@@ -48,7 +48,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Frontend URLs
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,7 +75,7 @@ async def create_tables():
     logger.info("Creating database tables...")
     try:
         # Import all models to ensure they're registered with Base
-        from src.models import user, portfolio, stock, transaction, holding  # noqa: F401
+        from src.models import user, portfolio, stock, transaction, holding, news_notice  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:

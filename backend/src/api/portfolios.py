@@ -4,18 +4,22 @@ Portfolio API endpoints.
 
 from typing import Annotated, Optional
 from uuid import UUID
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from src.core.dependencies import get_current_active_user, get_current_user_flexible
 from src.database import get_db
-from src.models import Portfolio, Holding, User
+from src.models import Portfolio, Holding, User, Stock, NewsNotice
 from src.schemas.portfolio import (
     PortfolioCreate,
     PortfolioResponse,
     PortfolioUpdate,
 )
+from src.schemas.holding import HoldingResponse
+from src.schemas.news_notice import NewsNoticeResponse
 
 router = APIRouter(prefix="/api/v1/portfolios", tags=["Portfolios"])
 
@@ -129,11 +133,11 @@ async def delete_portfolio(
     db.commit()
 
 
-@router.get("/{portfolio_id}/holdings")
+@router.get("/{portfolio_id}/holdings", response_model=list[HoldingResponse])
 async def get_portfolio_holdings(
     portfolio_id: UUID,
     db: Annotated[Session, Depends(get_db)]
-) -> list:
+) -> list[HoldingResponse]:
     """Get portfolio holdings."""
     portfolio = db.query(Portfolio).filter(
         Portfolio.id == portfolio_id,
@@ -146,7 +150,70 @@ async def get_portfolio_holdings(
             detail="Portfolio not found"
         )
     
-    holdings = db.query(Holding).filter(Holding.portfolio_id == portfolio_id).all()
+    # Get holdings with recent news counts
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     
-    # For now, return empty list until we implement holding schema
-    return []
+    holdings = db.query(Holding).join(Stock).filter(Holding.portfolio_id == portfolio_id).all()
+    
+    # Calculate recent news count for each holding
+    holdings_with_news_count = []
+    for holding in holdings:
+        recent_news_count = db.query(func.count(NewsNotice.id)).filter(
+            NewsNotice.stock_id == holding.stock_id,
+            NewsNotice.published_date >= thirty_days_ago
+        ).scalar() or 0
+        
+        # Convert to dict and add recent news count
+        holding_dict = HoldingResponse.model_validate(holding).model_dump()
+        holding_dict['recent_news_count'] = recent_news_count
+        holdings_with_news_count.append(HoldingResponse.model_validate(holding_dict))
+    
+    return holdings_with_news_count
+
+
+@router.get("/{portfolio_id}/holdings/{holding_id}", response_model=HoldingResponse)
+async def get_holding_detail(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    db: Annotated[Session, Depends(get_db)]
+) -> HoldingResponse:
+    """Get specific holding details."""
+    holding = db.query(Holding).join(Stock).filter(
+        Holding.portfolio_id == portfolio_id,
+        Holding.id == holding_id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Holding not found"
+        )
+    
+    return HoldingResponse.model_validate(holding)
+
+
+@router.get("/{portfolio_id}/holdings/{holding_id}/news", response_model=list[NewsNoticeResponse])
+async def get_holding_news_notices(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    db: Annotated[Session, Depends(get_db)]
+) -> list[NewsNoticeResponse]:
+    """Get news and notices for a specific holding."""
+    # First verify the holding exists in this portfolio
+    holding = db.query(Holding).filter(
+        Holding.portfolio_id == portfolio_id,
+        Holding.id == holding_id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Holding not found"
+        )
+    
+    # Get news and notices for the stock in this holding
+    news_notices = db.query(NewsNotice).filter(
+        NewsNotice.stock_id == holding.stock_id
+    ).order_by(NewsNotice.published_date.desc()).all()
+    
+    return [NewsNoticeResponse.model_validate(notice) for notice in news_notices]

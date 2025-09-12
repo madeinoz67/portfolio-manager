@@ -15,6 +15,7 @@ from src.database import Base
 
 if TYPE_CHECKING:
     from .holding import Holding
+    from .news_notice import NewsNotice
     from .price_history import PriceHistory
     from .transaction import Transaction
 
@@ -51,6 +52,9 @@ class Stock(Base):
     )
     price_history: list["PriceHistory"] = relationship(
         "PriceHistory", back_populates="stock", cascade="all, delete-orphan"
+    )
+    news_notices: list["NewsNotice"] = relationship(
+        "NewsNotice", back_populates="stock", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

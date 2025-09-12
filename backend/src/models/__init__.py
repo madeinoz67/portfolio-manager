@@ -8,6 +8,7 @@ from ..database import Base
 # Import all models for auto-discovery
 from .api_key import ApiKey
 from .holding import Holding
+from .news_notice import NewsNotice, NewsNoticeType
 from .portfolio import Portfolio
 from .price_history import PriceHistory
 from .stock import Stock, StockStatus
@@ -26,4 +27,6 @@ __all__ = [
     "TransactionType",
     "SourceType",
     "PriceHistory",
+    "NewsNotice",
+    "NewsNoticeType",
 ]
