@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.api.auth import router as auth_router
 from src.api.portfolios import router as portfolios_router
 from src.api.stocks import router as stocks_router
 from src.api.transactions import router as transactions_router
@@ -82,6 +83,7 @@ async def create_tables():
         raise
 
 # Include API routers
+app.include_router(auth_router)
 app.include_router(portfolios_router)
 app.include_router(stocks_router)
 app.include_router(transactions_router)

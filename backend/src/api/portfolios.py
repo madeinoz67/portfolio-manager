@@ -8,8 +8,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from src.core.dependencies import get_current_active_user, get_current_user_flexible
 from src.database import get_db
-from src.models import Portfolio, Holding
+from src.models import Portfolio, Holding, User
 from src.schemas.portfolio import (
     PortfolioCreate,
     PortfolioResponse,
@@ -21,28 +22,28 @@ router = APIRouter(prefix="/api/v1/portfolios", tags=["Portfolios"])
 
 @router.get("", response_model=list[PortfolioResponse])
 async def list_portfolios(
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> list[PortfolioResponse]:
-    """List user portfolios."""
-    # For MVP, just return all portfolios (no auth yet)
-    portfolios = db.query(Portfolio).filter(Portfolio.is_active.is_(True)).all()
+    """List current user's portfolios."""
+    portfolios = db.query(Portfolio).filter(
+        Portfolio.owner_id == current_user.id,
+        Portfolio.is_active.is_(True)
+    ).all()
     return [PortfolioResponse.model_validate(p) for p in portfolios]
 
 
 @router.post("", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)
 async def create_portfolio(
     portfolio_data: PortfolioCreate,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> PortfolioResponse:
-    """Create new portfolio."""
-    # For MVP, create with a dummy owner_id (no auth yet)
-    import uuid
-    dummy_owner_id = uuid.uuid4()
-    
+    """Create new portfolio for the current user."""
     portfolio = Portfolio(
         name=portfolio_data.name,
         description=portfolio_data.description,
-        owner_id=dummy_owner_id
+        owner_id=current_user.id
     )
     
     db.add(portfolio)
@@ -55,11 +56,13 @@ async def create_portfolio(
 @router.get("/{portfolio_id}", response_model=PortfolioResponse)
 async def get_portfolio(
     portfolio_id: UUID,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> PortfolioResponse:
-    """Get portfolio details."""
+    """Get portfolio details for current user."""
     portfolio = db.query(Portfolio).filter(
         Portfolio.id == portfolio_id,
+        Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).first()
     
@@ -76,11 +79,13 @@ async def get_portfolio(
 async def update_portfolio(
     portfolio_id: UUID,
     portfolio_data: PortfolioUpdate,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> PortfolioResponse:
-    """Update portfolio."""
+    """Update portfolio for current user."""
     portfolio = db.query(Portfolio).filter(
         Portfolio.id == portfolio_id,
+        Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).first()
     
@@ -103,11 +108,13 @@ async def update_portfolio(
 @router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_portfolio(
     portfolio_id: UUID,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> None:
-    """Delete portfolio (soft delete)."""
+    """Delete portfolio (soft delete) for current user."""
     portfolio = db.query(Portfolio).filter(
         Portfolio.id == portfolio_id,
+        Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).first()
     
