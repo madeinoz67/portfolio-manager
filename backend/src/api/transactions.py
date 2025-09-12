@@ -7,7 +7,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from src.database import get_db
 from src.models import Portfolio, Stock, Transaction
@@ -46,20 +46,20 @@ async def get_portfolio_transactions(
         Transaction.portfolio_id == portfolio_id
     ).count()
     
-    # Get transactions with pagination
+    # Get transactions with pagination and eager load stock relationship
     transactions = (
         db.query(Transaction)
+        .options(joinedload(Transaction.stock))
         .filter(Transaction.portfolio_id == portfolio_id)
         .offset(offset)
         .limit(limit)
         .all()
     )
     
-    # Convert to response objects with stock data
-    transaction_responses = []
-    for transaction in transactions:
-        # Load the stock relationship
-        transaction_responses.append(TransactionResponse.model_validate(transaction))
+    # Convert to response objects with stock data (stock already loaded)
+    transaction_responses = [
+        TransactionResponse.model_validate(transaction) for transaction in transactions
+    ]
     
     return TransactionListResponse(
         transactions=transaction_responses,
