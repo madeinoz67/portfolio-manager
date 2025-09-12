@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(.specify/scripts/check-task-prerequisites.sh:*)",
+      "Bash(uv add:*)",
+      "Bash(uv init:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(printf:*)",
+      "Bash(npm install:*)",
+      "Bash(source:*)",
+      "Bash(python:*)",
+      "Bash(uv run:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
