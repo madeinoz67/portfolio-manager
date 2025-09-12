@@ -5,6 +5,11 @@ FastAPI application entry point for Portfolio Management System.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.portfolios import router as portfolios_router
+from src.api.stocks import router as stocks_router
+from src.api.transactions import router as transactions_router
+from src.api.performance import router as performance_router
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Portfolio Management API",
@@ -22,6 +27,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include API routers
+app.include_router(portfolios_router)
+app.include_router(stocks_router)
+app.include_router(transactions_router)
+app.include_router(performance_router)
 
 
 @app.get("/")
