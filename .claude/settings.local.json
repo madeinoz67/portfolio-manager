@@ -14,7 +14,8 @@
       "Bash(lsof:*)",
       "Bash(curl:*)",
       "Bash(npm run dev:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
