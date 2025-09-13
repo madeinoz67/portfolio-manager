@@ -11,13 +11,15 @@ interface TransactionFormProps {
   onSubmit: (transaction: TransactionCreate) => Promise<boolean>
   onCancel: () => void
   initialData?: Partial<TransactionCreate>
+  isEditing?: boolean
 }
 
 export default function TransactionForm({ 
   portfolioId, 
   onSubmit, 
   onCancel, 
-  initialData 
+  initialData,
+  isEditing = false
 }: TransactionFormProps) {
   const [formData, setFormData] = useState<TransactionCreate>({
     stock_symbol: initialData?.stock_symbol || '',
@@ -55,20 +57,53 @@ export default function TransactionForm({
       newErrors.stock_symbol = 'Please select a valid stock from the list'
     }
 
-    // Dynamic quantity validation based on transaction type
-    const allowZeroQuantity = ['DIVIDEND', 'REVERSE_SPLIT', 'MERGER'].includes(formData.transaction_type)
-    if (!allowZeroQuantity && formData.quantity <= 0) {
-      newErrors.quantity = 'Quantity must be greater than 0'
-    } else if (allowZeroQuantity && formData.quantity < 0) {
-      newErrors.quantity = 'Quantity cannot be negative'
-    }
-
-    // Dynamic price validation based on transaction type
-    const allowZeroPrice = ['STOCK_SPLIT', 'REVERSE_SPLIT', 'SPIN_OFF', 'BONUS_SHARES'].includes(formData.transaction_type)
-    if (!allowZeroPrice && formData.price_per_share <= 0) {
-      newErrors.price_per_share = 'Price per share must be greater than 0'
-    } else if (allowZeroPrice && formData.price_per_share < 0) {
-      newErrors.price_per_share = 'Price per share cannot be negative'
+    // Dynamic validation based on transaction type
+    switch (formData.transaction_type) {
+      case 'BUY':
+      case 'SELL':
+      case 'TRANSFER_IN':
+      case 'TRANSFER_OUT':
+        // Regular trading - need positive quantity and price
+        if (formData.quantity <= 0) {
+          newErrors.quantity = 'Quantity must be greater than 0'
+        }
+        if (formData.price_per_share <= 0) {
+          newErrors.price_per_share = 'Price per share must be greater than 0'
+        }
+        break
+        
+      case 'DIVIDEND':
+        // Dividends: quantity should be 0 (no shares added), price is dividend per share
+        if (formData.quantity !== 0) {
+          newErrors.quantity = 'Quantity should be 0 for dividends (no shares are added to holdings)'
+        }
+        if (formData.price_per_share <= 0) {
+          newErrors.price_per_share = 'Dividend amount per share must be greater than 0'
+        }
+        break
+        
+      case 'STOCK_SPLIT':
+      case 'BONUS_SHARES':
+      case 'SPIN_OFF':
+        // These add shares but at no cost
+        if (formData.quantity <= 0) {
+          newErrors.quantity = 'Quantity of new shares must be greater than 0'
+        }
+        if (formData.price_per_share !== 0) {
+          newErrors.price_per_share = 'Price should be 0 for this transaction type'
+        }
+        break
+        
+      case 'REVERSE_SPLIT':
+      case 'MERGER':
+        // These typically remove shares and may have different validation
+        if (formData.quantity < 0) {
+          newErrors.quantity = 'Quantity cannot be negative'
+        }
+        if (formData.price_per_share < 0) {
+          newErrors.price_per_share = 'Price cannot be negative'
+        }
+        break
     }
 
     if (formData.fees < 0) {
@@ -146,7 +181,7 @@ export default function TransactionForm({
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-        Add Transaction
+        {isEditing ? 'Edit Transaction' : 'Add Transaction'}
       </h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -347,17 +382,31 @@ export default function TransactionForm({
             disabled={loading}
             className="flex-1"
           >
-            {formData.transaction_type === 'BUY' ? 'Add Buy Transaction' :
-             formData.transaction_type === 'SELL' ? 'Add Sell Transaction' :
-             formData.transaction_type === 'DIVIDEND' ? 'Add Dividend' :
-             formData.transaction_type === 'STOCK_SPLIT' ? 'Add Stock Split' :
-             formData.transaction_type === 'REVERSE_SPLIT' ? 'Add Reverse Split' :
-             formData.transaction_type === 'TRANSFER_IN' ? 'Add Transfer In' :
-             formData.transaction_type === 'TRANSFER_OUT' ? 'Add Transfer Out' :
-             formData.transaction_type === 'SPIN_OFF' ? 'Add Spin-off' :
-             formData.transaction_type === 'MERGER' ? 'Add Merger' :
-             formData.transaction_type === 'BONUS_SHARES' ? 'Add Bonus Shares' :
-             'Add Transaction'}
+{isEditing ? (
+              formData.transaction_type === 'BUY' ? 'Update Buy Transaction' :
+              formData.transaction_type === 'SELL' ? 'Update Sell Transaction' :
+              formData.transaction_type === 'DIVIDEND' ? 'Update Dividend' :
+              formData.transaction_type === 'STOCK_SPLIT' ? 'Update Stock Split' :
+              formData.transaction_type === 'REVERSE_SPLIT' ? 'Update Reverse Split' :
+              formData.transaction_type === 'TRANSFER_IN' ? 'Update Transfer In' :
+              formData.transaction_type === 'TRANSFER_OUT' ? 'Update Transfer Out' :
+              formData.transaction_type === 'SPIN_OFF' ? 'Update Spin-off' :
+              formData.transaction_type === 'MERGER' ? 'Update Merger' :
+              formData.transaction_type === 'BONUS_SHARES' ? 'Update Bonus Shares' :
+              'Update Transaction'
+            ) : (
+              formData.transaction_type === 'BUY' ? 'Add Buy Transaction' :
+              formData.transaction_type === 'SELL' ? 'Add Sell Transaction' :
+              formData.transaction_type === 'DIVIDEND' ? 'Add Dividend' :
+              formData.transaction_type === 'STOCK_SPLIT' ? 'Add Stock Split' :
+              formData.transaction_type === 'REVERSE_SPLIT' ? 'Add Reverse Split' :
+              formData.transaction_type === 'TRANSFER_IN' ? 'Add Transfer In' :
+              formData.transaction_type === 'TRANSFER_OUT' ? 'Add Transfer Out' :
+              formData.transaction_type === 'SPIN_OFF' ? 'Add Spin-off' :
+              formData.transaction_type === 'MERGER' ? 'Add Merger' :
+              formData.transaction_type === 'BONUS_SHARES' ? 'Add Bonus Shares' :
+              'Add Transaction'
+            )}
           </Button>
           
           <Button

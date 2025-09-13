@@ -4,6 +4,16 @@ import { useState, useCallback } from 'react'
 import { Transaction, TransactionCreate, TransactionListResponse } from '@/types/transaction'
 import { useAuth } from '@/contexts/AuthContext'
 
+interface TransactionUpdate {
+  stock_symbol?: string
+  transaction_type?: string
+  quantity?: number
+  price_per_share?: number
+  fees?: number
+  transaction_date?: string
+  notes?: string
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
 
 export function useTransactions(portfolioId: string) {
@@ -174,6 +184,109 @@ export function useTransactions(portfolioId: string) {
     return fetchTransactions(50, 0, filters)
   }, [fetchTransactions])
 
+  const updateTransaction = useCallback(async (transactionId: string, updateData: TransactionUpdate): Promise<boolean> => {
+    if (!portfolioId) {
+      setError('Portfolio ID is required')
+      return false
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/v1/portfolios/${portfolioId}/transactions/${transactionId}`,
+        {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(updateData)
+        }
+      )
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        
+        if (response.status === 401) {
+          throw new Error('Authentication required. Please log in.')
+        }
+        if (response.status === 404) {
+          throw new Error('Transaction not found')
+        }
+        if (response.status === 422) {
+          try {
+            const errorData = JSON.parse(responseText)
+            const errorMessage = errorData.detail?.[0]?.msg || 'Invalid transaction data'
+            throw new Error(errorMessage)
+          } catch {
+            throw new Error('Invalid transaction data')
+          }
+        }
+        throw new Error(`Failed to update transaction: ${response.status}`)
+      }
+
+      const updatedTransaction: Transaction = await response.json()
+      
+      // Update the transaction in the list
+      setTransactions(prev => 
+        prev.map(transaction => 
+          transaction.id === transactionId ? updatedTransaction : transaction
+        )
+      )
+      
+      return true
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update transaction'
+      console.error('Error updating transaction:', err)
+      setError(errorMessage)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [portfolioId])
+
+  const deleteTransaction = useCallback(async (transactionId: string): Promise<boolean> => {
+    if (!portfolioId) {
+      setError('Portfolio ID is required')
+      return false
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/v1/portfolios/${portfolioId}/transactions/${transactionId}`,
+        {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        }
+      )
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication required. Please log in.')
+        }
+        if (response.status === 404) {
+          throw new Error('Transaction not found')
+        }
+        throw new Error(`Failed to delete transaction: ${response.status}`)
+      }
+
+      // Remove the transaction from the list
+      setTransactions(prev => prev.filter(transaction => transaction.id !== transactionId))
+      setTotal(prev => prev - 1)
+      
+      return true
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete transaction'
+      console.error('Error deleting transaction:', err)
+      setError(errorMessage)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [portfolioId])
+
   const clearError = useCallback(() => {
     setError(null)
   }, [])
@@ -185,6 +298,8 @@ export function useTransactions(portfolioId: string) {
     total,
     fetchTransactions,
     createTransaction,
+    updateTransaction,
+    deleteTransaction,
     refreshTransactions,
     loadMoreTransactions,
     searchTransactions,

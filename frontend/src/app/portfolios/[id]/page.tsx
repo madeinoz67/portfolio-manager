@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Navigation from '@/components/layout/Navigation'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
-import TransactionForm from '@/components/transaction/TransactionForm'
-import TransactionList from '@/components/transaction/TransactionList'
+import TransactionForm from '@/components/Transaction/TransactionForm'
+import TransactionList from '@/components/Transaction/TransactionList'
 import HoldingsDisplay from '@/components/portfolio/HoldingsDisplay'
 import PortfolioEditForm from '@/components/portfolio/PortfolioEditForm'
 import { useToast } from '@/components/ui/Toast'
@@ -64,6 +64,7 @@ interface Transaction {
 export default function PortfolioDetail() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const portfolioId = params?.id as string
   const { addToast } = useToast()
 
@@ -145,6 +146,18 @@ export default function PortfolioDetail() {
   useEffect(() => {
     fetchPortfolio()
   }, [fetchPortfolio])
+
+  // Check for addTransaction query parameter and auto-open form
+  useEffect(() => {
+    const addTransactionParam = searchParams.get('addTransaction')
+    if (addTransactionParam === 'true') {
+      setShowTransactionForm(true)
+      // Remove the query parameter from URL to clean it up
+      const url = new URL(window.location.href)
+      url.searchParams.delete('addTransaction')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [searchParams])
 
   const handleAddTransaction = async (transactionData: TransactionCreate) => {
     console.log('handleAddTransaction called with:', transactionData)

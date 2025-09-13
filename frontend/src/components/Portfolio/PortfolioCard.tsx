@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Portfolio } from '@/types/portfolio'
 import Button from '@/components/ui/Button'
 
@@ -7,9 +8,14 @@ interface PortfolioCardProps {
 }
 
 export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
+  const router = useRouter()
   const isPositiveChange = parseFloat(portfolio.daily_change) >= 0
   const totalValue = parseFloat(portfolio.total_value || '0')
   const dailyChange = parseFloat(portfolio.daily_change || '0')
+
+  const handleAddTrade = () => {
+    router.push(`/portfolios/${portfolio.id}/add-transaction`)
+  }
 
   return (
     <div className="group bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg dark:hover:shadow-2xl transition-all duration-300 border dark:border-gray-700 overflow-hidden">
@@ -116,6 +122,7 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
             size="sm"
             variant="outline"
             className="flex-1"
+            onClick={handleAddTrade}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />

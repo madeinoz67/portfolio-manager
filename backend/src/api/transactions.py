@@ -196,44 +196,13 @@ async def update_transaction(
             detail="Transaction not found"
         )
     
-    # Update transaction fields if provided
+    # Use the transaction service for atomic processing
+    from src.services.transaction_service import update_transaction
+    
+    # Convert Pydantic model to dict for the service
     update_data = transaction_data.model_dump(exclude_unset=True)
     
-    for field, value in update_data.items():
-        if field == "stock_symbol":
-            # Handle stock symbol change
-            stock = db.query(Stock).filter(
-                Stock.symbol == value.upper()
-            ).first()
-            
-            if not stock:
-                stock = Stock(
-                    symbol=value.upper(),
-                    company_name=f"{value.upper()} Corporation",
-                    exchange="ASX"
-                )
-                db.add(stock)
-                db.flush()
-            
-            setattr(transaction, "stock_id", stock.id)
-        else:
-            setattr(transaction, field, value)
-    
-    # Recalculate total_amount if quantity, price_per_share, or fees changed
-    if any(field in update_data for field in ["quantity", "price_per_share", "fees"]):
-        fees = transaction.fees or Decimal("0")
-        transaction.total_amount = (transaction.quantity * transaction.price_per_share) + fees
-    
-    try:
-        db.commit()
-        db.refresh(transaction)
-        return TransactionResponse.model_validate(transaction)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update transaction: {str(e)}"
-        )
+    return update_transaction(db, portfolio_id, transaction_id, update_data)
 
 
 @router.delete("/{portfolio_id}/transactions/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -267,12 +236,7 @@ async def delete_transaction(
             detail="Transaction not found"
         )
     
-    try:
-        db.delete(transaction)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete transaction: {str(e)}"
-        )
+    # Use the transaction service for atomic processing
+    from src.services.transaction_service import delete_transaction as delete_transaction_service
+    
+    delete_transaction_service(db, portfolio_id, transaction_id)
