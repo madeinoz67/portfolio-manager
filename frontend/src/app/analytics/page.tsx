@@ -14,7 +14,7 @@ import TimeRangeSelector from '@/components/analytics/TimeRangeSelector'
 
 export default function Analytics() {
   const searchParams = useSearchParams()
-  const portfolioId = searchParams.get('portfolioId')
+  const portfolioId = searchParams?.get('portfolioId')
   const { portfolios, loading, error } = usePortfolios()
   const [selectedTimeRange, setSelectedTimeRange] = useState('1M')
   
