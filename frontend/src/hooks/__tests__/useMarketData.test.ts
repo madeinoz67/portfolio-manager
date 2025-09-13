@@ -371,13 +371,27 @@ describe('useMarketData', () => {
         { initialProps: { symbols: ['AAPL'] } }
       )
 
+      // First simulate WebSocket open event to establish connection
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
+
+      // Clear previous calls
+      mockWebSocket.send.mockClear()
+
       // Change symbols
-      rerender({ symbols: ['AAPL', 'GOOGL'] })
+      await act(async () => {
+        rerender({ symbols: ['AAPL', 'GOOGL'] })
+      })
 
       expect(mockWebSocket.send).toHaveBeenCalledWith(
         JSON.stringify({
           type: 'subscribe',
-          symbols: ['AAPL', 'GOOGL']
+          symbols: ['GOOGL']
         })
       )
     })
@@ -388,8 +402,22 @@ describe('useMarketData', () => {
         { initialProps: { symbols: ['AAPL', 'GOOGL', 'MSFT'] } }
       )
 
+      // First simulate WebSocket open event to establish connection
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
+
+      // Clear previous calls
+      mockWebSocket.send.mockClear()
+
       // Remove some symbols
-      rerender({ symbols: ['AAPL'] })
+      await act(async () => {
+        rerender({ symbols: ['AAPL'] })
+      })
 
       expect(mockWebSocket.send).toHaveBeenCalledWith(
         JSON.stringify({
