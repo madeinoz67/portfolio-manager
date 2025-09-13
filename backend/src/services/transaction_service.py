@@ -102,8 +102,8 @@ def process_transaction(
                     available=str(available_qty)
                 )
         
-        # Calculate total amount
-        total_amount = transaction_data.quantity * transaction_data.price_per_share
+        # Calculate total amount including fees
+        total_amount = (transaction_data.quantity * transaction_data.price_per_share) + (transaction_data.fees or Decimal("0"))
         
         # Create transaction record
         transaction = Transaction(

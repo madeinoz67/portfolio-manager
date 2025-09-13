@@ -15,6 +15,7 @@ from src.database import get_db
 from src.models import Portfolio, Transaction, Stock
 from src.schemas.transaction import (
     TransactionCreate,
+    TransactionUpdate,
     TransactionResponse,
     TransactionListResponse,
 )
@@ -156,3 +157,122 @@ async def get_transaction_detail(
         )
     
     return TransactionResponse.model_validate(transaction)
+
+
+@router.put("/{portfolio_id}/transactions/{transaction_id}", response_model=TransactionResponse)
+async def update_transaction(
+    portfolio_id: UUID,
+    transaction_id: UUID,
+    transaction_data: TransactionUpdate,
+    db: Annotated[Session, Depends(get_db)]
+) -> TransactionResponse:
+    """Update an existing transaction."""
+    # Verify portfolio exists
+    portfolio = db.query(Portfolio).filter(
+        Portfolio.id == portfolio_id,
+        Portfolio.is_active.is_(True)
+    ).first()
+    
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+    
+    # Get transaction with stock relationship
+    transaction = (
+        db.query(Transaction)
+        .options(joinedload(Transaction.stock))
+        .filter(
+            Transaction.id == transaction_id,
+            Transaction.portfolio_id == portfolio_id
+        )
+        .first()
+    )
+    
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found"
+        )
+    
+    # Update transaction fields if provided
+    update_data = transaction_data.model_dump(exclude_unset=True)
+    
+    for field, value in update_data.items():
+        if field == "stock_symbol":
+            # Handle stock symbol change
+            stock = db.query(Stock).filter(
+                Stock.symbol == value.upper()
+            ).first()
+            
+            if not stock:
+                stock = Stock(
+                    symbol=value.upper(),
+                    company_name=f"{value.upper()} Corporation",
+                    exchange="ASX"
+                )
+                db.add(stock)
+                db.flush()
+            
+            setattr(transaction, "stock_id", stock.id)
+        else:
+            setattr(transaction, field, value)
+    
+    # Recalculate total_amount if quantity, price_per_share, or fees changed
+    if any(field in update_data for field in ["quantity", "price_per_share", "fees"]):
+        fees = transaction.fees or Decimal("0")
+        transaction.total_amount = (transaction.quantity * transaction.price_per_share) + fees
+    
+    try:
+        db.commit()
+        db.refresh(transaction)
+        return TransactionResponse.model_validate(transaction)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update transaction: {str(e)}"
+        )
+
+
+@router.delete("/{portfolio_id}/transactions/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_transaction(
+    portfolio_id: UUID,
+    transaction_id: UUID,
+    db: Annotated[Session, Depends(get_db)]
+) -> None:
+    """Delete a transaction."""
+    # Verify portfolio exists
+    portfolio = db.query(Portfolio).filter(
+        Portfolio.id == portfolio_id,
+        Portfolio.is_active.is_(True)
+    ).first()
+    
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+    
+    # Get transaction
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.portfolio_id == portfolio_id
+    ).first()
+    
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found"
+        )
+    
+    try:
+        db.delete(transaction)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete transaction: {str(e)}"
+        )

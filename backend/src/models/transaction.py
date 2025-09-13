@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 class TransactionType(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
+    DIVIDEND = "DIVIDEND"
+    STOCK_SPLIT = "STOCK_SPLIT"
+    REVERSE_SPLIT = "REVERSE_SPLIT"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    SPIN_OFF = "SPIN_OFF"
+    MERGER = "MERGER"
+    BONUS_SHARES = "BONUS_SHARES"
 
 
 class SourceType(str, Enum):

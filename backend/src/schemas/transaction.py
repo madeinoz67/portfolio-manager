@@ -17,8 +17,8 @@ class TransactionCreate(BaseModel):
     """Schema for creating a new transaction."""
     stock_symbol: str = Field(..., min_length=1, max_length=10)
     transaction_type: TransactionType
-    quantity: Decimal = Field(..., gt=0)
-    price_per_share: Decimal = Field(..., gt=0)
+    quantity: Decimal = Field(..., ge=0)
+    price_per_share: Decimal = Field(..., ge=0)
     fees: Decimal = Field(default=Decimal("0.00"), ge=0)
     transaction_date: date
     notes: Optional[str] = Field(None, max_length=1000)
@@ -47,6 +47,23 @@ class TransactionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TransactionUpdate(BaseModel):
+    """Schema for updating an existing transaction."""
+    stock_symbol: Optional[str] = Field(None, min_length=1, max_length=10)
+    transaction_type: Optional[TransactionType] = None
+    quantity: Optional[Decimal] = Field(None, ge=0)
+    price_per_share: Optional[Decimal] = Field(None, ge=0)
+    fees: Optional[Decimal] = Field(None, ge=0)
+    transaction_date: Optional[date] = None
+    notes: Optional[str] = Field(None, max_length=1000)
+
+    @validator('transaction_date')
+    def validate_transaction_date(cls, v):
+        if v and v > date.today():
+            raise ValueError('Transaction date cannot be in the future')
+        return v
 
 
 class TransactionListResponse(BaseModel):
