@@ -1,11 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navigation from '@/components/layout/Navigation'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
+import TransactionForm from '@/components/transaction/TransactionForm'
+import TransactionList from '@/components/transaction/TransactionList'
+import { useToast } from '@/components/ui/Toast'
+import { useTransactions } from '@/hooks/useTransactions'
+import { TransactionCreate } from '@/types/transaction'
+import Button from '@/components/ui/Button'
 
 interface Portfolio {
   id: string
@@ -56,85 +62,117 @@ export default function PortfolioDetail() {
   const params = useParams()
   const router = useRouter()
   const portfolioId = params?.id as string
+  const { addToast } = useToast()
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [holdings, setHoldings] = useState<Holding[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showTransactionForm, setShowTransactionForm] = useState(false)
 
-  useEffect(() => {
-    const fetchPortfolio = async () => {
-      if (!portfolioId) return
+  const {
+    transactions,
+    createTransaction,
+    refreshTransactions,
+    loading: transactionLoading,
+    error: transactionError
+  } = useTransactions(portfolioId)
 
-      try {
-        setLoading(true)
-        const token = localStorage.getItem('auth_token')
-        if (!token) {
+  const fetchPortfolio = useCallback(async () => {
+    if (!portfolioId) return
+
+    try {
+      setLoading(true)
+      const token = localStorage.getItem('auth_token')
+      if (!token) {
+        router.push('/login')
+        return
+      }
+
+      // Fetch portfolio details
+      const portfolioResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!portfolioResponse.ok) {
+        if (portfolioResponse.status === 401) {
           router.push('/login')
           return
         }
+        throw new Error(`Failed to fetch portfolio: ${portfolioResponse.status}`)
+      }
 
-        // Fetch portfolio details
-        const portfolioResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`, {
+      const portfolioData = await portfolioResponse.json()
+      setPortfolio(portfolioData)
+
+      // Fetch portfolio holdings
+      try {
+        const holdingsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/holdings`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         })
-
-        if (!portfolioResponse.ok) {
-          if (portfolioResponse.status === 401) {
-            router.push('/login')
-            return
-          }
-          throw new Error(`Failed to fetch portfolio: ${portfolioResponse.status}`)
-        }
-
-        const portfolioData = await portfolioResponse.json()
-        setPortfolio(portfolioData)
-
-        // Fetch portfolio holdings
-        try {
-          const holdingsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/holdings`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          })
-          if (holdingsResponse.ok) {
-            const holdingsData = await holdingsResponse.json()
-            setHoldings(holdingsData)
-          }
-        } catch (err) {
-          console.warn('Failed to fetch holdings:', err)
-        }
-
-        // Fetch recent transactions
-        try {
-          const transactionsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions?limit=10`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          })
-          if (transactionsResponse.ok) {
-            const transactionsData = await transactionsResponse.json()
-            setTransactions(transactionsData.transactions || transactionsData)
-          }
-        } catch (err) {
-          console.warn('Failed to fetch transactions:', err)
+        if (holdingsResponse.ok) {
+          const holdingsData = await holdingsResponse.json()
+          setHoldings(holdingsData)
         }
       } catch (err) {
-        console.error('Error fetching portfolio:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch portfolio')
-      } finally {
-        setLoading(false)
+        console.warn('Failed to fetch holdings:', err)
       }
-    }
 
-    fetchPortfolio()
+    } catch (err) {
+      console.error('Error fetching portfolio:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch portfolio')
+    } finally {
+      setLoading(false)
+    }
   }, [portfolioId, router])
+
+  useEffect(() => {
+    fetchPortfolio()
+  }, [fetchPortfolio])
+
+  const handleAddTransaction = async (transactionData: TransactionCreate) => {
+    console.log('handleAddTransaction called with:', transactionData)
+    
+    try {
+      console.log('Calling createTransaction...')
+      const success = await createTransaction(transactionData)
+      console.log('createTransaction returned:', success)
+      
+      if (success) {
+        console.log('Transaction successful, showing success toast')
+        addToast('Transaction added successfully!', 'success')
+        setShowTransactionForm(false)
+        
+        console.log('Refreshing portfolio data...')
+        // Refresh portfolio data to update totals
+        await fetchPortfolio()
+        console.log('Portfolio data refreshed')
+        
+        return true
+      } else {
+        console.log('Transaction failed, showing error toast')
+        addToast('Failed to add transaction', 'error')
+        return false
+      }
+    } catch (err) {
+      console.error('Exception in handleAddTransaction:', err)
+      addToast('Failed to add transaction', 'error')
+      return false
+    }
+  }
+
+  const handleRefreshData = async () => {
+    await Promise.all([
+      fetchPortfolio(),
+      refreshTransactions()
+    ])
+  }
 
   if (loading) {
     return (
@@ -305,80 +343,42 @@ export default function PortfolioDetail() {
             )}
           </div>
 
-          {/* Recent Transactions Section */}
+          {/* Transaction Management Section */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Recent Transactions
-            </h2>
-            {transactions.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Stock
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Price
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Total
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {transactions.map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {new Date(transaction.transaction_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">
-                              {transaction.stock.symbol}
-                            </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-300">
-                              {transaction.stock.company_name}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            transaction.transaction_type === 'BUY'
-                              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
-                              : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
-                          }`}>
-                            {transaction.transaction_type}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {parseFloat(transaction.quantity).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          ${parseFloat(transaction.price_per_share).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          ${parseFloat(transaction.total_amount).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Transaction Management
+              </h2>
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleRefreshData}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Refresh Data
+                </Button>
+                <Button
+                  onClick={() => setShowTransactionForm(!showTransactionForm)}
+                  size="sm"
+                >
+                  {showTransactionForm ? 'Hide Form' : 'Add Transaction'}
+                </Button>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p>No transactions found for this portfolio</p>
+            </div>
+
+            {showTransactionForm && (
+              <div className="mb-6">
+                <TransactionForm
+                  portfolioId={portfolioId}
+                  onSubmit={handleAddTransaction}
+                  onCancel={() => setShowTransactionForm(false)}
+                />
               </div>
             )}
+
+            <TransactionList
+              portfolioId={portfolioId}
+            />
           </div>
         </div>
       </div>
