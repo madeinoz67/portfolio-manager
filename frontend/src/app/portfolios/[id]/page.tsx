@@ -308,14 +308,14 @@ export default function PortfolioDetail() {
             </div>
           </div>
 
-          {/* Holdings Section */}
-          <div className="mb-8">
-            <HoldingsDisplay portfolioId={portfolioId} />
-          </div>
-
           {/* Performance Metrics Section */}
           <div className="mb-8">
             <PerformanceMetrics portfolioId={portfolioId} />
+          </div>
+
+          {/* Holdings Section */}
+          <div className="mb-8">
+            <HoldingsDisplay portfolioId={portfolioId} />
           </div>
 
           {/* Transaction Management Section */}
