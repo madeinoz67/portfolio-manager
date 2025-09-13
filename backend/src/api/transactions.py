@@ -9,9 +9,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from src.database import get_db
-from src.models import Portfolio, Stock, Transaction
-from src.models.transaction import SourceType
+from src.database import get_db  
+from src.models import Portfolio, Transaction
 from src.schemas.transaction import (
     TransactionCreate,
     TransactionResponse,
@@ -47,10 +46,12 @@ async def get_portfolio_transactions(
     ).count()
     
     # Get transactions with pagination and eager load stock relationship
+    # Sort by transaction_date DESC, then by processed_date DESC for same-date transactions
     transactions = (
         db.query(Transaction)
         .options(joinedload(Transaction.stock))
         .filter(Transaction.portfolio_id == portfolio_id)
+        .order_by(Transaction.transaction_date.desc(), Transaction.processed_date.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -88,41 +89,7 @@ async def create_transaction(
             detail="Portfolio not found"
         )
     
-    # Find or create stock
-    stock = db.query(Stock).filter(
-        Stock.symbol == transaction_data.stock_symbol.upper()
-    ).first()
+    # Use the transaction service for atomic processing
+    from src.services.transaction_service import process_transaction
     
-    if not stock:
-        # For MVP, create a minimal stock record
-        stock = Stock(
-            symbol=transaction_data.stock_symbol.upper(),
-            company_name=f"{transaction_data.stock_symbol.upper()} Corporation",
-            exchange="ASX"
-        )
-        db.add(stock)
-        db.flush()  # Get the ID without committing
-    
-    # Calculate total amount
-    total_amount = transaction_data.quantity * transaction_data.price_per_share
-    
-    # Create transaction
-    transaction = Transaction(
-        portfolio_id=portfolio_id,
-        stock_id=stock.id,
-        transaction_type=transaction_data.transaction_type,
-        quantity=transaction_data.quantity,
-        price_per_share=transaction_data.price_per_share,
-        total_amount=total_amount,
-        fees=transaction_data.fees,
-        transaction_date=transaction_data.transaction_date,
-        source_type=SourceType.MANUAL,
-        notes=transaction_data.notes,
-        is_verified=True  # Manual transactions are pre-verified
-    )
-    
-    db.add(transaction)
-    db.commit()
-    db.refresh(transaction)
-    
-    return TransactionResponse.model_validate(transaction)
+    return process_transaction(db, portfolio_id, transaction_data)

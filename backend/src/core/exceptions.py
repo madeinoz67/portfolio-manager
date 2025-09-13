@@ -49,6 +49,17 @@ class InsufficientFundsError(TransactionError):
         )
 
 
+class InsufficientSharesError(TransactionError):
+    """Raised when trying to sell more shares than available (alias for compatibility)."""
+    
+    def __init__(self, symbol: str, requested: str, available: str):
+        super().__init__(
+            message=f"Insufficient shares for {symbol}: requested {requested}, available {available}",
+            code="INSUFFICIENT_SHARES",
+            details={"symbol": symbol, "requested": requested, "available": available}
+        )
+
+
 class StockNotFoundError(Exception):
     """Raised when a stock is not found."""
     
