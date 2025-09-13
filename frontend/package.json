@@ -11,6 +11,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@types/chart.js": "^2.9.41",
     "axios": "^1.12.1",
     "chart.js": "^4.5.0",
