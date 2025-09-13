@@ -64,6 +64,15 @@ describe('useMarketData', () => {
       const symbols = ['AAPL']
       const { result } = renderHook(() => useMarketData(symbols))
 
+      // First simulate WebSocket open event
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
+
       // Simulate WebSocket message
       const mockPriceUpdate = {
         type: 'price_update',
@@ -101,6 +110,15 @@ describe('useMarketData', () => {
     it('should handle multiple stock updates', async () => {
       const symbols = ['AAPL', 'GOOGL', 'MSFT']
       const { result } = renderHook(() => useMarketData(symbols))
+
+      // First simulate WebSocket open event
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
 
       const messageHandler = mockWebSocket.addEventListener.mock.calls.find(
         call => call[0] === 'message'
@@ -254,6 +272,15 @@ describe('useMarketData', () => {
     it('should handle WebSocket connection errors', async () => {
       const { result } = renderHook(() => useMarketData(['AAPL']))
 
+      // First simulate WebSocket open event
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
+
       const errorHandler = mockWebSocket.addEventListener.mock.calls.find(
         call => call[0] === 'error'
       )?.[1]
@@ -268,6 +295,15 @@ describe('useMarketData', () => {
 
     it('should attempt to reconnect on connection loss', async () => {
       const { result } = renderHook(() => useMarketData(['AAPL']))
+
+      // First simulate WebSocket open event
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
 
       const closeHandler = mockWebSocket.addEventListener.mock.calls.find(
         call => call[0] === 'close'
@@ -290,6 +326,15 @@ describe('useMarketData', () => {
 
     it('should stop reconnection attempts after max retries', async () => {
       const { result } = renderHook(() => useMarketData(['AAPL']))
+
+      // First simulate WebSocket open event
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
 
       const closeHandler = mockWebSocket.addEventListener.mock.calls.find(
         call => call[0] === 'close'
