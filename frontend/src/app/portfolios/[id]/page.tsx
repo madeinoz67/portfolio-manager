@@ -10,6 +10,7 @@ import TransactionForm from '@/components/Transaction/TransactionForm'
 import TransactionList from '@/components/Transaction/TransactionList'
 import HoldingsDisplay from '@/components/portfolio/HoldingsDisplay'
 import PortfolioEditForm from '@/components/portfolio/PortfolioEditForm'
+import PerformanceMetrics from '@/components/Portfolio/PerformanceMetrics'
 import { useToast } from '@/components/ui/Toast'
 import { useTransactions } from '@/hooks/useTransactions'
 import { useHoldings } from '@/hooks/useHoldings'
@@ -310,6 +311,11 @@ export default function PortfolioDetail() {
           {/* Holdings Section */}
           <div className="mb-8">
             <HoldingsDisplay portfolioId={portfolioId} />
+          </div>
+
+          {/* Performance Metrics Section */}
+          <div className="mb-8">
+            <PerformanceMetrics portfolioId={portfolioId} />
           </div>
 
           {/* Transaction Management Section */}
