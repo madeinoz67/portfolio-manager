@@ -1,0 +1,769 @@
+openapi: 3.0.3
+info:
+  title: Portfolio Management API
+  description: RESTful API for intelligent portfolio management system
+  version: 0.1.0
+  contact:
+    name: Portfolio Management System
+    
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Development server
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  # Authentication
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: bearer
+                  expires_in:
+                    type: integer
+        '401':
+          description: Invalid credentials
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: User registration
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+              required: [email, password]
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid input data
+        '409':
+          description: Email already exists
+
+  # User Profile
+  /users/me:
+    get:
+      tags: [User]
+      summary: Get current user profile
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    
+    put:
+      tags: [User]
+      summary: Update user profile
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                email_config:
+                  type: object
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  # API Keys
+  /users/me/api-keys:
+    get:
+      tags: [User]
+      summary: List user API keys
+      operationId: listApiKeys
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKey'
+    
+    post:
+      tags: [User]
+      summary: Create new API key
+      operationId: createApiKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                permissions:
+                  type: object
+              required: [name]
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  key:
+                    type: string
+                    description: API key value (only shown once)
+                  name:
+                    type: string
+
+  # Portfolios
+  /portfolios:
+    get:
+      tags: [Portfolios]
+      summary: List user portfolios
+      operationId: listPortfolios
+      responses:
+        '200':
+          description: List of portfolios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Portfolio'
+    
+    post:
+      tags: [Portfolios]
+      summary: Create new portfolio
+      operationId: createPortfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                description:
+                  type: string
+                  maxLength: 500
+              required: [name]
+      responses:
+        '201':
+          description: Portfolio created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+
+  /portfolios/{portfolio_id}:
+    get:
+      tags: [Portfolios]
+      summary: Get portfolio details
+      operationId: getPortfolio
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Portfolio details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioDetail'
+        '404':
+          description: Portfolio not found
+
+    put:
+      tags: [Portfolios]
+      summary: Update portfolio
+      operationId: updatePortfolio
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Portfolio updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+
+    delete:
+      tags: [Portfolios]
+      summary: Delete portfolio
+      operationId: deletePortfolio
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Portfolio deleted
+
+  # Holdings
+  /portfolios/{portfolio_id}/holdings:
+    get:
+      tags: [Holdings]
+      summary: Get portfolio holdings
+      operationId: getPortfolioHoldings
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Portfolio holdings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Holding'
+
+  # Transactions
+  /portfolios/{portfolio_id}/transactions:
+    get:
+      tags: [Transactions]
+      summary: Get portfolio transactions
+      operationId: getPortfolioTransactions
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+    post:
+      tags: [Transactions]
+      summary: Add manual transaction
+      operationId: createTransaction
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stock_symbol:
+                  type: string
+                transaction_type:
+                  type: string
+                  enum: [BUY, SELL]
+                quantity:
+                  type: number
+                  format: decimal
+                price_per_share:
+                  type: number
+                  format: decimal
+                fees:
+                  type: number
+                  format: decimal
+                  default: 0
+                transaction_date:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+              required: [stock_symbol, transaction_type, quantity, price_per_share, transaction_date]
+      responses:
+        '201':
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+
+  # Stocks
+  /stocks:
+    get:
+      tags: [Stocks]
+      summary: Search stocks
+      operationId: searchStocks
+      parameters:
+        - name: q
+          in: query
+          description: Search query (symbol or company name)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+      responses:
+        '200':
+          description: Stock search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stock'
+
+  /stocks/{stock_symbol}:
+    get:
+      tags: [Stocks]
+      summary: Get stock details
+      operationId: getStock
+      parameters:
+        - name: stock_symbol
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stock details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockDetail'
+
+  /stocks/{stock_symbol}/price-history:
+    get:
+      tags: [Stocks]
+      summary: Get stock price history
+      operationId: getStockPriceHistory
+      parameters:
+        - name: stock_symbol
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: period
+          in: query
+          description: Predefined period
+          schema:
+            type: string
+            enum: [1W, 1M, 3M, 6M, 1Y, 2Y, 5Y]
+      responses:
+        '200':
+          description: Price history data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PricePoint'
+
+  # Performance
+  /portfolios/{portfolio_id}/performance:
+    get:
+      tags: [Performance]
+      summary: Get portfolio performance metrics
+      operationId: getPortfolioPerformance
+      parameters:
+        - name: portfolio_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1D, 1W, 1M, 3M, 6M, 1Y, YTD, ALL]
+            default: 1M
+      responses:
+        '200':
+          description: Performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceMetrics'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        permissions:
+          type: object
+        last_used_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Portfolio:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        total_value:
+          type: number
+          format: decimal
+        daily_change:
+          type: number
+          format: decimal
+        daily_change_percent:
+          type: number
+          format: decimal
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PortfolioDetail:
+      allOf:
+        - $ref: '#/components/schemas/Portfolio'
+        - type: object
+          properties:
+            holdings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Holding'
+            recent_transactions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Transaction'
+
+    Holding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        stock:
+          $ref: '#/components/schemas/Stock'
+        quantity:
+          type: number
+          format: decimal
+        average_cost:
+          type: number
+          format: decimal
+        current_value:
+          type: number
+          format: decimal
+        unrealized_gain_loss:
+          type: number
+          format: decimal
+        unrealized_gain_loss_percent:
+          type: number
+          format: decimal
+        updated_at:
+          type: string
+          format: date-time
+
+    Stock:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        symbol:
+          type: string
+        company_name:
+          type: string
+        exchange:
+          type: string
+        current_price:
+          type: number
+          format: decimal
+        daily_change:
+          type: number
+          format: decimal
+        daily_change_percent:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [ACTIVE, HALTED, SUSPENDED, DELISTED]
+        last_price_update:
+          type: string
+          format: date-time
+
+    StockDetail:
+      allOf:
+        - $ref: '#/components/schemas/Stock'
+        - type: object
+          properties:
+            previous_close:
+              type: number
+              format: decimal
+            volume:
+              type: integer
+              format: int64
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        stock:
+          $ref: '#/components/schemas/Stock'
+        transaction_type:
+          type: string
+          enum: [BUY, SELL]
+        quantity:
+          type: number
+          format: decimal
+        price_per_share:
+          type: number
+          format: decimal
+        total_amount:
+          type: number
+          format: decimal
+        fees:
+          type: number
+          format: decimal
+        transaction_date:
+          type: string
+          format: date
+        source_type:
+          type: string
+          enum: [EMAIL, MANUAL, API]
+        notes:
+          type: string
+        is_verified:
+          type: boolean
+        processed_date:
+          type: string
+          format: date-time
+
+    PricePoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        open:
+          type: number
+          format: decimal
+        high:
+          type: number
+          format: decimal
+        low:
+          type: number
+          format: decimal
+        close:
+          type: number
+          format: decimal
+        volume:
+          type: integer
+          format: int64
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        total_return:
+          type: number
+          format: decimal
+          description: Total return including dividends
+        annualized_return:
+          type: number
+          format: decimal
+          description: Annualized return percentage
+        max_drawdown:
+          type: number
+          format: decimal
+          description: Maximum drawdown percentage
+        dividend_yield:
+          type: number
+          format: decimal
+          description: Current dividend yield
+        period_start_value:
+          type: number
+          format: decimal
+        period_end_value:
+          type: number
+          format: decimal
+        total_dividends:
+          type: number
+          format: decimal
+        period:
+          type: string
+        calculated_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

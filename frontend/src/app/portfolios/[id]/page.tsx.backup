@@ -1,0 +1,572 @@
+'use client'
+
+import { useState, useEffect, useMemo } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Navigation from '@/components/layout/Navigation'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import ErrorMessage from '@/components/ui/ErrorMessage'
+import StatsCard, { StatsGrid } from '@/components/dashboard/StatsCard'
+import PerformanceChart from '@/components/analytics/PerformanceChart'
+import AssetAllocationChart from '@/components/analytics/AssetAllocationChart'
+import TimeRangeSelector from '@/components/analytics/TimeRangeSelector'
+import Button from '@/components/ui/Button'
+
+interface Portfolio {
+  id: string
+  name: string
+  description?: string
+  total_value: string
+  daily_change: string
+  daily_change_percent: string
+  created_at: string
+  updated_at: string
+}
+
+interface Transaction {
+  id: string
+  stock: {
+    id: string
+    symbol: string
+    company_name: string
+    current_price?: string
+  }
+  transaction_type: 'BUY' | 'SELL'
+  quantity: string
+  price_per_share: string
+  total_amount: string
+  fees: string
+  transaction_date: string
+  notes?: string
+  processed_date: string
+}
+
+interface TransactionListResponse {
+  transactions: Transaction[]
+  total: number
+  limit: number
+  offset: number
+}
+
+interface Holding {
+  symbol: string
+  name: string
+  quantity: number
+  averagePrice: number
+  currentPrice: number
+  value: number
+  change: number
+  changePercent: number
+}
+
+export default function PortfolioDetails() {
+  const params = useParams()
+  const router = useRouter()
+  const portfolioId = params.id as string
+
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedTimeRange, setSelectedTimeRange] = useState('1M')
+  const [activeTab, setActiveTab] = useState('holdings')
+  const [showTransactionForm, setShowTransactionForm] = useState(false)
+  const [newTransaction, setNewTransaction] = useState({
+    stock_symbol: '',
+    transaction_type: 'BUY' as 'BUY' | 'SELL',
+    quantity: '',
+    price_per_share: '',
+    fees: '0.00',
+    transaction_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  })
+
+  // Generate mock holdings data based on transactions
+  const holdings = useMemo(() => {
+    const holdingsMap = new Map<string, Holding>()
+    
+    // Process transactions to calculate holdings
+    transactions.forEach(transaction => {
+      const symbol = transaction.stock.symbol
+      const quantity = parseFloat(transaction.quantity)
+      const price = parseFloat(transaction.price_per_share)
+      
+      if (!holdingsMap.has(symbol)) {
+        holdingsMap.set(symbol, {
+          symbol,
+          name: transaction.stock.company_name,
+          quantity: 0,
+          averagePrice: 0,
+          currentPrice: parseFloat(transaction.stock.current_price || '0') || price * 1.1, // Mock current price
+          value: 0,
+          change: 0,
+          changePercent: 0
+        })
+      }
+      
+      const holding = holdingsMap.get(symbol)!
+      
+      if (transaction.transaction_type === 'BUY') {
+        const totalCost = holding.quantity * holding.averagePrice + quantity * price
+        const totalQuantity = holding.quantity + quantity
+        holding.averagePrice = totalCost / totalQuantity
+        holding.quantity = totalQuantity
+      } else {
+        holding.quantity -= quantity
+      }
+      
+      // Calculate current values
+      holding.value = holding.quantity * holding.currentPrice
+      holding.change = holding.value - (holding.quantity * holding.averagePrice)
+      holding.changePercent = holding.averagePrice > 0 ? (holding.change / (holding.quantity * holding.averagePrice)) * 100 : 0
+    })
+    
+    return Array.from(holdingsMap.values()).filter(h => h.quantity > 0)
+  }, [transactions])
+
+  // Calculate portfolio statistics
+  const stats = useMemo(() => {
+    if (!portfolio) return null
+
+    const totalValue = parseFloat(portfolio.total_value || '0')
+    const dailyChange = parseFloat(portfolio.daily_change || '0')
+    const dailyChangePercent = parseFloat(portfolio.daily_change_percent || '0')
+
+    // Calculate holdings stats
+    const totalHoldingsValue = holdings.reduce((sum, holding) => sum + holding.value, 0)
+    const totalGainLoss = holdings.reduce((sum, holding) => sum + holding.change, 0)
+    const totalGainLossPercent = totalHoldingsValue > 0 ? (totalGainLoss / (totalHoldingsValue - totalGainLoss)) * 100 : 0
+
+    return {
+      totalValue: totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      dailyChange: Math.abs(dailyChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      dailyChangePercent: Math.abs(dailyChangePercent).toFixed(2),
+      isDailyPositive: dailyChange >= 0,
+      totalGainLoss: Math.abs(totalGainLoss).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      totalGainLossPercent: Math.abs(totalGainLossPercent).toFixed(2),
+      isTotalPositive: totalGainLoss >= 0,
+      holdingsCount: holdings.length,
+      transactionsCount: transactions.length
+    }
+  }, [portfolio, holdings, transactions])
+
+  // Fetch portfolio details
+  const fetchPortfolio = async () => {
+    try {
+      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setPortfolio(data)
+      } else if (response.status === 404) {
+        setError('Portfolio not found')
+      } else {
+        setError('Failed to fetch portfolio')
+      }
+    } catch (error) {
+      setError('Connection error')
+      console.error('Error fetching portfolio:', error)
+    }
+  }
+
+  // Fetch transactions
+  const fetchTransactions = async () => {
+    try {
+      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions`)
+      if (response.ok) {
+        const data: TransactionListResponse = await response.json()
+        setTransactions(data.transactions)
+      } else {
+        console.error('Failed to fetch transactions')
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error)
+    }
+  }
+
+  // Create new transaction
+  const createTransaction = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newTransaction),
+      })
+      
+      if (response.ok) {
+        setNewTransaction({
+          stock_symbol: '',
+          transaction_type: 'BUY',
+          quantity: '',
+          price_per_share: '',
+          fees: '0.00',
+          transaction_date: new Date().toISOString().split('T')[0],
+          notes: ''
+        })
+        setShowTransactionForm(false)
+        fetchTransactions() // Refresh the list
+      } else {
+        const errorData = await response.json()
+        setError(errorData.detail || 'Failed to create transaction')
+      }
+    } catch (error) {
+      setError('Connection error')
+      console.error('Error creating transaction:', error)
+    }
+  }
+
+  // Delete portfolio
+  const deletePortfolio = async () => {
+    if (!confirm('Are you sure you want to delete this portfolio? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`, {
+        method: 'DELETE',
+      })
+      
+      if (response.ok) {
+        router.push('/') // Navigate back to dashboard
+      } else {
+        setError('Failed to delete portfolio')
+      }
+    } catch (error) {
+      setError('Connection error')
+      console.error('Error deleting portfolio:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (portfolioId) {
+      Promise.all([fetchPortfolio(), fetchTransactions()]).finally(() => {
+        setLoading(false)
+      })
+    }
+  }, [portfolioId])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navigation />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center h-64">
+            <LoadingSpinner />
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!portfolio || error) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navigation />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <ErrorMessage message={error || "Portfolio not found"} />
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navigation />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Portfolio Header */}
+        <div className="mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+            <div className="mb-4 lg:mb-0">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                {portfolio.name}
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Portfolio Details • Created {new Date(portfolio.created_at).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <TimeRangeSelector 
+                selected={selectedTimeRange} 
+                onSelect={setSelectedTimeRange}
+              />
+              <Button 
+                variant="primary"
+                onClick={() => setShowTransactionForm(!showTransactionForm)}
+              >
+                Add Transaction
+              </Button>
+              <Button variant="secondary">
+                Edit Portfolio
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Key Metrics */}
+        {stats && (
+          <StatsGrid>
+            <StatsCard
+              title="Portfolio Value"
+              value={`$${stats.totalValue}`}
+              change={`${stats.dailyChangePercent}%`}
+              changeType={stats.isDailyPositive ? 'positive' : 'negative'}
+              icon={
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                </svg>
+              }
+              description="Current market value"
+            />
+            
+            <StatsCard
+              title="Total Gain/Loss"
+              value={`$${stats.totalGainLoss}`}
+              change={`${stats.totalGainLossPercent}%`}
+              changeType={stats.isTotalPositive ? 'positive' : 'negative'}
+              icon={
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              }
+              description="Unrealized gains/losses"
+            />
+            
+            <StatsCard
+              title="Holdings"
+              value={stats.holdingsCount.toString()}
+              icon={
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              }
+              description="Different positions"
+            />
+            
+            <StatsCard
+              title="Transactions"
+              value={stats.transactionsCount.toString()}
+              icon={
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              }
+              description="Total trades executed"
+            />
+          </StatsGrid>
+        )}
+
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Performance Chart */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Performance Over Time
+              </h3>
+              <PerformanceChart 
+                portfolios={[portfolio]} 
+                timeRange={selectedTimeRange}
+              />
+            </div>
+          </div>
+
+          {/* Asset Allocation */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Asset Allocation
+              </h3>
+              <AssetAllocationChart portfolios={[portfolio]} />
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction Form */}
+        {showTransactionForm && (
+          <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add New Transaction</h3>
+              <form onSubmit={createTransaction} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Stock Symbol
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newTransaction.stock_symbol}
+                      onChange={(e) => setNewTransaction({...newTransaction, stock_symbol: e.target.value.toUpperCase()})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., AAPL"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Transaction Type
+                    </label>
+                    <select
+                      value={newTransaction.transaction_type}
+                      onChange={(e) => setNewTransaction({...newTransaction, transaction_type: e.target.value as 'BUY' | 'SELL'})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="BUY">Buy</option>
+                      <option value="SELL">Sell</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Quantity
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      required
+                      value={newTransaction.quantity}
+                      onChange={(e) => setNewTransaction({...newTransaction, quantity: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Price per Share
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      value={newTransaction.price_per_share}
+                      onChange={(e) => setNewTransaction({...newTransaction, price_per_share: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Fees (optional)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={newTransaction.fees}
+                      onChange={(e) => setNewTransaction({...newTransaction, fees: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Transaction Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={newTransaction.transaction_date}
+                      onChange={(e) => setNewTransaction({...newTransaction, transaction_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notes (optional)
+                  </label>
+                  <textarea
+                    value={newTransaction.notes}
+                    onChange={(e) => setNewTransaction({...newTransaction, notes: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Add any notes about this transaction"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <Button type="submit" variant="primary">
+                    Add Transaction
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="secondary"
+                    onClick={() => setShowTransactionForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Transactions List */}
+        <div className="bg-white rounded-lg shadow-md">
+          <div className="p-6 border-b">
+            <h2 className="text-xl font-semibold">Transactions</h2>
+          </div>
+          {transactions.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500 text-lg">No transactions found</p>
+              <p className="text-gray-400 mt-2">Add your first transaction to get started</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fees</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {transactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(transaction.transaction_date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{transaction.stock.symbol}</div>
+                          <div className="text-sm text-gray-500">{transaction.stock.company_name}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          transaction.transaction_type === 'BUY' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {transaction.transaction_type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {parseFloat(transaction.quantity).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${parseFloat(transaction.price_per_share).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${parseFloat(transaction.total_amount).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${parseFloat(transaction.fees).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
