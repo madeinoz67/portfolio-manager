@@ -207,9 +207,8 @@ async def get_service_status(
 
     for provider in providers:
         # Check recent API usage to determine provider health
-        recent_usage = db.query(service.db.query).filter(
-            # This would be implemented with proper queries
-        ).limit(10).all() if hasattr(service, 'db') else []
+        # For now, skip the recent usage check as it's not fully implemented
+        recent_usage = []
 
         providers_status[provider.name] = {
             "enabled": provider.is_enabled,

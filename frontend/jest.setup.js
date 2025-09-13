@@ -56,3 +56,37 @@ Object.defineProperty(navigator, 'onLine', {
   writable: true,
   value: true,
 })
+
+// Mock fetch for all tests
+global.fetch = jest.fn()
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  clear: jest.fn(),
+}
+global.localStorage = localStorageMock
+
+// Mock process.env
+process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8001'
+
+// Reset all mocks after each test
+afterEach(() => {
+  jest.clearAllMocks()
+})
+
+// Mock AbortController
+global.AbortController = class AbortController {
+  signal = { aborted: false }
+  abort = jest.fn(() => {
+    this.signal.aborted = true
+  })
+}
+
+// Mock setTimeout and clearTimeout for timeout testing
+const originalSetTimeout = global.setTimeout
+const originalClearTimeout = global.clearTimeout
+global.setTimeout = jest.fn((cb, delay) => originalSetTimeout(cb, delay))
+global.clearTimeout = jest.fn((id) => originalClearTimeout(id))

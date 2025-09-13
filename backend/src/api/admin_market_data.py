@@ -7,6 +7,7 @@ Provides administrative controls for market data polling and usage monitoring.
 from datetime import datetime, timedelta
 from typing import List, Optional
 import uuid
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -220,12 +221,20 @@ async def get_api_usage(
         }
     )
 
-    return ApiUsageResponse(
+    from fastapi import Response
+
+    response_data = ApiUsageResponse(
         summary=summary,
         by_provider=by_provider,
         by_date=by_date,
         rate_limits=rate_limits,
         last_updated=datetime.now().isoformat() + "Z"
+    )
+
+    return Response(
+        content=response_data.model_dump_json(),
+        media_type="application/json",
+        headers={"Cache-Control": "max-age=300"}  # 5 minute cache
     )
 
 
@@ -251,7 +260,9 @@ async def get_poll_intervals(
 
     configs = query.all()
 
-    return [
+    from fastapi import Response
+
+    response_data = [
         PollIntervalResponse(
             id=str(config.id),
             interval_minutes=config.interval_minutes,
@@ -263,6 +274,12 @@ async def get_poll_intervals(
         )
         for config in configs
     ]
+
+    return Response(
+        content=json.dumps([item.model_dump() for item in response_data]),
+        media_type="application/json",
+        headers={"Cache-Control": "max-age=60"}  # 1 minute cache
+    )
 
 
 @router.post("/poll-intervals", response_model=PollIntervalResponse, status_code=status.HTTP_201_CREATED)
@@ -293,7 +310,9 @@ async def create_poll_interval(
     db.commit()
     db.refresh(new_config)
 
-    response = PollIntervalResponse(
+    from fastapi import Response
+
+    response_data = PollIntervalResponse(
         id=str(new_config.id),
         interval_minutes=new_config.interval_minutes,
         reason=new_config.reason,
@@ -303,4 +322,9 @@ async def create_poll_interval(
         expired_at=None
     )
 
-    return response
+    return Response(
+        content=response_data.model_dump_json(),
+        media_type="application/json",
+        status_code=201,
+        headers={"Location": f"/api/v1/admin/poll-intervals/{new_config.id}"}
+    )

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
+import { ErrorBanner } from '@/components/ui/ErrorBanner'
 
 interface LoginFormProps {
   onSuccess?: () => void
@@ -14,7 +15,8 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { login } = useAuth()
+  const [localError, setLocalError] = useState<any>(null)
+  const { login, clearError } = useAuth()
   const { addToast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,13 +24,16 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
     if (isSubmitting) return
 
     setIsSubmitting(true)
+    setLocalError(null)
+    clearError()
+
     try {
-      const success = await login({ email, password })
-      if (success) {
+      const result = await login({ email, password })
+      if (result.success) {
         addToast('Successfully logged in!', 'success')
         onSuccess?.()
       } else {
-        addToast('Invalid email or password', 'error')
+        setLocalError(result.error)
       }
     } catch (error) {
       addToast('Login failed. Please try again.', 'error')
@@ -45,6 +50,15 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
           Welcome back to your portfolio manager
         </p>
       </div>
+
+      {/* Show local error banner if login failed */}
+      {localError && (
+        <ErrorBanner
+          error={localError}
+          onDismiss={() => setLocalError(null)}
+          className="mb-6"
+        />
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>

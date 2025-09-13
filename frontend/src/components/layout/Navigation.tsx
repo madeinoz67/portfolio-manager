@@ -10,7 +10,7 @@ const navigationItems = [
   { name: 'Dashboard', href: '/', icon: 'dashboard' },
   { name: 'Portfolios', href: '/portfolios', icon: 'briefcase' },
   { name: 'Analytics', href: '/analytics', icon: 'chart' },
-  { name: 'Markets', href: '/markets', icon: 'trending' },
+  { name: 'Markets', href: '/market-data', icon: 'trending' },
   { name: 'Settings', href: '/settings', icon: 'settings' },
 ]
 
