@@ -1,4 +1,15 @@
-export type TransactionType = 'BUY' | 'SELL' | 'DIVIDEND' | 'STOCK_SPLIT' | 'REVERSE_SPLIT' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'SPIN_OFF' | 'MERGER' | 'BONUS_SHARES'
+export enum TransactionType {
+  BUY = 'BUY',
+  SELL = 'SELL',
+  DIVIDEND = 'DIVIDEND',
+  STOCK_SPLIT = 'STOCK_SPLIT',
+  REVERSE_SPLIT = 'REVERSE_SPLIT',
+  TRANSFER_IN = 'TRANSFER_IN',
+  TRANSFER_OUT = 'TRANSFER_OUT',
+  SPIN_OFF = 'SPIN_OFF',
+  MERGER = 'MERGER',
+  BONUS_SHARES = 'BONUS_SHARES'
+}
 
 export type SourceType = 'MANUAL' | 'IMPORTED' | 'EMAIL'
 
