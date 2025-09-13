@@ -55,12 +55,20 @@ export default function TransactionForm({
       newErrors.stock_symbol = 'Please select a valid stock from the list'
     }
 
-    if (formData.quantity <= 0) {
+    // Dynamic quantity validation based on transaction type
+    const allowZeroQuantity = ['DIVIDEND', 'REVERSE_SPLIT', 'MERGER'].includes(formData.transaction_type)
+    if (!allowZeroQuantity && formData.quantity <= 0) {
       newErrors.quantity = 'Quantity must be greater than 0'
+    } else if (allowZeroQuantity && formData.quantity < 0) {
+      newErrors.quantity = 'Quantity cannot be negative'
     }
 
-    if (formData.price_per_share <= 0) {
+    // Dynamic price validation based on transaction type
+    const allowZeroPrice = ['STOCK_SPLIT', 'REVERSE_SPLIT', 'SPIN_OFF', 'BONUS_SHARES'].includes(formData.transaction_type)
+    if (!allowZeroPrice && formData.price_per_share <= 0) {
       newErrors.price_per_share = 'Price per share must be greater than 0'
+    } else if (allowZeroPrice && formData.price_per_share < 0) {
+      newErrors.price_per_share = 'Price per share cannot be negative'
     }
 
     if (formData.fees < 0) {
@@ -161,16 +169,50 @@ export default function TransactionForm({
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             disabled={loading}
           >
-            <option value="BUY">Buy</option>
-            <option value="SELL">Sell</option>
+            <optgroup label="Trading">
+              <option value="BUY">Buy</option>
+              <option value="SELL">Sell</option>
+            </optgroup>
+            <optgroup label="Income">
+              <option value="DIVIDEND">Dividend</option>
+            </optgroup>
+            <optgroup label="Corporate Actions">
+              <option value="STOCK_SPLIT">Stock Split</option>
+              <option value="REVERSE_SPLIT">Reverse Split</option>
+              <option value="SPIN_OFF">Spin-off</option>
+              <option value="MERGER">Merger</option>
+              <option value="BONUS_SHARES">Bonus Shares</option>
+            </optgroup>
+            <optgroup label="Transfers">
+              <option value="TRANSFER_IN">Transfer In</option>
+              <option value="TRANSFER_OUT">Transfer Out</option>
+            </optgroup>
           </select>
         </div>
+
+        {/* Transaction Type Helper Text */}
+        {['DIVIDEND', 'STOCK_SPLIT', 'REVERSE_SPLIT', 'SPIN_OFF', 'MERGER', 'BONUS_SHARES'].includes(formData.transaction_type) && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              {formData.transaction_type === 'DIVIDEND' && 'For dividends, enter 0 quantity and the dividend amount per share as price.'}
+              {formData.transaction_type === 'STOCK_SPLIT' && 'For stock splits, enter the additional shares received and set price to 0.'}
+              {formData.transaction_type === 'REVERSE_SPLIT' && 'For reverse splits, enter 0 quantity and 0 price.'}
+              {formData.transaction_type === 'SPIN_OFF' && 'For spin-offs, enter the new shares received and set price to 0.'}
+              {formData.transaction_type === 'MERGER' && 'For mergers, enter 0 quantity and the price per share received.'}
+              {formData.transaction_type === 'BONUS_SHARES' && 'For bonus shares, enter the bonus shares received and set price to 0.'}
+            </p>
+          </div>
+        )}
 
         {/* Quantity and Price */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Quantity *
+              {formData.transaction_type === 'DIVIDEND' ? 'Quantity (optional for dividends)' : 
+               formData.transaction_type === 'STOCK_SPLIT' ? 'Additional Shares *' :
+               formData.transaction_type === 'SPIN_OFF' ? 'New Shares Received *' :
+               formData.transaction_type === 'BONUS_SHARES' ? 'Bonus Shares Received *' :
+               'Quantity *'}
             </label>
             <input
               type="number"
@@ -192,7 +234,9 @@ export default function TransactionForm({
 
           <div>
             <label htmlFor="price_per_share" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Price per Share *
+              {formData.transaction_type === 'DIVIDEND' ? 'Dividend per Share *' :
+               ['STOCK_SPLIT', 'REVERSE_SPLIT', 'SPIN_OFF', 'BONUS_SHARES'].includes(formData.transaction_type) ? 'Price per Share (usually 0)' :
+               'Price per Share *'}
             </label>
             <input
               type="number"
@@ -303,7 +347,17 @@ export default function TransactionForm({
             disabled={loading}
             className="flex-1"
           >
-            {formData.transaction_type === 'BUY' ? 'Add Buy Transaction' : 'Add Sell Transaction'}
+            {formData.transaction_type === 'BUY' ? 'Add Buy Transaction' :
+             formData.transaction_type === 'SELL' ? 'Add Sell Transaction' :
+             formData.transaction_type === 'DIVIDEND' ? 'Add Dividend' :
+             formData.transaction_type === 'STOCK_SPLIT' ? 'Add Stock Split' :
+             formData.transaction_type === 'REVERSE_SPLIT' ? 'Add Reverse Split' :
+             formData.transaction_type === 'TRANSFER_IN' ? 'Add Transfer In' :
+             formData.transaction_type === 'TRANSFER_OUT' ? 'Add Transfer Out' :
+             formData.transaction_type === 'SPIN_OFF' ? 'Add Spin-off' :
+             formData.transaction_type === 'MERGER' ? 'Add Merger' :
+             formData.transaction_type === 'BONUS_SHARES' ? 'Add Bonus Shares' :
+             'Add Transaction'}
           </Button>
           
           <Button

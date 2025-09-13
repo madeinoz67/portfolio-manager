@@ -1,4 +1,4 @@
-export type TransactionType = 'BUY' | 'SELL'
+export type TransactionType = 'BUY' | 'SELL' | 'DIVIDEND' | 'STOCK_SPLIT' | 'REVERSE_SPLIT' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'SPIN_OFF' | 'MERGER' | 'BONUS_SHARES'
 
 export type SourceType = 'MANUAL' | 'IMPORTED' | 'EMAIL'
 
