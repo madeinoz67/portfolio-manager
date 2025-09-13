@@ -78,3 +78,51 @@ logs/
 
 # Claude settings
 .claude/settings.local.json
+
+# Additional Python artifacts
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.coverage.*
+.cache/
+__pycache__
+
+# Frontend/Node.js
+node_modules/
+.next/
+.swc/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Development artifacts
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Additional database artifacts
+portfolio*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Lock files (optional - comment out if you want to track them)
+# package-lock.json
+# yarn.lock
+
+# Additional build artifacts
+dist/
+build/
+out/
+.output/
