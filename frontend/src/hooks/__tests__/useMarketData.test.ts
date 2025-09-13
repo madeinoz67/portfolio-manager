@@ -404,6 +404,15 @@ describe('useMarketData', () => {
     it('should handle invalid price data gracefully', async () => {
       const { result } = renderHook(() => useMarketData(['AAPL']))
 
+      // First simulate WebSocket open event
+      const openHandler = mockWebSocket.addEventListener.mock.calls.find(
+        call => call[0] === 'open'
+      )?.[1]
+
+      await act(async () => {
+        openHandler?.()
+      })
+
       const messageHandler = mockWebSocket.addEventListener.mock.calls.find(
         call => call[0] === 'message'
       )?.[1]
