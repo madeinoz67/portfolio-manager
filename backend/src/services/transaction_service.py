@@ -484,7 +484,7 @@ def _recalculate_holdings_for_stock(
         Transaction.portfolio_id == portfolio_id,
         Transaction.stock_id == stock_id
     ).order_by(Transaction.transaction_date.asc(), Transaction.processed_date.asc()).all()
-    
+
     # Delete existing holding
     existing_holding = db.query(Holding).filter(
         Holding.portfolio_id == portfolio_id,
@@ -492,7 +492,7 @@ def _recalculate_holdings_for_stock(
     ).first()
     if existing_holding:
         db.delete(existing_holding)
-    
+
     # If no transactions remain, we're done (holding deleted)
     if not transactions:
         return
@@ -511,7 +511,7 @@ def _recalculate_holdings_for_stock(
             transaction_date=transaction.transaction_date,
             notes=transaction.notes
         )
-        
+
         # Apply the transaction to holdings
         if transaction_data.transaction_type == TransactionType.BUY:
             holding = _replay_buy_transaction(db, holding, stock, portfolio_id, transaction_data)
