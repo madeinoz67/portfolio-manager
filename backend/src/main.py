@@ -11,6 +11,7 @@ from src.api.portfolios import router as portfolios_router
 from src.api.stocks import router as stocks_router
 from src.api.transactions import router as transactions_router
 from src.api.performance import router as performance_router
+from src.api.api_keys import router as api_keys_router
 from src.core.exceptions import (
     PortfolioError,
     TransactionError,
@@ -48,7 +49,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],  # Frontend URLs
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,6 +89,7 @@ app.include_router(portfolios_router)
 app.include_router(stocks_router)
 app.include_router(transactions_router)
 app.include_router(performance_router)
+app.include_router(api_keys_router)
 
 
 @app.get("/")

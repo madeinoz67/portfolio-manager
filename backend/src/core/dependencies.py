@@ -126,9 +126,28 @@ async def get_user_by_api_key_header(
     """
     Get user by API key from X-API-Key header.
     Returns None if no API key provided or invalid.
+    Raises HTTPException for expired keys.
     """
     if not x_api_key:
         return None
+    
+    from src.models.api_key import ApiKey
+    from src.core.api_keys import hash_api_key
+    from datetime import datetime
+    
+    # Check if the API key is expired specifically
+    key_hash = hash_api_key(x_api_key)
+    api_key_record = db.query(ApiKey).filter(
+        ApiKey.key_hash == key_hash,
+        ApiKey.is_active.is_(True)
+    ).first()
+    
+    if api_key_record and api_key_record.expires_at and api_key_record.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key has expired",
+            headers={"WWW-Authenticate": "X-API-Key"},
+        )
     
     return get_user_by_api_key(db, x_api_key)
 
