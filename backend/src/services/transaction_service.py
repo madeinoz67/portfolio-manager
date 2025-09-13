@@ -141,8 +141,14 @@ def process_transaction(
         elif transaction_data.transaction_type in [TransactionType.REVERSE_SPLIT, TransactionType.SPIN_OFF, TransactionType.MERGER]:
             _process_corporate_action_transaction(db, holding, transaction_data)
         
+        # Ensure all changes are flushed to the database before integrity check
+        db.flush()
+
         # Update portfolio totals after processing transaction
         _update_portfolio_totals(db, portfolio_id)
+
+        # Flush portfolio totals update as well
+        db.flush()
 
         # Verify data integrity before committing
         from src.services.portfolio_integrity import PortfolioIntegrityService
@@ -199,7 +205,7 @@ def _process_buy_transaction(
     transaction_data: TransactionCreate
 ) -> None:
     """Process a BUY transaction by creating or updating holdings."""
-    
+
     if holding:
         # Update existing holding with new average cost including fees
         current_total_cost = holding.quantity * holding.average_cost
@@ -207,35 +213,22 @@ def _process_buy_transaction(
         total_cost = current_total_cost + transaction_cost
         new_quantity = holding.quantity + transaction_data.quantity
         new_average_cost = total_cost / new_quantity
-        
+
         holding.quantity = new_quantity
         holding.average_cost = new_average_cost
-        # Use latest price as current price for now
-        holding.current_value = new_quantity * transaction_data.price_per_share
-        
-        # Calculate unrealized gains
-        cost_basis = new_quantity * new_average_cost
-        holding.unrealized_gain_loss = holding.current_value - cost_basis
-        if cost_basis > 0:
-            holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-        else:
-            holding.unrealized_gain_loss_percent = Decimal("0.00")
+        # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
 
     else:
         # Create new holding with fees included in average cost
         transaction_cost = (transaction_data.quantity * transaction_data.price_per_share) + (transaction_data.fees or Decimal("0"))
         average_cost_with_fees = transaction_cost / transaction_data.quantity
-        current_value = transaction_data.quantity * transaction_data.price_per_share
-        cost_basis = transaction_data.quantity * average_cost_with_fees
-        unrealized_gain_loss = current_value - cost_basis
+
         holding = Holding(
             portfolio_id=portfolio_id,
             stock_id=stock.id,
             quantity=transaction_data.quantity,
-            average_cost=average_cost_with_fees,
-            current_value=current_value,
-            unrealized_gain_loss=unrealized_gain_loss,
-            unrealized_gain_loss_percent=Decimal("0.00")
+            average_cost=average_cost_with_fees
+            # No need for current_value, unrealized_gain_loss etc - they're calculated automatically!
         )
         db.add(holding)
 
@@ -246,25 +239,16 @@ def _process_sell_transaction(
     transaction_data: TransactionCreate
 ) -> None:
     """Process a SELL transaction by updating or removing holdings."""
-    
+
     new_quantity = holding.quantity - transaction_data.quantity
-    
+
     if new_quantity == 0:
         # Remove holding completely
         db.delete(holding)
     else:
         # Update holding quantity but keep same average cost
         holding.quantity = new_quantity
-        # Use latest price as current price for now
-        holding.current_value = new_quantity * transaction_data.price_per_share
-        
-        # Calculate unrealized gains with new quantity
-        cost_basis = new_quantity * holding.average_cost
-        holding.unrealized_gain_loss = holding.current_value - cost_basis
-        if cost_basis > 0:
-            holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-        else:
-            holding.unrealized_gain_loss_percent = Decimal("0.00")
+        # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
 
 
 def _process_dividend_transaction(
@@ -285,31 +269,17 @@ def _process_stock_split_transaction(
     """Process a STOCK_SPLIT transaction by adding shares and adjusting average cost."""
     if not holding:
         raise TransactionError("Cannot process stock split for stock not held")
-    
+
     # Add shares from split
     new_quantity = holding.quantity + transaction_data.quantity
-    
+
     # Reduce average cost proportionally (same total cost basis, more shares)
     if new_quantity > 0:
         total_cost_basis = holding.quantity * holding.average_cost
         holding.average_cost = total_cost_basis / new_quantity
-    
-    # Calculate current price per share before updating quantity
-    old_quantity = holding.quantity
-    current_price_per_share = holding.current_value / old_quantity if old_quantity > 0 else Decimal("0.00")
-    
+
     holding.quantity = new_quantity
-    # After split, price per share is adjusted proportionally
-    split_adjusted_price = current_price_per_share * old_quantity / new_quantity if new_quantity > 0 else Decimal("0.00")
-    holding.current_value = new_quantity * split_adjusted_price
-    
-    # Recalculate unrealized gains
-    cost_basis = new_quantity * holding.average_cost
-    holding.unrealized_gain_loss = holding.current_value - cost_basis
-    if cost_basis > 0:
-        holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-    else:
-        holding.unrealized_gain_loss_percent = Decimal("0.00")
+    # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
 
 
 def _process_bonus_shares_transaction(
@@ -320,30 +290,17 @@ def _process_bonus_shares_transaction(
     """Process a BONUS_SHARES transaction by adding shares and adjusting average cost."""
     if not holding:
         raise TransactionError("Cannot process bonus shares for stock not held")
-    
+
     # Add bonus shares
     new_quantity = holding.quantity + transaction_data.quantity
-    
+
     # Reduce average cost (same total cost basis, more shares)
     if new_quantity > 0:
         total_cost_basis = holding.quantity * holding.average_cost
         holding.average_cost = total_cost_basis / new_quantity
-    
-    # Calculate current price per share before updating quantity
-    old_quantity = holding.quantity
-    current_price_per_share = holding.current_value / old_quantity if old_quantity > 0 else Decimal("0.00")
-    
+
     holding.quantity = new_quantity
-    # Keep current value per share the same
-    holding.current_value = new_quantity * current_price_per_share
-    
-    # Recalculate unrealized gains
-    cost_basis = new_quantity * holding.average_cost
-    holding.unrealized_gain_loss = holding.current_value - cost_basis
-    if cost_basis > 0:
-        holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-    else:
-        holding.unrealized_gain_loss_percent = Decimal("0.00")
+    # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
 
 
 def _process_transfer_in_transaction(

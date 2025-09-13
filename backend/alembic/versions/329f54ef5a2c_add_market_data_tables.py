@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column('requests_used_today', sa.Integer(), default=0),
         sa.Column('last_request_at', sa.TIMESTAMP(), nullable=True),
         sa.Column('priority', sa.Integer(), default=1),
-        sa.Column('supports_symbols', sa.ARRAY(sa.Text()), default=[]),
+        sa.Column('supports_symbols', sa.Text(), default='[]'),
         sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.func.now()),
         sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.func.now()),
     )
@@ -76,7 +76,7 @@ def upgrade() -> None:
         sa.Column('user_id', sa.UUID(), nullable=False),
         sa.Column('connected_at', sa.TIMESTAMP(), server_default=sa.func.now()),
         sa.Column('last_heartbeat', sa.TIMESTAMP(), server_default=sa.func.now()),
-        sa.Column('subscribed_portfolios', sa.ARRAY(sa.UUID()), default=[]),
+        sa.Column('subscribed_portfolios', sa.Text(), default='[]'),
         sa.Column('is_active', sa.Boolean(), default=True),
         sa.Column('user_agent', sa.Text(), nullable=True),
         sa.Column('ip_address', sa.String(45), nullable=True),
@@ -172,13 +172,37 @@ def upgrade() -> None:
     )
 
     # Extend stocks table with real-time price fields
-    op.add_column('stocks', sa.Column('current_price', sa.NUMERIC(10, 4), nullable=True))
-    op.add_column('stocks', sa.Column('previous_close', sa.NUMERIC(10, 4), nullable=True))
-    op.add_column('stocks', sa.Column('daily_change', sa.NUMERIC(8, 4), default=0))
-    op.add_column('stocks', sa.Column('daily_change_percent', sa.NUMERIC(5, 2), default=0))
-    op.add_column('stocks', sa.Column('last_price_update', sa.TIMESTAMP(), nullable=True))
-    op.add_column('stocks', sa.Column('price_source', sa.String(50), nullable=True))
-    op.add_column('stocks', sa.Column('market_status', sa.String(20), default='CLOSED'))
+    # Use safe column addition to handle existing columns
+
+    connection = op.get_bind()
+
+    # Function to check if column exists
+    def column_exists(table_name, column_name):
+        result = connection.execute(sa.text(f"PRAGMA table_info({table_name})"))
+        columns = [row[1] for row in result]
+        return column_name in columns
+
+    # Add columns only if they don't exist
+    if not column_exists('stocks', 'current_price'):
+        op.add_column('stocks', sa.Column('current_price', sa.NUMERIC(10, 4), nullable=True))
+
+    if not column_exists('stocks', 'previous_close'):
+        op.add_column('stocks', sa.Column('previous_close', sa.NUMERIC(10, 4), nullable=True))
+
+    if not column_exists('stocks', 'daily_change'):
+        op.add_column('stocks', sa.Column('daily_change', sa.NUMERIC(8, 4), default=0))
+
+    if not column_exists('stocks', 'daily_change_percent'):
+        op.add_column('stocks', sa.Column('daily_change_percent', sa.NUMERIC(5, 2), default=0))
+
+    if not column_exists('stocks', 'last_price_update'):
+        op.add_column('stocks', sa.Column('last_price_update', sa.TIMESTAMP(), nullable=True))
+
+    if not column_exists('stocks', 'price_source'):
+        op.add_column('stocks', sa.Column('price_source', sa.String(50), nullable=True))
+
+    if not column_exists('stocks', 'market_status'):
+        op.add_column('stocks', sa.Column('market_status', sa.String(20), default='CLOSED'))
 
     # Performance indexes for real-time queries
     op.create_index('idx_stocks_symbol_hash', 'stocks', ['symbol'], postgresql_using='hash')
