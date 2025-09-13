@@ -545,33 +545,20 @@ def _replay_buy_transaction(
         total_cost = current_total_cost + transaction_cost
         new_quantity = holding.quantity + transaction_data.quantity
         new_average_cost = total_cost / new_quantity
-        
+
         holding.quantity = new_quantity
         holding.average_cost = new_average_cost
-        holding.current_value = new_quantity * transaction_data.price_per_share
-        
-        # Calculate unrealized gains
-        cost_basis = new_quantity * new_average_cost
-        holding.unrealized_gain_loss = holding.current_value - cost_basis
-        if cost_basis > 0:
-            holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-        else:
-            holding.unrealized_gain_loss_percent = Decimal("0.00")
+        # No need to set current_value, unrealized_gain_loss etc - they're now hybrid properties!
     else:
         # Create new holding with fees included in average cost
         transaction_cost = (transaction_data.quantity * transaction_data.price_per_share) + (transaction_data.fees or Decimal("0"))
         average_cost_with_fees = transaction_cost / transaction_data.quantity
-        current_value = transaction_data.quantity * transaction_data.price_per_share
-        cost_basis = transaction_data.quantity * average_cost_with_fees
-        unrealized_gain_loss = current_value - cost_basis
         holding = Holding(
             portfolio_id=portfolio_id,
             stock_id=stock.id,
             quantity=transaction_data.quantity,
-            average_cost=average_cost_with_fees,
-            current_value=current_value,
-            unrealized_gain_loss=unrealized_gain_loss,
-            unrealized_gain_loss_percent=Decimal("0.00")
+            average_cost=average_cost_with_fees
+            # No need for current_value, unrealized_gain_loss etc - they're calculated automatically!
         )
         db.add(holding)
 
@@ -594,17 +581,9 @@ def _replay_sell_transaction(
         db.delete(holding)
         return None
     else:
-        # Update holding
+        # Update holding quantity but keep same average cost
         holding.quantity = new_quantity
-        holding.current_value = new_quantity * transaction_data.price_per_share
-        
-        # Calculate unrealized gains
-        cost_basis = new_quantity * holding.average_cost
-        holding.unrealized_gain_loss = holding.current_value - cost_basis
-        if cost_basis > 0:
-            holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-        else:
-            holding.unrealized_gain_loss_percent = Decimal("0.00")
+        # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
     
     return holding
 
@@ -617,27 +596,18 @@ def _replay_stock_split_transaction(
     """Replay a stock split transaction during holdings recalculation."""
     if not holding:
         return None
-    
-    # Add shares from split and adjust average cost
-    old_quantity = holding.quantity
+
+    # Add shares from split
     new_quantity = holding.quantity + transaction_data.quantity
-    total_cost_basis = holding.quantity * holding.average_cost
-    holding.average_cost = total_cost_basis / new_quantity
+
+    # Reduce average cost proportionally (same total cost basis, more shares)
+    if new_quantity > 0:
+        total_cost_basis = holding.quantity * holding.average_cost
+        holding.average_cost = total_cost_basis / new_quantity
+
     holding.quantity = new_quantity
-    
-    # Update current value (price per share should be adjusted for split)
-    current_price_per_share = holding.current_value / old_quantity if old_quantity > 0 else Decimal("0.00")
-    split_adjusted_price = current_price_per_share * old_quantity / new_quantity
-    holding.current_value = new_quantity * split_adjusted_price
-    
-    # Recalculate unrealized gains
-    cost_basis = new_quantity * holding.average_cost
-    holding.unrealized_gain_loss = holding.current_value - cost_basis
-    if cost_basis > 0:
-        holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-    else:
-        holding.unrealized_gain_loss_percent = Decimal("0.00")
-    
+    # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
+
     return holding
 
 
@@ -649,26 +619,18 @@ def _replay_bonus_shares_transaction(
     """Replay a bonus shares transaction during holdings recalculation."""
     if not holding:
         return None
-    
-    # Add bonus shares and adjust average cost
-    old_quantity = holding.quantity
+
+    # Add bonus shares
     new_quantity = holding.quantity + transaction_data.quantity
-    total_cost_basis = holding.quantity * holding.average_cost
-    holding.average_cost = total_cost_basis / new_quantity
+
+    # Reduce average cost (same total cost basis, more shares)
+    if new_quantity > 0:
+        total_cost_basis = holding.quantity * holding.average_cost
+        holding.average_cost = total_cost_basis / new_quantity
+
     holding.quantity = new_quantity
-    
-    # Keep current value per share the same
-    current_price_per_share = holding.current_value / old_quantity if old_quantity > 0 else Decimal("0.00")
-    holding.current_value = new_quantity * current_price_per_share
-    
-    # Recalculate unrealized gains
-    cost_basis = new_quantity * holding.average_cost
-    holding.unrealized_gain_loss = holding.current_value - cost_basis
-    if cost_basis > 0:
-        holding.unrealized_gain_loss_percent = (holding.unrealized_gain_loss / cost_basis) * 100
-    else:
-        holding.unrealized_gain_loss_percent = Decimal("0.00")
-    
+    # No need to calculate current_value, unrealized_gain_loss etc - they're now hybrid properties!
+
     return holding
 
 def _update_portfolio_totals(db: Session, portfolio_id: UUID) -> None:
