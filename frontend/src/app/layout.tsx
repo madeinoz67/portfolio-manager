@@ -3,6 +3,7 @@ import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import { AuthProvider } from '@/contexts/AuthContext'
+import AuthGuard from '@/components/Auth/AuthGuard'
 
 export const metadata: Metadata = {
   title: 'Portfolio Management System',
@@ -20,7 +21,9 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider>
             <ToastProvider>
-              {children}
+              <AuthGuard>
+                {children}
+              </AuthGuard>
             </ToastProvider>
           </ThemeProvider>
         </AuthProvider>

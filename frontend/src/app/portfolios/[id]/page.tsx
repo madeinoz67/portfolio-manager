@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Navigation from '@/components/layout/Navigation'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import ErrorMessage from '@/components/ui/ErrorMessage'
 
 interface Portfolio {
   id: string
@@ -15,14 +18,31 @@ interface Portfolio {
   updated_at: string
 }
 
+interface Stock {
+  id: string
+  symbol: string
+  company_name: string
+  current_price?: string
+  sector?: string
+  market_cap?: string
+}
+
+interface Holding {
+  id: string
+  stock: Stock
+  quantity: string
+  average_cost: string
+  current_value: string
+  unrealized_gain_loss: string
+  unrealized_gain_loss_percent: string
+  recent_news_count: number
+  created_at: string
+  updated_at: string
+}
+
 interface Transaction {
   id: string
-  stock: {
-    id: string
-    symbol: string
-    company_name: string
-    current_price?: string
-  }
+  stock: Stock
   transaction_type: 'BUY' | 'SELL'
   quantity: string
   price_per_share: string
@@ -30,149 +50,109 @@ interface Transaction {
   fees: string
   transaction_date: string
   notes?: string
-  processed_date: string
-}
-
-interface TransactionListResponse {
-  transactions: Transaction[]
-  total: number
-  limit: number
-  offset: number
 }
 
 export default function PortfolioDetail() {
   const params = useParams()
   const router = useRouter()
-  const portfolioId = params.id as string
+  const portfolioId = params?.id as string
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [holdings, setHoldings] = useState<Holding[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showTransactionForm, setShowTransactionForm] = useState(false)
-  const [newTransaction, setNewTransaction] = useState({
-    stock_symbol: '',
-    transaction_type: 'BUY' as 'BUY' | 'SELL',
-    quantity: '',
-    price_per_share: '',
-    fees: '0.00',
-    transaction_date: new Date().toISOString().split('T')[0],
-    notes: ''
-  })
-
-  // Fetch portfolio details
-  const fetchPortfolio = async () => {
-    try {
-      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setPortfolio(data)
-      } else if (response.status === 404) {
-        setError('Portfolio not found')
-      } else {
-        setError('Failed to fetch portfolio')
-      }
-    } catch (error) {
-      setError('Connection error')
-      console.error('Error fetching portfolio:', error)
-    }
-  }
-
-  // Fetch transactions
-  const fetchTransactions = async () => {
-    try {
-      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions`)
-      if (response.ok) {
-        const data: TransactionListResponse = await response.json()
-        setTransactions(data.transactions)
-      } else {
-        console.error('Failed to fetch transactions')
-      }
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
-    }
-  }
-
-  // Create new transaction
-  const createTransaction = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newTransaction),
-      })
-      
-      if (response.ok) {
-        setNewTransaction({
-          stock_symbol: '',
-          transaction_type: 'BUY',
-          quantity: '',
-          price_per_share: '',
-          fees: '0.00',
-          transaction_date: new Date().toISOString().split('T')[0],
-          notes: ''
-        })
-        setShowTransactionForm(false)
-        fetchTransactions() // Refresh the list
-      } else {
-        const errorData = await response.json()
-        setError(errorData.detail || 'Failed to create transaction')
-      }
-    } catch (error) {
-      setError('Connection error')
-      console.error('Error creating transaction:', error)
-    }
-  }
-
-  // Delete portfolio
-  const deletePortfolio = async () => {
-    if (!confirm('Are you sure you want to delete this portfolio? This action cannot be undone.')) {
-      return
-    }
-
-    try {
-      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`, {
-        method: 'DELETE',
-      })
-      
-      if (response.ok) {
-        router.push('/') // Navigate back to dashboard
-      } else {
-        setError('Failed to delete portfolio')
-      }
-    } catch (error) {
-      setError('Connection error')
-      console.error('Error deleting portfolio:', error)
-    }
-  }
 
   useEffect(() => {
-    if (portfolioId) {
-      Promise.all([fetchPortfolio(), fetchTransactions()]).finally(() => {
+    const fetchPortfolio = async () => {
+      if (!portfolioId) return
+
+      try {
+        setLoading(true)
+        const token = localStorage.getItem('auth_token')
+        if (!token) {
+          router.push('/login')
+          return
+        }
+
+        // Fetch portfolio details
+        const portfolioResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!portfolioResponse.ok) {
+          if (portfolioResponse.status === 401) {
+            router.push('/login')
+            return
+          }
+          throw new Error(`Failed to fetch portfolio: ${portfolioResponse.status}`)
+        }
+
+        const portfolioData = await portfolioResponse.json()
+        setPortfolio(portfolioData)
+
+        // Fetch portfolio holdings
+        try {
+          const holdingsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/holdings`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          if (holdingsResponse.ok) {
+            const holdingsData = await holdingsResponse.json()
+            setHoldings(holdingsData)
+          }
+        } catch (err) {
+          console.warn('Failed to fetch holdings:', err)
+        }
+
+        // Fetch recent transactions
+        try {
+          const transactionsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions?limit=10`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          if (transactionsResponse.ok) {
+            const transactionsData = await transactionsResponse.json()
+            setTransactions(transactionsData.transactions || transactionsData)
+          }
+        } catch (err) {
+          console.warn('Failed to fetch transactions:', err)
+        }
+      } catch (err) {
+        console.error('Error fetching portfolio:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch portfolio')
+      } finally {
         setLoading(false)
-      })
+      }
     }
-  }, [portfolioId])
+
+    fetchPortfolio()
+  }, [portfolioId, router])
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navigation />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <LoadingSpinner />
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 text-lg mb-4">{error}</p>
-          <Link href="/" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            Back to Dashboard
-          </Link>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navigation />
+        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <ErrorMessage message={error} />
         </div>
       </div>
     )
@@ -180,257 +160,226 @@ export default function PortfolioDetail() {
 
   if (!portfolio) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 text-lg mb-4">Portfolio not found</p>
-          <Link href="/" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            Back to Dashboard
-          </Link>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navigation />
+        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <ErrorMessage message="Portfolio not found" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <Link href="/" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-            ← Back to Dashboard
-          </Link>
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{portfolio.name}</h1>
-              {portfolio.description && (
-                <p className="mt-2 text-gray-600">{portfolio.description}</p>
-              )}
-            </div>
-            <button
-              onClick={deletePortfolio}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Delete Portfolio
-            </button>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navigation />
+      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {portfolio.name}
+            </h1>
+            {portfolio.description && (
+              <p className="text-gray-600 dark:text-gray-300">
+                {portfolio.description}
+              </p>
+            )}
           </div>
-        </div>
-
-        {/* Portfolio Summary */}
-        <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-          <h2 className="text-xl font-semibold mb-4">Portfolio Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <p className="text-gray-500 text-sm">Total Value</p>
-              <p className="text-2xl font-bold">${portfolio.total_value}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-sm">Daily Change</p>
-              <p className={`text-2xl font-bold ${
-                parseFloat(portfolio.daily_change) >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                ${portfolio.daily_change} ({portfolio.daily_change_percent}%)
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-6 text-white">
+              <h3 className="text-sm font-medium text-blue-100">Total Value</h3>
+              <p className="text-3xl font-bold">
+                ${parseFloat(portfolio.total_value).toLocaleString()}
               </p>
             </div>
-            <div>
-              <p className="text-gray-500 text-sm">Created</p>
-              <p className="text-lg">{new Date(portfolio.created_at).toLocaleDateString()}</p>
+            
+            <div className="bg-gradient-to-r from-green-500 to-blue-500 rounded-lg p-6 text-white">
+              <h3 className="text-sm font-medium text-green-100">Daily Change</h3>
+              <p className="text-3xl font-bold">
+                ${parseFloat(portfolio.daily_change).toFixed(2)}
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white">
+              <h3 className="text-sm font-medium text-purple-100">Change %</h3>
+              <p className="text-3xl font-bold">
+                {parseFloat(portfolio.daily_change_percent).toFixed(2)}%
+              </p>
             </div>
           </div>
-        </div>
 
-        {/* Add Transaction Button */}
-        <div className="mb-6">
-          <button
-            onClick={() => setShowTransactionForm(!showTransactionForm)}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-          >
-            + Add Transaction
-          </button>
-        </div>
-
-        {/* Transaction Form */}
-        {showTransactionForm && (
-          <div className="mb-6 bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold mb-4">Add New Transaction</h3>
-            <form onSubmit={createTransaction} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock Symbol
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newTransaction.stock_symbol}
-                    onChange={(e) => setNewTransaction({...newTransaction, stock_symbol: e.target.value.toUpperCase()})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., AAPL"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transaction Type
-                  </label>
-                  <select
-                    value={newTransaction.transaction_type}
-                    onChange={(e) => setNewTransaction({...newTransaction, transaction_type: e.target.value as 'BUY' | 'SELL'})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="BUY">Buy</option>
-                    <option value="SELL">Sell</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Quantity
-                  </label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    min="0"
-                    required
-                    value={newTransaction.quantity}
-                    onChange={(e) => setNewTransaction({...newTransaction, quantity: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Price per Share
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    value={newTransaction.price_per_share}
-                    onChange={(e) => setNewTransaction({...newTransaction, price_per_share: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fees (optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={newTransaction.fees}
-                    onChange={(e) => setNewTransaction({...newTransaction, fees: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transaction Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newTransaction.transaction_date}
-                    onChange={(e) => setNewTransaction({...newTransaction, transaction_date: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes (optional)
-                </label>
-                <textarea
-                  value={newTransaction.notes}
-                  onChange={(e) => setNewTransaction({...newTransaction, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Add any notes about this transaction"
-                  rows={3}
-                />
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  type="submit"
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Add Transaction
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowTransactionForm(false)}
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Transactions List */}
-        <div className="bg-white rounded-lg shadow-md">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-semibold">Transactions</h2>
-          </div>
-          {transactions.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-gray-500 text-lg">No transactions found</p>
-              <p className="text-gray-400 mt-2">Add your first transaction to get started</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fees</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(transaction.transaction_date).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{transaction.stock.symbol}</div>
-                          <div className="text-sm text-gray-500">{transaction.stock.company_name}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          transaction.transaction_type === 'BUY' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {transaction.transaction_type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {parseFloat(transaction.quantity).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${parseFloat(transaction.price_per_share).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        ${parseFloat(transaction.total_amount).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${parseFloat(transaction.fees).toFixed(2)}
-                      </td>
+          {/* Holdings Section */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Stock Holdings
+            </h2>
+            {holdings.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Stock
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Avg Cost
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Current Value
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Gain/Loss
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        %
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {holdings.map((holding) => (
+                      <tr key={holding.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Link 
+                            href={`/portfolios/${portfolioId}/holdings/${holding.id}`}
+                            className="block hover:bg-gray-50 dark:hover:bg-gray-700 -m-2 p-2 rounded transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                                  {holding.stock.symbol} →
+                                </div>
+                                <div className="text-sm text-gray-500 dark:text-gray-300">
+                                  {holding.stock.company_name}
+                                </div>
+                              </div>
+                              {holding.recent_news_count > 0 && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100 ml-2 flex-shrink-0">
+                                  <span className="mr-1">📰</span>
+                                  {holding.recent_news_count}
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {parseFloat(holding.quantity).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          ${parseFloat(holding.average_cost).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          ${parseFloat(holding.current_value).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`font-medium ${
+                            parseFloat(holding.unrealized_gain_loss) >= 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {parseFloat(holding.unrealized_gain_loss) >= 0 ? '+' : ''}
+                            ${parseFloat(holding.unrealized_gain_loss).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`font-medium ${
+                            parseFloat(holding.unrealized_gain_loss_percent) >= 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {parseFloat(holding.unrealized_gain_loss_percent) >= 0 ? '+' : ''}
+                            {parseFloat(holding.unrealized_gain_loss_percent).toFixed(2)}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <p>No holdings found in this portfolio</p>
+              </div>
+            )}
+          </div>
+
+          {/* Recent Transactions Section */}
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Recent Transactions
+            </h2>
+            {transactions.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Stock
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Price
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {transactions.map((transaction) => (
+                      <tr key={transaction.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {new Date(transaction.transaction_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {transaction.stock.symbol}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-300">
+                              {transaction.stock.company_name}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            transaction.transaction_type === 'BUY'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                              : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                          }`}>
+                            {transaction.transaction_type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {parseFloat(transaction.quantity).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          ${parseFloat(transaction.price_per_share).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          ${parseFloat(transaction.total_amount).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <p>No transactions found for this portfolio</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

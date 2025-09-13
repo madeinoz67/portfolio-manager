@@ -4,7 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import AuthModal from '@/components/Auth/AuthModal'
 import { useAuth } from '@/contexts/AuthContext'
 
 const navigationItems = [
@@ -50,8 +49,6 @@ const getIcon = (iconName: string) => {
 
 export default function Navigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [showAuthModal, setShowAuthModal] = useState(false)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
@@ -94,53 +91,30 @@ export default function Navigation() {
             })}
           </div>
 
-          {/* Right side - Theme toggle and auth */}
+          {/* Right side - Theme toggle and user profile */}
           <div className="hidden md:flex items-center space-x-4">
             <ThemeToggle />
             
-            {user ? (
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-white">
-                      {user.first_name ? user.first_name[0] : user.email[0].toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    <p className="text-gray-900 dark:text-white font-medium">
-                      {user.first_name || user.email.split('@')[0]}
-                    </p>
-                  </div>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-medium text-white">
+                    {user?.first_name ? user.first_name[0] : user?.email[0].toUpperCase()}
+                  </span>
                 </div>
-                <button
-                  onClick={logout}
-                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
-                >
-                  Logout
-                </button>
+                <div className="text-sm">
+                  <p className="text-gray-900 dark:text-white font-medium">
+                    {user?.first_name || user?.email.split('@')[0]}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => {
-                    setAuthMode('login')
-                    setShowAuthModal(true)
-                  }}
-                  className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => {
-                    setAuthMode('register')
-                    setShowAuthModal(true)
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  Sign Up
-                </button>
-              </div>
-            )}
+              <button
+                onClick={logout}
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           {/* Mobile menu button */}
@@ -181,68 +155,36 @@ export default function Navigation() {
               )
             })}
             
-            {/* Mobile Auth Section */}
+            {/* Mobile User Section */}
             <div className="border-t dark:border-gray-700 pt-3 mt-3">
-              {user ? (
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-3 px-3 py-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-medium text-white">
-                        {user.first_name ? user.first_name[0] : user.email[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="text-sm">
-                      <p className="text-gray-900 dark:text-white font-medium">
-                        {user.first_name || user.email.split('@')[0]}
-                      </p>
-                      <p className="text-gray-500 dark:text-gray-400">{user.email}</p>
-                    </div>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-3 px-3 py-2">
+                  <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-medium text-white">
+                      {user?.first_name ? user.first_name[0] : user?.email[0].toUpperCase()}
+                    </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      logout()
-                      setIsMobileMenuOpen(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-base font-medium"
-                  >
-                    Logout
-                  </button>
+                  <div className="text-sm">
+                    <p className="text-gray-900 dark:text-white font-medium">
+                      {user?.first_name || user?.email.split('@')[0]}
+                    </p>
+                    <p className="text-gray-500 dark:text-gray-400">{user?.email}</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      setAuthMode('login')
-                      setShowAuthModal(true)
-                      setIsMobileMenuOpen(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-base font-medium"
-                  >
-                    Login
-                  </button>
-                  <button
-                    onClick={() => {
-                      setAuthMode('register')
-                      setShowAuthModal(true)
-                      setIsMobileMenuOpen(false)
-                    }}
-                    className="w-full text-left px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-base font-medium"
-                  >
-                    Sign Up
-                  </button>
-                </div>
-              )}
+                <button
+                  onClick={() => {
+                    logout()
+                    setIsMobileMenuOpen(false)
+                  }}
+                  className="w-full text-left px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-base font-medium"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        defaultMode={authMode}
-      />
     </nav>
   )
 }

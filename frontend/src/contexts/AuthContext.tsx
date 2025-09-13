@@ -30,12 +30,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const fetchCurrentUser = async (authToken: string) => {
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
       })
+      
+      clearTimeout(timeoutId)
 
       if (response.ok) {
         const userData = await response.json()
@@ -47,6 +53,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch (error) {
       console.error('Error fetching current user:', error)
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('Auth request timed out')
+      }
       localStorage.removeItem('auth_token')
       setToken(null)
     } finally {

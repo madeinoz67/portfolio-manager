@@ -1,214 +1,228 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-
-interface Portfolio {
-  id: string
-  name: string
-  description?: string
-  total_value: string
-  daily_change: string
-  daily_change_percent: string
-  created_at: string
-  updated_at: string
-}
+import { useState, useMemo } from 'react'
+import { usePortfolios } from '@/hooks/usePortfolios'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import ErrorMessage from '@/components/ui/ErrorMessage'
+import CreatePortfolioForm from '@/components/Portfolio/CreatePortfolioForm'
+import PortfolioCard from '@/components/Portfolio/PortfolioCard'
+import { PortfolioGridSkeleton } from '@/components/ui/PortfolioCardSkeleton'
+import { useToast } from '@/components/ui/Toast'
+import Navigation from '@/components/layout/Navigation'
+import HeroSection from '@/components/dashboard/HeroSection'
+import StatsCard, { StatsGrid } from '@/components/dashboard/StatsCard'
+import Button from '@/components/ui/Button'
 
 export default function Home() {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { portfolios, loading, error, createPortfolio } = usePortfolios()
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [newPortfolio, setNewPortfolio] = useState({ name: '', description: '' })
+  const [searchQuery, setSearchQuery] = useState('')
+  const { addToast } = useToast()
 
-  // Fetch portfolios from API
-  const fetchPortfolios = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('http://localhost:8001/api/v1/portfolios')
-      if (response.ok) {
-        const data = await response.json()
-        setPortfolios(data)
-        setError(null)
-      } else {
-        setError('Failed to fetch portfolios')
-      }
-    } catch (error) {
-      setError('Connection error')
-      console.error('Error fetching portfolios:', error)
-    } finally {
-      setLoading(false)
+  const handleCreatePortfolio = async (portfolioData: any) => {
+    const success = await createPortfolio(portfolioData)
+    if (success) {
+      addToast('Portfolio created successfully!', 'success')
+      setShowCreateForm(false)
+      return true
+    } else {
+      addToast('Failed to create portfolio', 'error')
+      return false
     }
   }
 
-  // Create new portfolio
-  const createPortfolio = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const response = await fetch('http://localhost:8001/api/v1/portfolios', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newPortfolio),
-      })
-      
-      if (response.ok) {
-        setNewPortfolio({ name: '', description: '' })
-        setShowCreateForm(false)
-        fetchPortfolios() // Refresh the list
-      } else {
-        setError('Failed to create portfolio')
-      }
-    } catch (error) {
-      setError('Connection error')
-      console.error('Error creating portfolio:', error)
+  // Calculate portfolio statistics
+  const stats = useMemo(() => {
+    const totalValue = portfolios.reduce((sum, p) => sum + parseFloat(p.total_value || '0'), 0)
+    const totalChange = portfolios.reduce((sum, p) => sum + parseFloat(p.daily_change || '0'), 0)
+    const totalChangePercent = totalValue > 0 ? (totalChange / (totalValue - totalChange)) * 100 : 0
+    
+    return {
+      totalValue: totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      totalChange: Math.abs(totalChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      totalChangePercent: Math.abs(totalChangePercent).toFixed(2),
+      isPositive: totalChange >= 0,
+      portfolioCount: portfolios.length,
+      activePortfolios: portfolios.filter(p => parseFloat(p.total_value || '0') > 0).length
     }
-  }
+  }, [portfolios])
 
-  useEffect(() => {
-    fetchPortfolios()
-  }, [])
+  // Filter portfolios based on search
+  const filteredPortfolios = useMemo(() => {
+    if (!searchQuery) return portfolios
+    return portfolios.filter(portfolio =>
+      portfolio.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (portfolio.description && portfolio.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+  }, [portfolios, searchQuery])
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navigation />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Hero Skeleton */}
+          <div className="bg-gray-200 dark:bg-gray-700 rounded-2xl p-8 mb-8 animate-pulse h-48"></div>
+          
+          {/* Stats Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-gray-200 dark:bg-gray-700 rounded-xl p-6 animate-pulse h-24"></div>
+            ))}
+          </div>
+          
+          {/* Portfolio Grid Skeleton */}
+          <PortfolioGridSkeleton />
+        </main>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Portfolio Dashboard</h1>
-          <p className="mt-2 text-gray-600">Manage your investment portfolios</p>
-        </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navigation />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Hero Section */}
+        <HeroSection
+          totalValue={stats.totalValue}
+          totalGain={stats.totalChange}
+          gainPercent={stats.totalChangePercent}
+          isPositive={stats.isPositive}
+        />
 
         {/* Error message */}
-        {error && (
-          <div className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
+        {error && <ErrorMessage message={error} className="mb-6" />}
 
-        {/* Create Portfolio Button */}
-        <div className="mb-6">
-          <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Create New Portfolio
-          </button>
+        {/* Statistics Cards */}
+        <StatsGrid>
+          <StatsCard
+            title="Total Portfolios"
+            value={stats.portfolioCount.toString()}
+            icon={
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+            }
+            description="Active investment portfolios"
+          />
+          
+          <StatsCard
+            title="Active Holdings"
+            value={stats.activePortfolios.toString()}
+            icon={
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            }
+            description="Portfolios with positions"
+          />
+          
+          <StatsCard
+            title="Today's Change"
+            value={`$${stats.totalChange}`}
+            change={`${stats.totalChangePercent}%`}
+            changeType={stats.isPositive ? 'positive' : 'negative'}
+            icon={
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            }
+            description="Daily performance"
+          />
+          
+          <StatsCard
+            title="Portfolio Value"
+            value={`$${stats.totalValue}`}
+            icon={
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+              </svg>
+            }
+            description="Total invested capital"
+          />
+        </StatsGrid>
+
+        {/* Portfolio Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Your Portfolios</h2>
+            <p className="text-gray-600 dark:text-gray-400">Manage and track your investment portfolios</p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Search */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search portfolios..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            
+            <Button
+              onClick={() => setShowCreateForm(true)}
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              }
+            >
+              New Portfolio
+            </Button>
+          </div>
         </div>
 
         {/* Create Portfolio Form */}
         {showCreateForm && (
-          <div className="mb-6 bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold mb-4">Create New Portfolio</h3>
-            <form onSubmit={createPortfolio} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Portfolio Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={100}
-                  value={newPortfolio.name}
-                  onChange={(e) => setNewPortfolio({...newPortfolio, name: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter portfolio name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description (optional)
-                </label>
-                <textarea
-                  maxLength={500}
-                  value={newPortfolio.description}
-                  onChange={(e) => setNewPortfolio({...newPortfolio, description: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter description"
-                  rows={3}
-                />
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  type="submit"
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Create Portfolio
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+          <div className="mb-8">
+            <CreatePortfolioForm
+              onSubmit={handleCreatePortfolio}
+              onCancel={() => setShowCreateForm(false)}
+            />
           </div>
         )}
 
         {/* Portfolios Grid */}
-        {portfolios.length === 0 ? (
-          <div className="bg-white p-8 rounded-lg shadow-md text-center">
-            <p className="text-gray-500 text-lg">No portfolios found</p>
-            <p className="text-gray-400 mt-2">Create your first portfolio to get started</p>
+        {filteredPortfolios.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 border-2 border-dashed border-gray-300 dark:border-gray-600">
+              <div className="mx-auto w-24 h-24 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                {searchQuery ? 'No portfolios found' : 'No portfolios yet'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                {searchQuery 
+                  ? `No portfolios match "${searchQuery}". Try a different search term.`
+                  : 'Create your first portfolio to start tracking your investments and building wealth.'
+                }
+              </p>
+              {!searchQuery && (
+                <Button onClick={() => setShowCreateForm(true)}>
+                  Create Your First Portfolio
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {portfolios.map((portfolio) => (
-              <div key={portfolio.id} className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {portfolio.name}
-                </h3>
-                {portfolio.description && (
-                  <p className="text-gray-600 text-sm mb-4">
-                    {portfolio.description}
-                  </p>
-                )}
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Total Value:</span>
-                    <span className="font-semibold">${portfolio.total_value}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Daily Change:</span>
-                    <span className={`font-semibold ${
-                      parseFloat(portfolio.daily_change) >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      ${portfolio.daily_change} ({portfolio.daily_change_percent}%)
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-400 pt-2">
-                    Created: {new Date(portfolio.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-                <div className="mt-4 flex space-x-2">
-                  <Link
-                    href={`/portfolios/${portfolio.id}`}
-                    className="flex-1 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors text-center"
-                  >
-                    View Details
-                  </Link>
-                  <Link
-                    href={`/portfolios/${portfolio.id}`}
-                    className="flex-1 bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors text-center"
-                  >
-                    Add Transaction
-                  </Link>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredPortfolios.map((portfolio) => (
+              <PortfolioCard key={portfolio.id} portfolio={portfolio} />
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }
