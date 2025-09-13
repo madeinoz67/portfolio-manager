@@ -34,15 +34,17 @@ class Settings(BaseSettings):
     database_pool_size: int = 20
     database_max_overflow: int = 30
 
-    # Market Data Providers
+    # Market Data Providers - yfinance only for ASX support
     alpha_vantage_api_key: Optional[str] = None
+    alpha_vantage_enabled: bool = False  # Disabled - no ASX support
     alpha_vantage_base_url: str = "https://www.alphavantage.co"
     alpha_vantage_rate_limit_per_minute: int = 5
     alpha_vantage_rate_limit_per_day: int = 500
 
-    yfinance_enabled: bool = True
+    yfinance_enabled: bool = True  # Primary provider for ASX data
     yfinance_rate_limit_per_minute: int = 60
     yfinance_rate_limit_per_day: int = 2000
+    yfinance_priority: int = 1  # Highest priority
 
     # Cache Settings
     redis_url: Optional[str] = None

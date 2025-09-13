@@ -20,6 +20,7 @@ from src.core.logging import get_logger
 from src.database import get_db
 from src.core.api_keys import generate_api_key, hash_api_key
 from src.models.user import User
+from src.models.user_role import UserRole
 from src.models.api_key import ApiKey
 from src.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyCreateResponse
 from src.schemas.auth import (
@@ -57,17 +58,31 @@ async def register_user(
     # Create new user
     try:
         hashed_password = get_password_hash(user_data.password)
-        
+
+        # Check if this is the first user (should become admin)
+        user_count = db.query(User).count()
+        is_first_user = user_count == 0
+
+        logger.info(f"User count: {user_count}, is_first_user: {is_first_user}")
+
         new_user = User(
             email=user_data.email,
             password_hash=hashed_password,
             first_name=user_data.first_name,
-            last_name=user_data.last_name
+            last_name=user_data.last_name,
+            role=UserRole.ADMIN if is_first_user else UserRole.USER
         )
-        
+
+        logger.info(f"Created user with role: {new_user.role}")
+
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+
+        if is_first_user:
+            logger.info(f"First user registered as admin: {new_user.email}")
+        else:
+            logger.info(f"User registered with standard user role: {new_user.email}")
         
         logger.info(f"User registered successfully: {new_user.email} (ID: {new_user.id})")
         
@@ -76,6 +91,7 @@ async def register_user(
             email=new_user.email,
             first_name=new_user.first_name,
             last_name=new_user.last_name,
+            role=new_user.role.value,
             is_active=new_user.is_active,
             created_at=new_user.created_at.isoformat()
         )
@@ -140,7 +156,16 @@ async def login_user(
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert to seconds
+            user=UserResponse(
+                id=str(user.id),
+                email=user.email,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                role=user.role.value,
+                is_active=user.is_active,
+                created_at=user.created_at.isoformat()
+            )
         )
         
     except Exception as e:
@@ -164,6 +189,7 @@ async def get_current_user_profile(
         email=current_user.email,
         first_name=current_user.first_name,
         last_name=current_user.last_name,
+        role=current_user.role.value,
         is_active=current_user.is_active,
         created_at=current_user.created_at.isoformat()
     )
@@ -201,6 +227,7 @@ async def update_current_user_profile(
             email=current_user.email,
             first_name=current_user.first_name,
             last_name=current_user.last_name,
+            role=current_user.role.value,
             is_active=current_user.is_active,
             created_at=current_user.created_at.isoformat()
         )

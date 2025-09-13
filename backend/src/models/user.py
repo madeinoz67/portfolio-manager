@@ -6,10 +6,11 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, String, Text, Uuid, Enum
 from sqlalchemy.orm import relationship
 
 from src.database import Base
+from .user_role import UserRole
 
 if TYPE_CHECKING:
     from .api_key import ApiKey
@@ -27,6 +28,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     email_config = Column(Text)  # JSON string for OAuth tokens, broker settings
 
     # Relationships

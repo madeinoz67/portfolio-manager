@@ -20,6 +20,7 @@ from src.schemas.portfolio import (
 )
 from src.schemas.holding import HoldingResponse
 from src.schemas.news_notice import NewsNoticeResponse
+from src.services.dynamic_portfolio_service import DynamicPortfolioService
 
 router = APIRouter(prefix="/api/v1/portfolios", tags=["Portfolios"])
 
@@ -34,6 +35,8 @@ async def list_portfolios(
         Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).all()
+
+    # Temporarily disable dynamic values to fix immediate issue
     return [PortfolioResponse.model_validate(p) for p in portfolios]
 
 
@@ -69,13 +72,14 @@ async def get_portfolio(
         Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).first()
-    
+
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portfolio not found"
         )
-    
+
+    # Temporarily use static values to fix immediate issue
     return PortfolioResponse.model_validate(portfolio)
 
 

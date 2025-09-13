@@ -14,6 +14,7 @@ from src.api.performance import router as performance_router
 from src.api.api_keys import router as api_keys_router
 from src.api.market_data import router as market_data_router
 from src.api.admin_market_data import router as admin_market_data_router
+from src.api.admin import router as admin_router
 from src.core.exceptions import (
     PortfolioError,
     TransactionError,
@@ -96,6 +97,7 @@ app.include_router(performance_router)
 app.include_router(api_keys_router)
 app.include_router(market_data_router)
 app.include_router(admin_market_data_router)
+app.include_router(admin_router)
 
 
 @app.get("/")
