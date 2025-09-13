@@ -1,0 +1,1132 @@
+openapi: 3.0.3
+info:
+  title: Market Data API
+  description: API contracts for real-time market data integration with scheduled updates
+  version: 0.2.0
+  contact:
+    name: Portfolio Manager
+    url: https://github.com/portfolio-manager
+
+servers:
+  - url: http://localhost:8001
+    description: Development server
+  - url: https://api.portfolio-manager.com
+    description: Production server
+
+paths:
+  /api/v1/market-data/stream:
+    get:
+      summary: Server-Sent Events stream for real-time portfolio updates
+      description: |
+        Establishes SSE connection for receiving real-time portfolio value updates.
+        Updates are sent every 15 minutes during market hours, hourly after hours.
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: portfolio_ids
+          in: query
+          description: Comma-separated list of portfolio IDs to subscribe to
+          required: false
+          schema:
+            type: string
+            example: "123e4567-e89b-12d3-a456-426614174000,987fcdeb-51a2-43d1-b789-123456789abc"
+        - name: include_heartbeat
+          in: query
+          description: Include periodic heartbeat messages
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  event: portfolio_update
+                  data: {"type":"portfolio_update","data":{"portfolio_id":"123e4567-e89b-12d3-a456-426614174000","total_value":"15750.25","daily_change":"125.75","daily_change_percent":"0.81","last_updated":"2025-09-13T10:30:00Z","stale_price_count":0},"timestamp":"2025-09-13T10:30:00Z","sequence":1}
+
+                  event: heartbeat
+                  data: {"type":"heartbeat","data":{"status":"connected","server_time":"2025-09-13T10:30:30Z","next_update_in":870},"timestamp":"2025-09-13T10:30:30Z"}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/market-data/prices/{symbol}:
+    get:
+      summary: Get current price for a specific stock symbol
+      description: Returns the current market price and metadata for a stock symbol
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: Stock symbol (e.g., CBA.AX for ASX stocks)
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]+(\.[A-Z]{2,3})?$'
+            example: "CBA.AX"
+      responses:
+        '200':
+          description: Current price data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentPrice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/market-data/prices:
+    get:
+      summary: Get current prices for multiple symbols
+      description: Bulk endpoint for fetching current prices for multiple stocks
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          description: Comma-separated list of stock symbols
+          schema:
+            type: string
+            example: "CBA.AX,BHP.AX,CSL.AX"
+        - name: include_stale
+          in: query
+          description: Include prices that may be stale (>30 minutes old)
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Current prices for requested symbols
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CurrentPrice'
+                  metadata:
+                    type: object
+                    properties:
+                      requested_count:
+                        type: integer
+                        example: 3
+                      returned_count:
+                        type: integer
+                        example: 3
+                      stale_count:
+                        type: integer
+                        example: 0
+                      last_update:
+                        type: string
+                        format: date-time
+                        example: "2025-09-13T10:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/market-data/status:
+    get:
+      summary: Get market data service status
+      description: Returns the current status of market data services and next update schedule
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Market data service status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketDataStatus'
+
+  /api/v1/market-data/providers:
+    get:
+      summary: Get configured data providers
+      description: Returns list of configured market data providers and their status
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of data providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DataProvider'
+
+  /api/v1/market-data/refresh:
+    post:
+      summary: Trigger manual price refresh
+      description: |
+        Manually trigger a price update for specified symbols.
+        Limited to once per minute to prevent API abuse.
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                symbols:
+                  type: array
+                  items:
+                    type: string
+                  example: ["CBA.AX", "BHP.AX"]
+                force:
+                  type: boolean
+                  description: Force refresh even if recently updated
+                  default: false
+              required:
+                - symbols
+      responses:
+        '200':
+          description: Refresh initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Price refresh initiated for 2 symbols"
+                  symbols:
+                    type: array
+                    items:
+                      type: string
+                  estimated_completion:
+                    type: string
+                    format: date-time
+                    example: "2025-09-13T10:31:00Z"
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Administrative endpoints
+  /api/v1/admin/poll-intervals:
+    get:
+      summary: Get all poll interval configurations
+      description: Retrieve all administrative poll interval settings for users, portfolios, and global
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: config_type
+          in: query
+          description: Filter by configuration type
+          required: false
+          schema:
+            type: string
+            enum: ["global", "user", "portfolio"]
+        - name: is_active
+          in: query
+          description: Filter by active status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of poll interval configurations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configurations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PollIntervalConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    
+    post:
+      summary: Create new poll interval configuration
+      description: Create administrative configuration for poll intervals
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePollIntervalConfig'
+      responses:
+        '201':
+          description: Configuration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollIntervalConfig'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/poll-intervals/{config_id}:
+    put:
+      summary: Update poll interval configuration
+      description: Modify existing poll interval configuration
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePollIntervalConfig'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollIntervalConfig'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    
+    delete:
+      summary: Delete poll interval configuration
+      description: Remove poll interval configuration
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Configuration deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/api-usage:
+    get:
+      summary: Get API usage metrics and reporting
+      description: Retrieve comprehensive API usage data for cost management and reporting
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: time_bucket
+          in: query
+          description: Aggregation level for metrics
+          required: false
+          schema:
+            type: string
+            enum: ["hourly", "daily", "monthly"]
+            default: "daily"
+        - name: provider_id
+          in: query
+          description: Filter by data provider
+          required: false
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          description: Filter by specific user
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_date
+          in: query
+          description: Start date for metrics (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          description: End date for metrics (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: API usage metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIUsageReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/overrides:
+    get:
+      summary: Get active administrative overrides
+      description: Retrieve all active system overrides
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of active overrides
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  overrides:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdministrativeOverride'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    
+    post:
+      summary: Create administrative override
+      description: Create system override for maintenance or emergency control
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdministrativeOverride'
+      responses:
+        '201':
+          description: Override created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministrativeOverride'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/overrides/{override_id}:
+    delete:
+      summary: Remove administrative override
+      description: Deactivate or remove administrative override
+      tags:
+        - Administration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: override_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Override removed successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CurrentPrice:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: "CBA.AX"
+        price:
+          type: number
+          format: decimal
+          example: 105.75
+        previous_close:
+          type: number
+          format: decimal
+          example: 104.50
+        change:
+          type: number
+          format: decimal
+          example: 1.25
+        change_percent:
+          type: number
+          format: decimal
+          example: 1.20
+        volume:
+          type: integer
+          example: 1234567
+        market_status:
+          type: string
+          enum: ["OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS"]
+          example: "OPEN"
+        last_updated:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:30:00Z"
+        source:
+          type: string
+          example: "alpha_vantage"
+        is_stale:
+          type: boolean
+          description: True if price is older than 30 minutes
+          example: false
+        staleness_minutes:
+          type: integer
+          description: Minutes since last update
+          example: 5
+      required:
+        - symbol
+        - price
+        - last_updated
+        - source
+        - is_stale
+
+    MarketDataStatus:
+      type: object
+      properties:
+        service_status:
+          type: string
+          enum: ["active", "degraded", "maintenance", "error"]
+          example: "active"
+        last_update:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:30:00Z"
+        next_scheduled_update:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:45:00Z"
+        market_status:
+          type: string
+          enum: ["OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS"]
+          example: "OPEN"
+        active_connections:
+          type: integer
+          description: Number of active SSE connections
+          example: 12
+        update_frequency:
+          type: object
+          properties:
+            current_interval_minutes:
+              type: integer
+              example: 15
+            next_interval_minutes:
+              type: integer
+              example: 15
+            reason:
+              type: string
+              example: "market_hours"
+        provider_status:
+          type: object
+          properties:
+            primary_provider:
+              type: string
+              example: "alpha_vantage"
+            primary_status:
+              type: string
+              enum: ["active", "rate_limited", "error", "maintenance"]
+              example: "active"
+            fallback_provider:
+              type: string
+              example: "yfinance"
+            fallback_status:
+              type: string
+              enum: ["active", "rate_limited", "error", "maintenance"]
+              example: "active"
+      required:
+        - service_status
+        - market_status
+        - active_connections
+
+    DataProvider:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          example: "alpha_vantage"
+        provider_name:
+          type: string
+          example: "Alpha Vantage"
+        is_active:
+          type: boolean
+          example: true
+        priority:
+          type: integer
+          example: 1
+        rate_limit_per_day:
+          type: integer
+          example: 500
+        requests_used_today:
+          type: integer
+          example: 47
+        requests_remaining:
+          type: integer
+          example: 453
+        last_request_at:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:30:00Z"
+        supports_symbols:
+          type: array
+          items:
+            type: string
+          example: [".AX", ".US", ".LSE"]
+        status:
+          type: string
+          enum: ["active", "rate_limited", "error", "maintenance"]
+          example: "active"
+      required:
+        - provider_id
+        - provider_name
+        - is_active
+        - status
+
+    SSEEvent:
+      type: object
+      discriminator:
+        propertyName: type
+      properties:
+        type:
+          type: string
+          enum: ["portfolio_update", "price_update", "heartbeat", "connection_status", "error"]
+        timestamp:
+          type: string
+          format: date-time
+        sequence:
+          type: integer
+          description: Monotonic sequence number for event ordering
+      required:
+        - type
+        - timestamp
+
+    PortfolioUpdateEvent:
+      allOf:
+        - $ref: '#/components/schemas/SSEEvent'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: ["portfolio_update"]
+            data:
+              type: object
+              properties:
+                portfolio_id:
+                  type: string
+                  format: uuid
+                total_value:
+                  type: string
+                  description: Decimal value as string for precision
+                  example: "15750.25"
+                daily_change:
+                  type: string
+                  example: "125.75"
+                daily_change_percent:
+                  type: string
+                  example: "0.81"
+                last_updated:
+                  type: string
+                  format: date-time
+                stale_price_count:
+                  type: integer
+                  description: Number of holdings with stale prices
+                  example: 0
+              required:
+                - portfolio_id
+                - total_value
+                - last_updated
+
+    HeartbeatEvent:
+      allOf:
+        - $ref: '#/components/schemas/SSEEvent'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: ["heartbeat"]
+            data:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: ["connected", "reconnecting", "error"]
+                server_time:
+                  type: string
+                  format: date-time
+                next_update_in:
+                  type: integer
+                  description: Seconds until next scheduled update
+                  example: 870
+              required:
+                - status
+                - server_time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "INVALID_SYMBOL"
+            message:
+              type: string
+              example: "Invalid stock symbol format"
+            details:
+              type: object
+              additionalProperties: true
+          required:
+            - code
+            - message
+      required:
+        - error
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "INVALID_SYMBOLS"
+              message: "One or more symbols are invalid"
+              details:
+                invalid_symbols: ["INVALID", "BADFORMAT"]
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Authentication required"
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "FORBIDDEN"
+              message: "Access denied to requested portfolios"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "SYMBOL_NOT_FOUND"
+              message: "Stock symbol not found"
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "RATE_LIMITED"
+              message: "Manual refresh rate limit exceeded. Try again in 60 seconds."
+              details:
+                retry_after_seconds: 60
+
+    PollIntervalConfig:
+      type: object
+      properties:
+        config_id:
+          type: string
+          example: "global-15min"
+        config_type:
+          type: string
+          enum: ["global", "user", "portfolio"]
+          example: "global"
+        target_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        interval_minutes:
+          type: integer
+          minimum: 1
+          example: 15
+        is_active:
+          type: boolean
+          example: true
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 1
+        created_by:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:30:00Z"
+        effective_from:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:30:00Z"
+        effective_until:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        reason:
+          type: string
+          example: "Global default poll interval for cost optimization"
+      required:
+        - config_id
+        - config_type
+        - interval_minutes
+        - is_active
+        - priority
+        - created_by
+        - reason
+
+    CreatePollIntervalConfig:
+      type: object
+      properties:
+        config_type:
+          type: string
+          enum: ["global", "user", "portfolio"]
+        target_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Required for user/portfolio configs, null for global"
+        interval_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        effective_from:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Defaults to now if not provided"
+        effective_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Null means permanent"
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+      required:
+        - config_type
+        - interval_minutes
+        - reason
+
+    UpdatePollIntervalConfig:
+      type: object
+      properties:
+        interval_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        is_active:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+        effective_from:
+          type: string
+          format: date-time
+        effective_until:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+
+    APIUsageReport:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            total_requests:
+              type: integer
+              example: 1520
+            total_cost_estimate:
+              type: number
+              format: decimal
+              example: 15.20
+            rate_limits_hit:
+              type: integer
+              example: 3
+            providers_used:
+              type: array
+              items:
+                type: string
+              example: ["alpha_vantage", "yfinance"]
+        by_provider:
+          type: array
+          items:
+            type: object
+            properties:
+              provider_id:
+                type: string
+                example: "alpha_vantage"
+              requests_count:
+                type: integer
+                example: 1200
+              cost_estimate:
+                type: number
+                format: decimal
+                example: 12.00
+              rate_limit_hit:
+                type: boolean
+                example: false
+              error_rate:
+                type: number
+                format: decimal
+                example: 0.02
+        by_user:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id:
+                type: string
+                format: uuid
+              username:
+                type: string
+                example: "john.doe"
+              requests_count:
+                type: integer
+                example: 450
+              cost_estimate:
+                type: number
+                format: decimal
+                example: 4.50
+        time_series:
+          type: array
+          items:
+            type: object
+            properties:
+              time_bucket:
+                type: string
+                format: date-time
+                example: "2025-09-13T10:00:00Z"
+              requests_count:
+                type: integer
+                example: 75
+              cost_estimate:
+                type: number
+                format: decimal
+                example: 0.75
+        metadata:
+          type: object
+          properties:
+            generated_at:
+              type: string
+              format: date-time
+            time_bucket:
+              type: string
+              enum: ["hourly", "daily", "monthly"]
+            from_date:
+              type: string
+              format: date-time
+            to_date:
+              type: string
+              format: date-time
+      required:
+        - summary
+        - metadata
+
+    AdministrativeOverride:
+      type: object
+      properties:
+        override_id:
+          type: string
+          example: "emergency-stop-20250913"
+        override_type:
+          type: string
+          enum: ["disable_updates", "force_interval", "emergency_stop"]
+          example: "disable_updates"
+        scope:
+          type: string
+          enum: ["global", "user", "portfolio", "provider"]
+          example: "user"
+        target_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        provider_id:
+          type: string
+          nullable: true
+          example: null
+        is_active:
+          type: boolean
+          example: true
+        override_value:
+          type: string
+          nullable: true
+          description: "JSON configuration data"
+          example: '{"disabled_until": "2025-09-13T16:00:00Z"}'
+        reason:
+          type: string
+          example: "User exceeded API rate limits, temporary suspension"
+        created_by:
+          type: string
+          format: uuid
+          example: "admin-123e4567-e89b-12d3-a456-426614174000"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-09-13T10:30:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-09-13T16:00:00Z"
+        auto_remove:
+          type: boolean
+          example: true
+      required:
+        - override_id
+        - override_type
+        - scope
+        - is_active
+        - reason
+        - created_by
+
+    CreateAdministrativeOverride:
+      type: object
+      properties:
+        override_type:
+          type: string
+          enum: ["disable_updates", "force_interval", "emergency_stop"]
+        scope:
+          type: string
+          enum: ["global", "user", "portfolio", "provider"]
+        target_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Required for user/portfolio scope"
+        provider_id:
+          type: string
+          nullable: true
+          description: "Required for provider scope"
+        override_value:
+          type: string
+          nullable: true
+          description: "JSON configuration data"
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Auto-expiry time, null means manual removal only"
+        auto_remove:
+          type: boolean
+          default: true
+          description: "Automatically remove when expired"
+      required:
+        - override_type
+        - scope
+        - reason
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Market Data
+    description: Real-time market data operations with scheduled updates
+  - name: Administration
+    description: Administrative controls for poll intervals, API usage tracking, and system overrides (Admin access only)

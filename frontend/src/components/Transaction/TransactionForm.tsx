@@ -53,7 +53,8 @@ export default function TransactionForm({
 
     if (!formData.stock_symbol.trim()) {
       newErrors.stock_symbol = 'Stock symbol is required'
-    } else if (!selectedStock) {
+    } else if (!selectedStock && !isEditing) {
+      // Only require selectedStock validation for new transactions, not edits
       newErrors.stock_symbol = 'Please select a valid stock from the list'
     }
 

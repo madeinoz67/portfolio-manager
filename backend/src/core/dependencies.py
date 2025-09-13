@@ -13,6 +13,7 @@ from src.core.auth import verify_token, get_current_user_email
 from src.core.logging import get_logger
 from src.database import get_db
 from src.models.user import User
+from src.models.user_role import UserRole
 
 logger = get_logger(__name__)
 
@@ -175,5 +176,21 @@ async def get_current_user_flexible(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive user"
         )
-    
+
     return user
+
+
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """
+    Get current user and verify they have admin role.
+    """
+    if current_user.role != UserRole.ADMIN:
+        logger.warning(f"Non-admin user attempted admin access: {current_user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+
+    return current_user

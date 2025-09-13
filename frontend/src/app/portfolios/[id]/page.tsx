@@ -14,6 +14,7 @@ import PerformanceMetrics from '@/components/Portfolio/PerformanceMetrics'
 import { useToast } from '@/components/ui/Toast'
 import { useTransactions } from '@/hooks/useTransactions'
 import { useHoldings } from '@/hooks/useHoldings'
+import { usePortfolios } from '@/hooks/usePortfolios'
 import { TransactionCreate } from '@/types/transaction'
 import Button from '@/components/ui/Button'
 
@@ -89,6 +90,9 @@ export default function PortfolioDetail() {
     calculatePortfolioSummary,
     fetchHoldings
   } = useHoldings(portfolioId)
+
+  // Add usePortfolios hook to refresh global portfolio data
+  const { fetchPortfolios } = usePortfolios()
 
   const fetchPortfolio = useCallback(async () => {
     if (!portfolioId) return
@@ -176,6 +180,8 @@ export default function PortfolioDetail() {
         console.log('Refreshing portfolio data...')
         // Refresh portfolio data to update totals
         await fetchPortfolio()
+        // Also refresh global portfolios data for the dashboard
+        await fetchPortfolios()
         console.log('Portfolio data refreshed')
         
         return true
@@ -195,8 +201,37 @@ export default function PortfolioDetail() {
     await Promise.all([
       fetchPortfolio(),
       refreshTransactions(),
-      fetchHoldings()
+      fetchHoldings(),
+      fetchPortfolios()
     ])
+  }
+
+  const handleTransactionUpdated = async () => {
+    console.log('Transaction updated, refreshing portfolio data...')
+    addToast('Transaction updated successfully!', 'success')
+
+    // Refresh all portfolio-related data
+    await Promise.all([
+      fetchPortfolio(),
+      refreshTransactions(),
+      fetchHoldings(),
+      fetchPortfolios()
+    ])
+    console.log('Portfolio data refreshed after transaction update')
+  }
+
+  const handleTransactionDeleted = async () => {
+    console.log('Transaction deleted, refreshing portfolio data...')
+    addToast('Transaction deleted successfully!', 'success')
+
+    // Refresh all portfolio-related data
+    await Promise.all([
+      fetchPortfolio(),
+      refreshTransactions(),
+      fetchHoldings(),
+      fetchPortfolios()
+    ])
+    console.log('Portfolio data refreshed after transaction deletion')
   }
 
   const handleUpdatePortfolio = (updatedPortfolio: Portfolio) => {
@@ -361,6 +396,8 @@ export default function PortfolioDetail() {
 
             <TransactionList
               portfolioId={portfolioId}
+              onTransactionUpdated={handleTransactionUpdated}
+              onTransactionDeleted={handleTransactionDeleted}
             />
           </div>
         </div>

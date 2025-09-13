@@ -5,10 +5,11 @@ Holding model for current stock positions in portfolios.
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, Numeric, Uuid
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from src.database import Base
 
@@ -25,15 +26,36 @@ class Holding(Base):
     stock_id = Column(Uuid, ForeignKey("stocks.id"), nullable=False)
     quantity = Column(Numeric(12, 4), nullable=False)
     average_cost = Column(Numeric(10, 4), default=Decimal("0.0000"))
-    current_value = Column(Numeric(15, 2), default=Decimal("0.00"))
-    unrealized_gain_loss = Column(Numeric(15, 2), default=Decimal("0.00"))
-    unrealized_gain_loss_percent = Column(Numeric(5, 2), default=Decimal("0.00"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     portfolio: "Portfolio" = relationship("Portfolio", back_populates="holdings")
     stock: "Stock" = relationship("Stock", back_populates="holdings")
+
+    @hybrid_property
+    def current_value(self) -> Decimal:
+        """Calculate current market value based on live stock price."""
+        if self.stock and self.stock.current_price:
+            return self.quantity * self.stock.current_price
+        return self.quantity * self.average_cost  # Fallback to cost basis if no current price
+
+    @hybrid_property
+    def cost_basis(self) -> Decimal:
+        """Total cost basis for this holding."""
+        return self.quantity * self.average_cost
+
+    @hybrid_property
+    def unrealized_gain_loss(self) -> Decimal:
+        """Calculate unrealized gain/loss based on current price."""
+        return self.current_value - self.cost_basis
+
+    @hybrid_property
+    def unrealized_gain_loss_percent(self) -> Decimal:
+        """Calculate unrealized gain/loss percentage."""
+        if self.cost_basis > 0:
+            return (self.unrealized_gain_loss / self.cost_basis) * 100
+        return Decimal("0.00")
 
     # Composite unique constraint
     __table_args__ = (

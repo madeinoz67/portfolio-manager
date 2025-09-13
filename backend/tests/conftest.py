@@ -105,3 +105,9 @@ def test_data(db):
         stock=stock,
         access_token=access_token
     )
+
+
+@pytest.fixture
+def valid_jwt_token(test_data):
+    """Provide a valid JWT token for testing."""
+    return test_data.access_token

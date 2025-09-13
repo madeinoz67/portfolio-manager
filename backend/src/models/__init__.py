@@ -14,11 +14,14 @@ from .price_history import PriceHistory
 from .stock import Stock, StockStatus
 from .transaction import Transaction, TransactionType, SourceType
 from .user import User
+from .realtime_price_history import RealtimePriceHistory
+from .portfolio_valuation import PortfolioValuation
+from .market_data_provider import MarketDataProvider
 
 __all__ = [
     "Base",
     "User",
-    "ApiKey", 
+    "ApiKey",
     "Portfolio",
     "Stock",
     "StockStatus",
@@ -29,4 +32,7 @@ __all__ = [
     "PriceHistory",
     "NewsNotice",
     "NewsNoticeType",
+    "RealtimePriceHistory",
+    "PortfolioValuation",
+    "MarketDataProvider",
 ]

@@ -25,11 +25,20 @@ export interface TokenResponse {
   expires_in: number
 }
 
+export interface AuthError {
+  type: 'network' | 'server' | 'auth' | 'timeout'
+  message: string
+  details?: string
+  timestamp: Date
+}
+
 export interface AuthContextType {
   user: User | null
   token: string | null
-  login: (data: LoginData) => Promise<boolean>
-  register: (data: RegisterData) => Promise<boolean>
+  login: (data: LoginData) => Promise<{ success: boolean; error?: AuthError }>
+  register: (data: RegisterData) => Promise<{ success: boolean; error?: AuthError }>
   logout: () => void
   loading: boolean
+  error: AuthError | null
+  clearError: () => void
 }

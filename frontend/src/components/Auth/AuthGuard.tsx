@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import AuthModal from './AuthModal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { ErrorBanner } from '@/components/ui/ErrorBanner'
 
 interface AuthGuardProps {
   children: React.ReactNode
 }
 
 export default function AuthGuard({ children }: AuthGuardProps) {
-  const { user, loading } = useAuth()
+  const { user, loading, error, clearError } = useAuth()
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   useEffect(() => {
@@ -53,7 +54,16 @@ export default function AuthGuard({ children }: AuthGuardProps) {
               Intelligent portfolio management with AI-powered analysis
             </p>
           </div>
-          
+
+          {/* Show error banner if there's an authentication error */}
+          {error && (
+            <ErrorBanner
+              error={error}
+              onDismiss={clearError}
+              className="mb-6"
+            />
+          )}
+
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-xl border dark:border-gray-700">
             <div className="mb-6">
               <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -68,7 +78,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                 Please sign in to access your portfolio dashboard and manage your investments.
               </p>
             </div>
-            
+
             <button
               onClick={() => setShowAuthModal(true)}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"

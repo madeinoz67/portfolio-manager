@@ -11,9 +11,11 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@types/chart.js": "^2.9.41",
     "axios": "^1.12.1",
     "chart.js": "^4.5.0",
+    "lucide-react": "^0.544.0",
     "next": "15.5.3",
     "react": "19.1.0",
     "react-chartjs-2": "^5.3.0",

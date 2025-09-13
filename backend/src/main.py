@@ -12,6 +12,9 @@ from src.api.stocks import router as stocks_router
 from src.api.transactions import router as transactions_router
 from src.api.performance import router as performance_router
 from src.api.api_keys import router as api_keys_router
+from src.api.market_data import router as market_data_router
+from src.api.admin_market_data import router as admin_market_data_router
+from src.api.admin import router as admin_router
 from src.core.exceptions import (
     PortfolioError,
     TransactionError,
@@ -33,8 +36,8 @@ logger = get_logger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="Portfolio Management API",
-    description="RESTful API for intelligent portfolio management system",
-    version="0.1.0",
+    description="RESTful API for intelligent portfolio management system with real-time market data integration",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -77,6 +80,8 @@ async def create_tables():
     try:
         # Import all models to ensure they're registered with Base
         from src.models import user, portfolio, stock, transaction, holding, news_notice  # noqa: F401
+        from src.models import market_data_provider, realtime_price_history, portfolio_valuation  # noqa: F401
+        from src.models import sse_connection, poll_interval_config, api_usage_metrics  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:
@@ -90,6 +95,9 @@ app.include_router(stocks_router)
 app.include_router(transactions_router)
 app.include_router(performance_router)
 app.include_router(api_keys_router)
+app.include_router(market_data_router)
+app.include_router(admin_market_data_router)
+app.include_router(admin_router)
 
 
 @app.get("/")
@@ -97,8 +105,9 @@ async def root() -> dict[str, str]:
     """Root endpoint returning API information."""
     return {
         "message": "Portfolio Management API",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "docs": "/docs",
+        "features": ["Portfolio Management", "Real-time Market Data", "Admin Controls"],
     }
 
 

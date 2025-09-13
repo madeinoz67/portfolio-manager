@@ -37,6 +37,18 @@ class StockDetailResponse(StockResponse):
         from_attributes = True
 
 
+class StockCreateRequest(BaseModel):
+    """Schema for creating a new stock."""
+    symbol: str = Field(..., max_length=10)
+    company_name: str = Field(..., max_length=200)
+    exchange: str = Field(default="ASX", max_length=50)
+    current_price: Optional[Decimal] = Field(None, ge=0)
+    status: StockStatus = StockStatus.ACTIVE
+
+    class Config:
+        from_attributes = True
+
+
 class PricePointResponse(BaseModel):
     """Schema for stock price history points."""
     date: date

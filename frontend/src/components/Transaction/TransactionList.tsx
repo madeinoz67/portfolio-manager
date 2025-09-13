@@ -12,9 +12,15 @@ import TransactionEditModal from './TransactionEditModal'
 
 interface TransactionListProps {
   portfolioId: string
+  onTransactionUpdated?: () => void // Callback for when a transaction is edited
+  onTransactionDeleted?: () => void // Callback for when a transaction is deleted
 }
 
-export default function TransactionList({ portfolioId }: TransactionListProps) {
+export default function TransactionList({
+  portfolioId,
+  onTransactionUpdated,
+  onTransactionDeleted
+}: TransactionListProps) {
   const router = useRouter()
   const {
     transactions,
@@ -71,6 +77,15 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
     setEditingTransaction(null)
   }
 
+  const handleUpdateTransaction = async (transactionId: string, updateData: any) => {
+    const success = await updateTransaction(transactionId, updateData)
+    if (success) {
+      // Trigger portfolio data refresh
+      onTransactionUpdated?.()
+    }
+    return success
+  }
+
   const handleDelete = (transaction: Transaction) => {
     setDeletingTransaction(transaction)
   }
@@ -80,6 +95,8 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
       const success = await deleteTransaction(deletingTransaction.id)
       if (success) {
         setDeletingTransaction(null)
+        // Trigger portfolio data refresh
+        onTransactionDeleted?.()
       }
     }
   }
@@ -304,7 +321,7 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
         onClose={handleCloseEditModal}
         transaction={editingTransaction}
         portfolioId={portfolioId}
-        onUpdate={updateTransaction}
+        onUpdate={handleUpdateTransaction}
       />
 
       {/* Delete Confirmation Modal */}
