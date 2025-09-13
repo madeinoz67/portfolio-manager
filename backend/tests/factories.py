@@ -11,7 +11,7 @@ from uuid import uuid4
 from faker import Faker
 from sqlalchemy.orm import Session
 
-from src.models import Portfolio, Stock, Transaction, Holding
+from src.models import Portfolio, Stock, Transaction, Holding, User
 from src.models.transaction import TransactionType, SourceType
 from src.schemas.transaction import TransactionCreate
 
@@ -189,3 +189,95 @@ class TestDataFactory:
     def rollback(self):
         """Rollback all changes."""
         self.db.rollback()
+
+
+# Helper functions for backward compatibility
+def create_test_user(db: Session, **kwargs) -> User:
+    """Create a test user with realistic data."""
+    defaults = {
+        "email": fake.email(),
+        "first_name": fake.first_name(),
+        "last_name": fake.last_name(),
+        "password_hash": fake.password(),
+        "is_active": True,
+    }
+    defaults.update(kwargs)
+    
+    user = User(**defaults)
+    db.add(user)
+    db.flush()
+    return user
+
+
+def create_test_portfolio(db: Session, owner_id=None, **kwargs) -> Portfolio:
+    """Create a test portfolio with realistic data."""
+    if owner_id is None:
+        owner_id = uuid4()
+    
+    defaults = {
+        "name": fake.company(),
+        "description": fake.text(max_nb_chars=200),
+        "owner_id": owner_id,
+    }
+    defaults.update(kwargs)
+    
+    portfolio = Portfolio(**defaults)
+    db.add(portfolio)
+    db.flush()
+    return portfolio
+
+
+def create_test_stock(db: Session, symbol=None, company_name=None, exchange=None, **kwargs) -> Stock:
+    """Create a test stock with real or provided company data."""
+    if symbol is None:
+        # Use a random real stock
+        symbol, company_name, exchange = fake.random_element(elements=REAL_STOCKS)
+    
+    defaults = {
+        "symbol": symbol,
+        "company_name": company_name or f"{symbol} Corporation",
+        "exchange": exchange or "NYSE",
+        "current_price": Decimal(str(fake.pyfloat(min_value=10, max_value=500, right_digits=2))),
+        "previous_close": Decimal(str(fake.pyfloat(min_value=10, max_value=500, right_digits=2))),
+    }
+    defaults.update(kwargs)
+    
+    stock = Stock(**defaults)
+    db.add(stock)
+    db.flush()
+    return stock
+
+
+def create_test_transaction(
+    db: Session, 
+    portfolio_id, 
+    stock_id, 
+    transaction_type, 
+    quantity, 
+    price_per_share, 
+    transaction_date=None,
+    **kwargs
+) -> Transaction:
+    """Create a test transaction with provided data."""
+    if transaction_date is None:
+        transaction_date = fake.date_between(start_date='-1y', end_date='today')
+    
+    defaults = {
+        "portfolio_id": portfolio_id,
+        "stock_id": stock_id,
+        "transaction_type": transaction_type,
+        "quantity": quantity,
+        "price_per_share": price_per_share,
+        "total_amount": quantity * price_per_share,
+        "fees": Decimal("0.00"),
+        "transaction_date": transaction_date,
+        "source_type": SourceType.MANUAL,
+        "notes": None,
+        "is_verified": True,
+    }
+    defaults.update(kwargs)
+    
+    transaction = Transaction(**defaults)
+    db.add(transaction)
+    db.flush()
+    return transaction

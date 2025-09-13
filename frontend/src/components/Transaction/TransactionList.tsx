@@ -6,6 +6,7 @@ import { useTransactions } from '@/hooks/useTransactions'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
+import TransactionFilter from './TransactionFilter'
 
 interface TransactionListProps {
   portfolioId: string
@@ -19,15 +20,41 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
     total,
     fetchTransactions,
     loadMoreTransactions,
+    searchTransactions,
     hasMore,
     clearError
   } = useTransactions(portfolioId)
+
+  const [currentFilters, setCurrentFilters] = useState<{
+    startDate?: string
+    endDate?: string
+    stockSymbol?: string
+  } | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     if (portfolioId) {
       fetchTransactions()
     }
   }, [portfolioId, fetchTransactions])
+
+  const handleFilter = async (filters: {
+    startDate?: string
+    endDate?: string
+    stockSymbol?: string
+  }) => {
+    setCurrentFilters(filters)
+    await searchTransactions(filters)
+  }
+
+  const handleClearFilters = async () => {
+    setCurrentFilters(null)
+    await fetchTransactions()
+  }
+
+  const handleLoadMore = () => {
+    loadMoreTransactions(currentFilters || undefined)
+  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
@@ -69,8 +96,25 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
               {total} total transaction{total !== 1 ? 's' : ''}
             </p>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </Button>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="px-6">
+          <TransactionFilter
+            onFilter={handleFilter}
+            onClear={handleClearFilters}
+            loading={loading}
+          />
+        </div>
+      )}
 
       {transactions.length === 0 ? (
         <div className="p-8 text-center">
@@ -162,7 +206,7 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 text-center">
               <Button
                 variant="secondary"
-                onClick={loadMoreTransactions}
+                onClick={handleLoadMore}
                 loading={loading}
                 disabled={loading}
               >

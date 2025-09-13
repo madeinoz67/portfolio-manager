@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { usePortfolios } from '@/hooks/usePortfolios'
 import Navigation from '@/components/layout/Navigation'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -12,27 +13,46 @@ import PortfolioComparison from '@/components/analytics/PortfolioComparison'
 import TimeRangeSelector from '@/components/analytics/TimeRangeSelector'
 
 export default function Analytics() {
+  const searchParams = useSearchParams()
+  const portfolioId = searchParams.get('portfolioId')
   const { portfolios, loading, error } = usePortfolios()
   const [selectedTimeRange, setSelectedTimeRange] = useState('1M')
+  
+  // Filter portfolios based on portfolioId query parameter
+  const filteredPortfolios = useMemo(() => {
+    if (portfolioId) {
+      return portfolios.filter(p => p.id === portfolioId)
+    }
+    return portfolios
+  }, [portfolios, portfolioId])
+  
+  // Get the specific portfolio for title if analyzing single portfolio
+  const selectedPortfolio = useMemo(() => {
+    if (portfolioId && filteredPortfolios.length > 0) {
+      return filteredPortfolios[0]
+    }
+    return null
+  }, [portfolioId, filteredPortfolios])
 
-  // Calculate analytics metrics
+  // Calculate analytics metrics based on filtered portfolios
   const analytics = useMemo(() => {
-    const totalValue = portfolios.reduce((sum, p) => sum + parseFloat(p.total_value || '0'), 0)
-    const totalChange = portfolios.reduce((sum, p) => sum + parseFloat(p.daily_change || '0'), 0)
+    const activePortfolios = filteredPortfolios
+    const totalValue = activePortfolios.reduce((sum, p) => sum + parseFloat(p.total_value || '0'), 0)
+    const totalChange = activePortfolios.reduce((sum, p) => sum + parseFloat(p.daily_change || '0'), 0)
     const totalChangePercent = totalValue > 0 ? (totalChange / (totalValue - totalChange)) * 100 : 0
     
-    // Calculate best and worst performing portfolios
-    const bestPerformer = portfolios.reduce((best, current) => {
+    // Calculate best and worst performing portfolios (only relevant for multi-portfolio view)
+    const bestPerformer = activePortfolios.reduce((best, current) => {
       const currentChange = parseFloat(current.daily_change_percent || '0')
       const bestChange = parseFloat(best.daily_change_percent || '0')
       return currentChange > bestChange ? current : best
-    }, portfolios[0] || {})
+    }, activePortfolios[0] || {})
     
-    const worstPerformer = portfolios.reduce((worst, current) => {
+    const worstPerformer = activePortfolios.reduce((worst, current) => {
       const currentChange = parseFloat(current.daily_change_percent || '0')
       const worstChange = parseFloat(worst.daily_change_percent || '0')
       return currentChange < worstChange ? current : worst
-    }, portfolios[0] || {})
+    }, activePortfolios[0] || {})
 
     return {
       totalValue: totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -41,10 +61,10 @@ export default function Analytics() {
       isPositive: totalChange >= 0,
       bestPerformer,
       worstPerformer,
-      portfolioCount: portfolios.length,
-      averageReturn: portfolios.length > 0 ? (totalChangePercent / portfolios.length).toFixed(2) : '0.00'
+      portfolioCount: activePortfolios.length,
+      averageReturn: activePortfolios.length > 0 ? (totalChangePercent / activePortfolios.length).toFixed(2) : '0.00'
     }
-  }, [portfolios])
+  }, [filteredPortfolios])
 
   if (loading) {
     return (
@@ -68,9 +88,14 @@ export default function Analytics() {
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                {selectedPortfolio ? `${selectedPortfolio.name} Analytics` : 'Analytics Dashboard'}
+              </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Comprehensive analysis of your portfolio performance
+                {selectedPortfolio 
+                  ? `Performance analysis for ${selectedPortfolio.name}` 
+                  : 'Comprehensive analysis of your portfolio performance'
+                }
               </p>
             </div>
             <TimeRangeSelector 
@@ -111,16 +136,16 @@ export default function Analytics() {
           />
           
           <StatsCard
-            title="Best Performer"
-            value={analytics.bestPerformer?.name || 'N/A'}
-            change={`${analytics.bestPerformer?.daily_change_percent || '0'}%`}
+            title={selectedPortfolio ? "Current Portfolio" : "Best Performer"}
+            value={selectedPortfolio ? selectedPortfolio.name : (analytics.bestPerformer?.name || 'N/A')}
+            change={`${selectedPortfolio ? selectedPortfolio.daily_change_percent : (analytics.bestPerformer?.daily_change_percent || '0')}%`}
             changeType="positive"
             icon={
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             }
-            description="Top performing portfolio"
+            description={selectedPortfolio ? "Portfolio being analyzed" : "Top performing portfolio"}
           />
           
           <StatsCard
@@ -144,7 +169,7 @@ export default function Analytics() {
                 Portfolio Performance
               </h3>
               <PerformanceChart 
-                portfolios={portfolios} 
+                portfolios={filteredPortfolios} 
                 timeRange={selectedTimeRange}
               />
             </div>
@@ -156,20 +181,22 @@ export default function Analytics() {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Asset Allocation
               </h3>
-              <AssetAllocationChart portfolios={portfolios} />
+              <AssetAllocationChart portfolios={filteredPortfolios} />
             </div>
           </div>
         </div>
 
-        {/* Portfolio Comparison */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700">
-          <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Portfolio Comparison
-            </h3>
-            <PortfolioComparison portfolios={portfolios} />
+        {/* Portfolio Comparison - only show if multiple portfolios or general view */}
+        {(!selectedPortfolio || filteredPortfolios.length > 1) && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Portfolio Comparison
+              </h3>
+              <PortfolioComparison portfolios={filteredPortfolios} />
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   )

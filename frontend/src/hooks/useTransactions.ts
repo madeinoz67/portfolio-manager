@@ -19,15 +19,39 @@ export function useTransactions(portfolioId: string) {
     }
   }
 
-  const fetchTransactions = useCallback(async (limit = 50, offset = 0) => {
+  const fetchTransactions = useCallback(async (
+    limit = 50, 
+    offset = 0, 
+    filters?: {
+      startDate?: string
+      endDate?: string
+      stockSymbol?: string
+    }
+  ) => {
     if (!portfolioId) return
 
     setLoading(true)
     setError(null)
 
     try {
+      // Build query parameters
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: offset.toString()
+      })
+
+      if (filters?.startDate) {
+        params.append('start_date', filters.startDate)
+      }
+      if (filters?.endDate) {
+        params.append('end_date', filters.endDate)
+      }
+      if (filters?.stockSymbol) {
+        params.append('stock_symbol', filters.stockSymbol)
+      }
+
       const response = await fetch(
-        `${API_BASE}/api/v1/portfolios/${portfolioId}/transactions?limit=${limit}&offset=${offset}`,
+        `${API_BASE}/api/v1/portfolios/${portfolioId}/transactions?${params.toString()}`,
         {
           headers: getAuthHeaders()
         }
@@ -125,13 +149,29 @@ export function useTransactions(portfolioId: string) {
     }
   }, [portfolioId])
 
-  const refreshTransactions = useCallback(() => {
-    return fetchTransactions(50, 0)
+  const refreshTransactions = useCallback((filters?: {
+    startDate?: string
+    endDate?: string
+    stockSymbol?: string
+  }) => {
+    return fetchTransactions(50, 0, filters)
   }, [fetchTransactions])
 
-  const loadMoreTransactions = useCallback(() => {
-    return fetchTransactions(50, transactions.length)
+  const loadMoreTransactions = useCallback((filters?: {
+    startDate?: string
+    endDate?: string
+    stockSymbol?: string
+  }) => {
+    return fetchTransactions(50, transactions.length, filters)
   }, [fetchTransactions, transactions.length])
+
+  const searchTransactions = useCallback(async (filters: {
+    startDate?: string
+    endDate?: string
+    stockSymbol?: string
+  }) => {
+    return fetchTransactions(50, 0, filters)
+  }, [fetchTransactions])
 
   const clearError = useCallback(() => {
     setError(null)
@@ -146,6 +186,7 @@ export function useTransactions(portfolioId: string) {
     createTransaction,
     refreshTransactions,
     loadMoreTransactions,
+    searchTransactions,
     clearError,
     hasMore: transactions.length < total
   }

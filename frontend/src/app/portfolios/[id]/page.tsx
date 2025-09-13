@@ -350,6 +350,14 @@ export default function PortfolioDetail() {
                 Transaction Management
               </h2>
               <div className="flex gap-3">
+                <Link href={`/analytics?portfolioId=${portfolioId}`}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                  >
+                    Portfolio Analysis
+                  </Button>
+                </Link>
                 <Button
                   onClick={handleRefreshData}
                   variant="secondary"
