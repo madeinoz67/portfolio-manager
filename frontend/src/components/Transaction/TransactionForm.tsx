@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
+import StockSelector from './StockSelector'
 import { TransactionCreate, TransactionType } from '@/types/transaction'
+import { Stock } from '@/hooks/useStocks'
 
 interface TransactionFormProps {
   portfolioId: string
@@ -29,14 +31,28 @@ export default function TransactionForm({
   
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null)
+
+  const handleStockSelect = (symbol: string, stock: Stock | null) => {
+    setFormData(prev => ({ ...prev, stock_symbol: symbol }))
+    setSelectedStock(stock)
+    
+    // Auto-fill price if stock has current price
+    if (stock?.current_price && formData.price_per_share === 0) {
+      setFormData(prev => ({ 
+        ...prev, 
+        price_per_share: parseFloat(stock.current_price!) 
+      }))
+    }
+  }
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
 
     if (!formData.stock_symbol.trim()) {
       newErrors.stock_symbol = 'Stock symbol is required'
-    } else if (!/^[A-Z]{1,10}$/.test(formData.stock_symbol.toUpperCase())) {
-      newErrors.stock_symbol = 'Stock symbol must be 1-10 uppercase letters'
+    } else if (!selectedStock) {
+      newErrors.stock_symbol = 'Please select a valid stock from the list'
     }
 
     if (formData.quantity <= 0) {
@@ -127,25 +143,11 @@ export default function TransactionForm({
       
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Stock Symbol */}
-        <div>
-          <label htmlFor="stock_symbol" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Stock Symbol *
-          </label>
-          <input
-            type="text"
-            id="stock_symbol"
-            value={formData.stock_symbol}
-            onChange={(e) => handleInputChange('stock_symbol', e.target.value)}
-            placeholder="e.g., AAPL"
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-              errors.stock_symbol ? 'border-red-500' : 'border-gray-300'
-            }`}
-            disabled={loading}
-          />
-          {errors.stock_symbol && (
-            <p className="text-red-500 text-sm mt-1">{errors.stock_symbol}</p>
-          )}
-        </div>
+        <StockSelector
+          selectedSymbol={formData.stock_symbol}
+          onSelectStock={handleStockSelect}
+          error={errors.stock_symbol}
+        />
 
         {/* Transaction Type */}
         <div>

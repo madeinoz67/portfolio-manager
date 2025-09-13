@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Transaction } from '@/types/transaction'
 import { useTransactions } from '@/hooks/useTransactions'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -13,6 +14,7 @@ interface TransactionListProps {
 }
 
 export default function TransactionList({ portfolioId }: TransactionListProps) {
+  const router = useRouter()
   const {
     transactions,
     loading,
@@ -142,7 +144,7 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Stock
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Type
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -161,7 +163,11 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {transactions.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <tr 
+                    key={transaction.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    onClick={() => router.push(`/portfolios/${portfolioId}/transactions/${transaction.id}`)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {formatDate(transaction.transaction_date)}
                     </td>
@@ -170,12 +176,12 @@ export default function TransactionList({ portfolioId }: TransactionListProps) {
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
                           {transaction.stock.symbol}
                         </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                        <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-[200px]">
                           {transaction.stock.company_name}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         transaction.transaction_type === 'BUY'
                           ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
