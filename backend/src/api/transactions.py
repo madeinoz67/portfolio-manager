@@ -117,3 +117,42 @@ async def create_transaction(
     from src.services.transaction_service import process_transaction
     
     return process_transaction(db, portfolio_id, transaction_data)
+
+
+@router.get("/{portfolio_id}/transactions/{transaction_id}", response_model=TransactionResponse)
+async def get_transaction_detail(
+    portfolio_id: UUID,
+    transaction_id: UUID,
+    db: Annotated[Session, Depends(get_db)]
+) -> TransactionResponse:
+    """Get specific transaction details."""
+    # Verify portfolio exists
+    portfolio = db.query(Portfolio).filter(
+        Portfolio.id == portfolio_id,
+        Portfolio.is_active.is_(True)
+    ).first()
+    
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+    
+    # Get transaction with stock relationship
+    transaction = (
+        db.query(Transaction)
+        .options(joinedload(Transaction.stock))
+        .filter(
+            Transaction.id == transaction_id,
+            Transaction.portfolio_id == portfolio_id
+        )
+        .first()
+    )
+    
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found"
+        )
+    
+    return TransactionResponse.model_validate(transaction)

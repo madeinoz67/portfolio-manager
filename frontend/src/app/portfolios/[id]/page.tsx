@@ -8,8 +8,11 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import TransactionForm from '@/components/transaction/TransactionForm'
 import TransactionList from '@/components/transaction/TransactionList'
+import HoldingsDisplay from '@/components/portfolio/HoldingsDisplay'
+import PortfolioEditForm from '@/components/portfolio/PortfolioEditForm'
 import { useToast } from '@/components/ui/Toast'
 import { useTransactions } from '@/hooks/useTransactions'
+import { useHoldings } from '@/hooks/useHoldings'
 import { TransactionCreate } from '@/types/transaction'
 import Button from '@/components/ui/Button'
 
@@ -69,6 +72,7 @@ export default function PortfolioDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showTransactionForm, setShowTransactionForm] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
 
   const {
     transactions,
@@ -77,6 +81,12 @@ export default function PortfolioDetail() {
     loading: transactionLoading,
     error: transactionError
   } = useTransactions(portfolioId)
+
+  const {
+    holdings: holdingsData,
+    calculatePortfolioSummary,
+    fetchHoldings
+  } = useHoldings(portfolioId)
 
   const fetchPortfolio = useCallback(async () => {
     if (!portfolioId) return
@@ -170,8 +180,15 @@ export default function PortfolioDetail() {
   const handleRefreshData = async () => {
     await Promise.all([
       fetchPortfolio(),
-      refreshTransactions()
+      refreshTransactions(),
+      fetchHoldings()
     ])
+  }
+
+  const handleUpdatePortfolio = (updatedPortfolio: Portfolio) => {
+    setPortfolio(updatedPortfolio)
+    setShowEditForm(false)
+    addToast('Portfolio updated successfully!', 'success')
   }
 
   if (loading) {
@@ -213,134 +230,73 @@ export default function PortfolioDetail() {
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              {portfolio.name}
-            </h1>
+            <div className="flex items-center justify-between mb-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {portfolio.name}
+              </h1>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowEditForm(true)}
+              >
+                Edit Portfolio
+              </Button>
+            </div>
             {portfolio.description && (
               <p className="text-gray-600 dark:text-gray-300">
                 {portfolio.description}
               </p>
             )}
           </div>
+
+          {/* Portfolio Edit Form */}
+          {showEditForm && (
+            <div className="mb-6">
+              <PortfolioEditForm
+                portfolio={portfolio}
+                onUpdate={handleUpdatePortfolio}
+                onCancel={() => setShowEditForm(false)}
+              />
+            </div>
+          )}
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-6 text-white">
               <h3 className="text-sm font-medium text-blue-100">Total Value</h3>
               <p className="text-3xl font-bold">
-                ${parseFloat(portfolio.total_value).toLocaleString()}
+                ${calculatePortfolioSummary().totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             
             <div className="bg-gradient-to-r from-green-500 to-blue-500 rounded-lg p-6 text-white">
-              <h3 className="text-sm font-medium text-green-100">Daily Change</h3>
+              <h3 className="text-sm font-medium text-green-100">Total Cost</h3>
               <p className="text-3xl font-bold">
-                ${parseFloat(portfolio.daily_change).toFixed(2)}
+                ${calculatePortfolioSummary().totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             
             <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white">
-              <h3 className="text-sm font-medium text-purple-100">Change %</h3>
-              <p className="text-3xl font-bold">
-                {parseFloat(portfolio.daily_change_percent).toFixed(2)}%
+              <h3 className="text-sm font-medium text-purple-100">Total Gain/Loss</h3>
+              <p className={`text-3xl font-bold ${
+                calculatePortfolioSummary().totalGainLoss >= 0 ? 'text-green-100' : 'text-red-100'
+              }`}>
+                {calculatePortfolioSummary().totalGainLoss >= 0 ? '+' : ''}${calculatePortfolioSummary().totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg p-6 text-white">
+              <h3 className="text-sm font-medium text-orange-100">Return %</h3>
+              <p className={`text-3xl font-bold ${
+                calculatePortfolioSummary().totalGainLossPercent >= 0 ? 'text-green-100' : 'text-red-100'
+              }`}>
+                {calculatePortfolioSummary().totalGainLossPercent >= 0 ? '+' : ''}{calculatePortfolioSummary().totalGainLossPercent.toFixed(2)}%
               </p>
             </div>
           </div>
 
           {/* Holdings Section */}
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Stock Holdings
-            </h2>
-            {holdings.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Stock
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Avg Cost
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Current Value
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        Gain/Loss
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                        %
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {holdings.map((holding) => (
-                      <tr key={holding.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link 
-                            href={`/portfolios/${portfolioId}/holdings/${holding.id}`}
-                            className="block hover:bg-gray-50 dark:hover:bg-gray-700 -m-2 p-2 rounded transition-colors"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
-                                  {holding.stock.symbol} →
-                                </div>
-                                <div className="text-sm text-gray-500 dark:text-gray-300">
-                                  {holding.stock.company_name}
-                                </div>
-                              </div>
-                              {holding.recent_news_count > 0 && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100 ml-2 flex-shrink-0">
-                                  <span className="mr-1">📰</span>
-                                  {holding.recent_news_count}
-                                </span>
-                              )}
-                            </div>
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {parseFloat(holding.quantity).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          ${parseFloat(holding.average_cost).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          ${parseFloat(holding.current_value).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`font-medium ${
-                            parseFloat(holding.unrealized_gain_loss) >= 0
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-red-600 dark:text-red-400'
-                          }`}>
-                            {parseFloat(holding.unrealized_gain_loss) >= 0 ? '+' : ''}
-                            ${parseFloat(holding.unrealized_gain_loss).toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`font-medium ${
-                            parseFloat(holding.unrealized_gain_loss_percent) >= 0
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-red-600 dark:text-red-400'
-                          }`}>
-                            {parseFloat(holding.unrealized_gain_loss_percent) >= 0 ? '+' : ''}
-                            {parseFloat(holding.unrealized_gain_loss_percent).toFixed(2)}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p>No holdings found in this portfolio</p>
-              </div>
-            )}
+            <HoldingsDisplay portfolioId={portfolioId} />
           </div>
 
           {/* Transaction Management Section */}

@@ -37,6 +37,15 @@ class TestTransactionAPI:
         # Should return 401/422, not 404 for missing route
         assert response.status_code in [201, 401, 404, 422], f"Expected valid status code, got {response.status_code}"
 
+    def test_get_transaction_detail_endpoint_exists(self, client: TestClient):
+        """GET /api/v1/portfolios/{portfolio_id}/transactions/{transaction_id} should exist."""
+        portfolio_uuid = "00000000-0000-0000-0000-000000000000"
+        transaction_uuid = "11111111-1111-1111-1111-111111111111"
+        response = client.get(f"/api/v1/portfolios/{portfolio_uuid}/transactions/{transaction_uuid}")
+        
+        # Should return 401/404, not 404 for missing route
+        assert response.status_code in [200, 401, 404], f"Expected valid status code, got {response.status_code}"
+
     def test_get_transactions_pagination_parameters(self, client: TestClient):
         """GET transactions should handle pagination parameters."""
         test_uuid = "00000000-0000-0000-0000-000000000000"

@@ -2,17 +2,18 @@
 
 import { useState, useCallback } from 'react'
 import { Transaction, TransactionCreate, TransactionListResponse } from '@/types/transaction'
+import { useAuth } from '@/contexts/AuthContext'
 
-const API_BASE = 'http://localhost:8001'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
 
 export function useTransactions(portfolioId: string) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
+  const { token } = useAuth()
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('auth_token')
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
