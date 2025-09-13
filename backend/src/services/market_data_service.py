@@ -100,29 +100,65 @@ class MarketDataService:
             return None
 
     async def _fetch_from_yfinance(self, symbol: str) -> Optional[Dict]:
-        """Fetch price data from Yahoo Finance (via yfinance-like API)."""
+        """Fetch price data from Yahoo Finance using yfinance library."""
         try:
-            session = await self.get_session()
+            import yfinance as yf
+            import asyncio
 
-            # Mock implementation - in real implementation would use yfinance
-            # For development, return mock data
-            import random
-            base_price = 100 + hash(symbol) % 900  # Deterministic base price
-            price_variation = random.uniform(-5, 5)
-            current_price = base_price + price_variation
+            # Run yfinance in thread pool to avoid blocking
+            def fetch_data():
+                # Handle ASX symbols - yfinance expects .AX suffix for ASX stocks
+                yf_symbol = symbol
+                if not symbol.endswith('.AX') and self._is_asx_symbol(symbol):
+                    yf_symbol = f"{symbol}.AX"
 
-            return {
-                "symbol": symbol,
-                "price": Decimal(str(round(current_price, 2))),
-                "volume": random.randint(1000000, 10000000),
-                "market_cap": None,
-                "source_timestamp": datetime.now(),
-                "provider": "yfinance"
-            }
+                ticker = yf.Ticker(yf_symbol)
+
+                # Get current price info
+                info = ticker.info
+
+                if not info or 'currentPrice' not in info:
+                    # Fallback to history for current price
+                    hist = ticker.history(period="1d")
+                    if hist.empty:
+                        return None
+
+                    current_price = float(hist['Close'].iloc[-1])
+                    volume = int(hist['Volume'].iloc[-1]) if 'Volume' in hist.columns else 0
+                else:
+                    current_price = info.get('currentPrice', 0)
+                    volume = info.get('volume', 0)
+
+                return {
+                    "symbol": symbol,  # Keep original symbol format
+                    "price": Decimal(str(round(current_price, 4))),
+                    "volume": volume,
+                    "market_cap": info.get('marketCap') if info else None,
+                    "source_timestamp": datetime.now(),
+                    "provider": "yfinance",
+                    "company_name": info.get('shortName') if info else None,
+                    "currency": info.get('currency', 'AUD') if info else 'AUD'
+                }
+
+            # Run in thread pool to avoid blocking async event loop
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, fetch_data)
+
+            if result:
+                logger.info(f"Successfully fetched {symbol} from yfinance: ${result['price']}")
+
+            return result
 
         except Exception as e:
             logger.error(f"Error fetching from yfinance for {symbol}: {e}")
             return None
+
+    def _is_asx_symbol(self, symbol: str) -> bool:
+        """Check if symbol appears to be an ASX stock (basic heuristic)."""
+        # ASX symbols are typically 3-4 letter codes
+        # More sophisticated logic could check against known ASX symbol list
+        return (len(symbol) >= 3 and len(symbol) <= 4 and
+                symbol.isalpha() and symbol.isupper())
 
     async def _fetch_from_alpha_vantage(self, symbol: str, api_key: Optional[str]) -> Optional[Dict]:
         """Fetch price data from Alpha Vantage API."""

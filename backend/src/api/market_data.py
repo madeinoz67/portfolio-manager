@@ -137,26 +137,43 @@ async def get_bulk_prices(
     service = MarketDataService(db)
 
     try:
-        price_data = await service.refresh_portfolio_symbols(symbols)
-
+        # Fetch each symbol individually for simplicity
         prices = {}
         cached_count = 0
         fresh_count = 0
 
-        for symbol, data in price_data.items():
-            prices[symbol] = PriceResponse(
-                symbol=symbol,
-                price=float(data["price"]),
-                volume=data.get("volume"),
-                market_cap=float(data["market_cap"]) if data.get("market_cap") else None,
-                fetched_at=data.get("fetched_at", datetime.now()).isoformat() + "Z",
-                cached=data.get("cached", False)
-            )
+        for symbol in symbols:
+            try:
+                # Check cache first
+                cached_price = service.get_latest_price(symbol, max_age_minutes=30)
 
-            if data.get("cached"):
-                cached_count += 1
-            else:
-                fresh_count += 1
+                if cached_price:
+                    prices[symbol] = PriceResponse(
+                        symbol=symbol,
+                        price=float(cached_price.price),
+                        volume=cached_price.volume,
+                        market_cap=float(cached_price.market_cap) if cached_price.market_cap else None,
+                        fetched_at=cached_price.fetched_at.isoformat() + "Z",
+                        cached=True
+                    )
+                    cached_count += 1
+                else:
+                    # Fetch fresh data
+                    price_data = await service.fetch_price(symbol)
+
+                    if price_data:
+                        prices[symbol] = PriceResponse(
+                            symbol=symbol,
+                            price=float(price_data["price"]),
+                            volume=price_data.get("volume"),
+                            market_cap=float(price_data["market_cap"]) if price_data.get("market_cap") else None,
+                            fetched_at=price_data["source_timestamp"].isoformat() + "Z",
+                            cached=False
+                        )
+                        fresh_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to fetch price for {symbol}: {e}")
+                continue
 
         return BulkPriceResponse(
             prices=prices,

@@ -13,11 +13,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc, Integer, cast
 from pydantic import BaseModel, Field, validator
 
-from src.core.dependencies import get_current_user_flexible
+from src.core.dependencies import get_current_user_flexible, get_current_admin_user
 from src.database import get_db
 from src.models.user import User
 from src.models.poll_interval_config import PollIntervalConfig
 from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_provider import MarketDataProvider
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-market-data"])
 
