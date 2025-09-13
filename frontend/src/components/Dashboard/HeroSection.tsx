@@ -1,3 +1,5 @@
+import { useAuth } from '@/contexts/AuthContext'
+
 interface HeroSectionProps {
   totalValue: string
   totalGain: string
@@ -6,6 +8,7 @@ interface HeroSectionProps {
 }
 
 export default function HeroSection({ totalValue, totalGain, gainPercent, isPositive }: HeroSectionProps) {
+  const { user } = useAuth()
   return (
     <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 rounded-2xl p-8 mb-8 overflow-hidden">
       {/* Background Pattern */}
@@ -19,7 +22,7 @@ export default function HeroSection({ totalValue, totalGain, gainPercent, isPosi
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
           <div className="mb-6 lg:mb-0">
             <h1 className="text-white text-3xl lg:text-4xl font-bold mb-2">
-              Welcome back, John 👋
+              Welcome back, {user?.first_name || 'Friend'} 👋
             </h1>
             <p className="text-blue-100 text-lg">
               Here's what's happening with your investments today
