@@ -17,6 +17,7 @@ from src.models.portfolio import Portfolio
 from src.models.api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import ProviderActivity
 from src.schemas.auth import UserResponse
+from src.utils.datetime_utils import to_iso_string, utc_now
 
 logger = get_logger(__name__)
 
@@ -100,7 +101,7 @@ async def list_users(
             lastName=user.last_name,
             role=user.role.value,
             isActive=user.is_active,
-            createdAt=user.created_at.isoformat(),
+            createdAt=to_iso_string(user.created_at),
             portfolioCount=portfolio_count,
             lastLoginAt=None  # TODO: Track login times in future
         ))
@@ -179,7 +180,7 @@ async def get_user(
             id=str(portfolio.id),
             name=portfolio.name,
             value=portfolio_value,
-            lastUpdated=portfolio.updated_at.isoformat()
+            lastUpdated=to_iso_string(portfolio.updated_at)
         ))
 
     return AdminUserDetails(
@@ -189,7 +190,7 @@ async def get_user(
         lastName=user.last_name,
         role=user.role.value,
         isActive=user.is_active,
-        createdAt=user.created_at.isoformat() + "Z",
+        createdAt=to_iso_string(user.created_at),
         portfolioCount=len(portfolios),
         lastLoginAt=None,  # TODO: Track login times in future
         totalAssets=total_assets,
@@ -227,7 +228,7 @@ async def get_system_metrics(
         activeUsers=active_users,
         adminUsers=admin_users,
         systemStatus=system_status,
-        lastUpdated=datetime.now().isoformat()
+        lastUpdated=to_iso_string(utc_now())
     )
 
 
@@ -342,7 +343,7 @@ async def get_market_data_status(
             "providerId": provider.name,
             "providerName": provider.display_name,
             "isEnabled": provider.is_enabled,
-            "lastUpdate": provider.updated_at.isoformat(),
+            "lastUpdate": to_iso_string(provider.updated_at),
             "apiCallsToday": calls_today,
             "monthlyLimit": provider.rate_limit_per_day * 30,  # Approximate monthly limit
             "monthlyUsage": calls_this_month,
@@ -392,7 +393,7 @@ async def get_api_usage(
     from sqlalchemy import func, and_
     from datetime import datetime, date, timedelta
 
-    today = datetime.now().date()
+    today = utc_now().date()
     current_month_start = datetime(today.year, today.month, 1)
 
     # Get today's activities
@@ -674,7 +675,7 @@ async def get_provider_details(
     from sqlalchemy import func, and_
 
     # Calculate date ranges
-    today = datetime.now().date()
+    today = utc_now().date()
     yesterday = today - timedelta(days=1)
     seven_days_ago = today - timedelta(days=7)
     thirty_days_ago = today - timedelta(days=30)
@@ -802,7 +803,7 @@ async def get_provider_details(
         metadata = activity.activity_metadata or {}
 
         activity_item = {
-            "timestamp": activity.timestamp.isoformat(),
+            "timestamp": to_iso_string(activity.timestamp),
             "type": activity.activity_type,
             "description": activity.description,
             "status": activity.status
@@ -879,7 +880,7 @@ async def get_provider_details(
         priority=provider.priority,
         rateLimitPerMinute=provider.rate_limit_per_minute,
         rateLimitPerDay=provider.rate_limit_per_day,
-        lastUpdated=provider.updated_at.isoformat(),
+        lastUpdated=to_iso_string(provider.updated_at),
         usageStats=UsageStats(
             today=today_stats,
             yesterday=yesterday_stats,
@@ -947,7 +948,7 @@ async def get_market_data_activities(
             type=activity.activity_type,
             description=activity.description,
             status=activity.status,
-            timestamp=activity.timestamp.isoformat()
+            timestamp=to_iso_string(activity.timestamp)
         ))
 
     # Calculate pagination info
@@ -1103,7 +1104,7 @@ async def get_dashboard_recent_activities(
             activity_type=activity.activity_type,
             description=activity.description,
             status=activity.status,
-            timestamp=activity.timestamp.isoformat(),
+            timestamp=to_iso_string(activity.timestamp),
             relative_time=calculate_relative_time(activity.timestamp),
             metadata=activity.activity_metadata
         ))

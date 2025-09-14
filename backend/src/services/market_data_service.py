@@ -5,7 +5,7 @@ Provides abstraction layer for different market data providers
 with fallback support and caching.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from decimal import Decimal
 import asyncio
@@ -18,8 +18,10 @@ from sqlalchemy import desc, and_
 from src.models.market_data_provider import MarketDataProvider
 from src.models.realtime_price_history import RealtimePriceHistory
 from src.models.api_usage_metrics import ApiUsageMetrics
+from src.utils.datetime_utils import utc_now
 from src.services.activity_service import log_provider_activity
 from src.core.logging import get_logger
+from src.utils.datetime_utils import to_iso_string
 
 logger = get_logger(__name__)
 
@@ -407,7 +409,7 @@ class MarketDataService:
                             if info and 'regularMarketPrice' in info:
                                 data[original_symbol] = {
                                     "price": float(info['regularMarketPrice']),
-                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "timestamp": to_iso_string(datetime.now(timezone.utc)),
                                     "source": "yfinance_bulk"
                                 }
                             else:
@@ -477,7 +479,7 @@ class MarketDataService:
                     "price": Decimal(str(round(current_price, 4))),
                     "volume": volume,
                     "market_cap": info.get('marketCap') if info else None,
-                    "source_timestamp": datetime.now(),
+                    "source_timestamp": utc_now(),
                     "provider": "yfinance",
                     "company_name": info.get('shortName') if info else None,
                     "currency": info.get('currency', 'AUD') if info else 'AUD'
@@ -651,7 +653,7 @@ class MarketDataService:
                             "price": Decimal(quote.get("05. price", "0")),
                             "volume": int(quote.get("06. volume", "0")),
                             "market_cap": None,
-                            "source_timestamp": datetime.now(),
+                            "source_timestamp": utc_now(),
                             "provider": "alpha_vantage"
                         }
                     else:
@@ -779,7 +781,7 @@ class MarketDataService:
         """Log API usage for monitoring and rate limiting."""
         try:
             # Use local time for consistency with recorded_at field
-            now_local = datetime.now()
+            now_local = utc_now()
 
             # Create the usage record with explicit recorded_at to ensure consistency
             # Both recorded_at and time_bucket must be in same timezone format
@@ -868,7 +870,7 @@ def make_api_call(provider_config: dict, symbol: str) -> dict:
 
     return {
         "price": 150.25,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": to_iso_string(datetime.now(timezone.utc))
     }
 
 

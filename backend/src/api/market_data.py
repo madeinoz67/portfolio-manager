@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 
 from src.core.dependencies import get_current_user_flexible, get_current_admin_user
 from src.database import get_db
+from src.utils.datetime_utils import utc_now, to_iso_string
+from src.utils.datetime_utils import utc_now, to_iso_string
 from src.models.user import User
 from src.models.stock import Stock
 from src.models.portfolio import Portfolio
@@ -197,7 +199,7 @@ async def get_bulk_prices(
 
         return BulkPriceResponse(
             prices=prices,
-            fetched_at=datetime.now().isoformat() + "Z",
+            fetched_at=to_iso_string(utc_now()),
             cached_count=cached_count,
             fresh_count=fresh_count
         )
@@ -249,7 +251,7 @@ async def get_service_status(
         status=overall_status,
         providers_status=providers_status,
         next_update_in_seconds=900,  # 15 minutes
-        last_update_at=datetime.now().isoformat() + "Z",
+        last_update_at=to_iso_string(utc_now()),
         cache_stats=cache_stats
     )
 
@@ -290,7 +292,7 @@ async def refresh_prices(
             "message": f"Refreshed {len(price_data)} symbols",
             "symbols_refreshed": len(price_data),
             "symbols": list(price_data.keys()),
-            "refreshed_at": datetime.now().isoformat() + "Z"
+            "refreshed_at": to_iso_string(utc_now())
         }
 
     except Exception as e:
@@ -349,7 +351,7 @@ async def stream_market_data(
                     db.commit()
 
                     # Send heartbeat
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.now().isoformat() + 'Z'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': to_iso_string(utc_now())})}\n\n"
 
                     # Mock price update (in real implementation, this would be triggered by actual price changes)
                     if symbols:
@@ -413,7 +415,6 @@ async def get_scheduler_status(
 
     try:
         from datetime import datetime, timedelta
-        from src.utils.datetime_utils import utc_now
 
         # Get recent activities from the last hour for statistics
         one_hour_ago = utc_now() - timedelta(hours=1)
@@ -532,8 +533,8 @@ async def get_scheduler_status(
             scheduler={
                 "status": "running",
                 "uptime_seconds": uptime_seconds,
-                "next_run_at": next_run_at.isoformat() + "Z",
-                "last_run_at": last_run_at.isoformat() + "Z",
+                "next_run_at": to_iso_string(next_run_at),
+                "last_run_at": to_iso_string(last_run_at),
                 "total_runs": total_activities,
                 "successful_runs": success_count,
                 "failed_runs": total_activities - success_count,

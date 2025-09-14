@@ -30,6 +30,7 @@ from src.schemas.auth import (
     UserResponse,
     UserUpdate
 )
+from src.utils.datetime_utils import to_iso_string
 
 logger = get_logger(__name__)
 
@@ -93,7 +94,7 @@ async def register_user(
             last_name=new_user.last_name,
             role=new_user.role.value,
             is_active=new_user.is_active,
-            created_at=new_user.created_at.isoformat()
+            created_at=to_iso_string(new_user.created_at)
         )
         
     except Exception as e:
@@ -164,7 +165,7 @@ async def login_user(
                 last_name=user.last_name,
                 role=user.role.value,
                 is_active=user.is_active,
-                created_at=user.created_at.isoformat()
+                created_at=to_iso_string(user.created_at)
             )
         )
         
@@ -191,7 +192,7 @@ async def get_current_user_profile(
         last_name=current_user.last_name,
         role=current_user.role.value,
         is_active=current_user.is_active,
-        created_at=current_user.created_at.isoformat()
+        created_at=to_iso_string(current_user.created_at)
     )
 
 
@@ -229,7 +230,7 @@ async def update_current_user_profile(
             last_name=current_user.last_name,
             role=current_user.role.value,
             is_active=current_user.is_active,
-            created_at=current_user.created_at.isoformat()
+            created_at=to_iso_string(current_user.created_at)
         )
         
     except Exception as e:
@@ -260,10 +261,10 @@ async def list_api_keys(
             id=str(key.id),
             name=key.name,
             permissions=json.loads(key.permissions) if key.permissions else None,
-            last_used_at=key.last_used_at.isoformat() if key.last_used_at else None,
-            expires_at=key.expires_at.isoformat() if key.expires_at else None,
+            last_used_at=to_iso_string(key.last_used_at) if key.last_used_at else None,
+            expires_at=to_iso_string(key.expires_at) if key.expires_at else None,
             is_active=key.is_active,
-            created_at=key.created_at.isoformat()
+            created_at=to_iso_string(key.created_at)
         ) for key in api_keys
     ]
 
@@ -302,8 +303,8 @@ async def create_api_key(
             name=new_api_key.name,
             key=api_key_value,  # Only shown once!
             permissions=json.loads(new_api_key.permissions) if new_api_key.permissions else None,
-            expires_at=new_api_key.expires_at.isoformat() if new_api_key.expires_at else None,
-            created_at=new_api_key.created_at.isoformat()
+            expires_at=to_iso_string(new_api_key.expires_at) if new_api_key.expires_at else None,
+            created_at=to_iso_string(new_api_key.created_at)
         )
         
     except Exception as e:

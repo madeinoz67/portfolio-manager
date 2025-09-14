@@ -4,11 +4,12 @@ Dashboard activity service for creating realistic activity logging.
 Provides functions to log different types of market data provider activities
 that will be displayed in the admin dashboard recent activity feed.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 
 from src.services.activity_service import log_provider_activity
+from src.utils.datetime_utils import to_iso_string
 
 
 def log_bulk_price_update(
@@ -387,7 +388,7 @@ def get_dashboard_activity_summary(
         },
         "by_provider": {},
         "activity_types": {},
-        "last_updated": datetime.utcnow().isoformat()
+        "last_updated": to_iso_string(datetime.now(timezone.utc))
     }
 
     # Count by provider
