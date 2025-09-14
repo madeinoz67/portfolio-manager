@@ -21,6 +21,25 @@ export default function MarketDataPage() {
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
+  // Helper function to validate cached price data
+  const validateCachedPriceData = (priceData: Record<string, PriceData>): boolean => {
+    try {
+      for (const [symbol, data] of Object.entries(priceData)) {
+        if (data.fetched_at) {
+          const testDate = new Date(data.fetched_at);
+          if (isNaN(testDate.getTime())) {
+            console.warn(`Invalid cached date for ${symbol}:`, data.fetched_at);
+            return false;
+          }
+        }
+      }
+      return true;
+    } catch (error) {
+      console.warn('Error validating cached price data:', error);
+      return false;
+    }
+  };
+
   // Load persisted data on mount
   useEffect(() => {
     const savedSymbols = localStorage.getItem('market_data_symbols')
@@ -38,11 +57,33 @@ export default function MarketDataPage() {
     }
 
     if (savedPriceData) {
-      setPriceData(JSON.parse(savedPriceData))
+      try {
+        const parsedPriceData = JSON.parse(savedPriceData);
+        // Validate cached data before using it
+        if (validateCachedPriceData(parsedPriceData)) {
+          setPriceData(parsedPriceData);
+        } else {
+          console.warn('Clearing invalid cached price data');
+          localStorage.removeItem('market_data_prices');
+          localStorage.removeItem('market_data_last_updated');
+        }
+      } catch (error) {
+        console.warn('Error parsing cached price data, clearing cache:', error);
+        localStorage.removeItem('market_data_prices');
+        localStorage.removeItem('market_data_last_updated');
+      }
     }
 
     if (savedLastUpdated) {
-      setLastUpdated(new Date(savedLastUpdated))
+      try {
+        const lastUpdatedDate = new Date(savedLastUpdated);
+        if (!isNaN(lastUpdatedDate.getTime())) {
+          setLastUpdated(lastUpdatedDate);
+        }
+      } catch (error) {
+        console.warn('Invalid last updated date in cache:', error);
+        localStorage.removeItem('market_data_last_updated');
+      }
     }
   }, [])
 
@@ -242,7 +283,14 @@ export default function MarketDataPage() {
                       )}
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {isLoading ? 'Fetching...' : priceInfo ?
-                          `Updated: ${formatDisplayDateTime(priceInfo.fetched_at)}` :
+                          (() => {
+                            try {
+                              const formattedDate = formatDisplayDateTime(priceInfo.fetched_at);
+                              return formattedDate === 'Invalid Date' ? 'Date unavailable' : `Updated: ${formattedDate}`;
+                            } catch {
+                              return 'Date unavailable';
+                            }
+                          })() :
                           'No price data'
                         }
                       </div>
