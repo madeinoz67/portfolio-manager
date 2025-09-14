@@ -18,8 +18,6 @@ export default function ProviderDetailPage({ params }: ProviderDetailPageProps) 
   const [providerDetail, setProviderDetail] = useState<ProviderDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [bulkUpdatesEnabled, setBulkUpdatesEnabled] = useState(false)
-  const [bulkUpdatesLoading, setBulkUpdatesLoading] = useState(false)
   const { fetchProviderDetails } = useAdmin()
 
   useEffect(() => {
@@ -60,32 +58,6 @@ export default function ProviderDetailPage({ params }: ProviderDetailPageProps) 
     router.push('/admin/market-data')
   }
 
-  const handleBulkUpdatesToggle = async () => {
-    try {
-      setBulkUpdatesLoading(true)
-      const response = await fetch(`/api/v1/admin/providers/${providerId}/bulk-updates/toggle`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-        },
-        body: JSON.stringify({
-          enable_bulk_updates: !bulkUpdatesEnabled
-        })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setBulkUpdatesEnabled(result.bulk_updates_enabled)
-      } else {
-        console.error('Failed to toggle bulk updates')
-      }
-    } catch (error) {
-      console.error('Error toggling bulk updates:', error)
-    } finally {
-      setBulkUpdatesLoading(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -198,32 +170,15 @@ export default function ProviderDetailPage({ params }: ProviderDetailPageProps) 
                 {providerDetail.isEnabled ? 'Enabled' : 'Disabled'}
               </span>
 
-              {/* Bulk Updates Toggle */}
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-600 dark:text-gray-300">Bulk Updates:</span>
-                <button
-                  onClick={handleBulkUpdatesToggle}
-                  disabled={bulkUpdatesLoading}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                    bulkUpdatesEnabled
-                      ? 'bg-blue-600'
-                      : 'bg-gray-200 dark:bg-gray-700'
-                  } ${bulkUpdatesLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      bulkUpdatesEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                <span className={`text-xs font-medium ${
-                  bulkUpdatesEnabled
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}>
-                  {bulkUpdatesLoading ? 'Loading...' : bulkUpdatesEnabled ? 'On' : 'Off'}
+              {/* Bulk Updates Status Tag */}
+              {providerDetail.isEnabled && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300">
+                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  Bulk Updates
                 </span>
-              </div>
+              )}
             </div>
           </div>
         </div>
