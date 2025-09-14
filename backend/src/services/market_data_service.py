@@ -18,6 +18,7 @@ from sqlalchemy import desc, and_
 from src.models.market_data_provider import MarketDataProvider
 from src.models.realtime_price_history import RealtimePriceHistory
 from src.models.api_usage_metrics import ApiUsageMetrics
+from src.utils.datetime_utils import to_iso_string
 from src.models.holding import Holding
 from src.models.stock import Stock
 from src.models.portfolio import Portfolio
@@ -597,7 +598,7 @@ class MarketDataService:
                                     "previous_close": info.get('previousClose'),
                                     "market_cap": info.get('marketCap'),
                                     "currency": info.get('currency', 'USD'),
-                                    "fetched_at": datetime.utcnow(),
+                                    "fetched_at": to_iso_string(datetime.utcnow()),
                                     "provider": "yfinance",
                                     "bulk_fetch": True
                                 }
@@ -769,7 +770,7 @@ class MarketDataService:
                                         "change_percent": symbol_data.get("change_percent", "0%"),
                                         "previous_close": float(symbol_data.get("previous_close", "0")),
                                         "market_cap": None,  # Not provided in bulk API
-                                        "fetched_at": datetime.utcnow(),
+                                        "fetched_at": to_iso_string(datetime.utcnow()),
                                         "provider": "alpha_vantage",
                                         "bulk_fetch": True
                                     }
@@ -891,7 +892,7 @@ class MarketDataService:
                     "symbol": symbol,
                     "price": latest.price,
                     "volume": latest.volume,
-                    "fetched_at": latest.fetched_at,
+                    "fetched_at": to_iso_string(latest.fetched_at),
                     "cached": True
                 }
             else:
