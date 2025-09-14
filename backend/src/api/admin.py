@@ -1006,9 +1006,9 @@ def calculate_relative_time(timestamp: datetime) -> str:
         # Convert timezone-aware timestamp to naive UTC
         timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
 
-    # Ensure now is also naive UTC (our utc_now should already be naive)
-    if hasattr(now, 'tzinfo') and now.tzinfo is not None:
-        now = now.replace(tzinfo=None)
+    # Ensure now is also naive UTC (convert timezone-aware to naive UTC)
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
 
     # Calculate the difference
     diff = now - timestamp

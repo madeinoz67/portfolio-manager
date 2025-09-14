@@ -18,6 +18,9 @@ from sqlalchemy import desc, and_
 from src.models.market_data_provider import MarketDataProvider
 from src.models.realtime_price_history import RealtimePriceHistory
 from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.holding import Holding
+from src.models.stock import Stock
+from src.models.portfolio import Portfolio
 from src.utils.datetime_utils import utc_now
 from src.services.activity_service import log_provider_activity
 from src.core.logging import get_logger
@@ -157,6 +160,52 @@ class MarketDataService:
             )
 
         return None
+
+    def get_actively_monitored_symbols(self, provider_bulk_limit: int = 10, minutes_lookback: int = 60) -> List[str]:
+        """
+        Get list of symbols that should be actively monitored based on:
+        1. Current portfolio holdings
+        2. Recent price requests
+
+        Args:
+            provider_bulk_limit: Maximum symbols per batch (provider-specific)
+            minutes_lookback: How far back to look for recent price requests
+
+        Returns:
+            List of symbol strings to monitor, limited by provider_bulk_limit
+        """
+        monitored_symbols = set()
+
+        # 1. Get symbols from active portfolio holdings
+        portfolio_symbols = (
+            self.db.query(Stock.symbol)
+            .join(Holding, Holding.stock_id == Stock.id)
+            .join(Portfolio, Portfolio.id == Holding.portfolio_id)
+            .filter(Holding.quantity > 0)  # Only active holdings
+            .distinct()
+            .all()
+        )
+
+        for symbol_tuple in portfolio_symbols:
+            monitored_symbols.add(symbol_tuple[0])
+
+        # 2. Get symbols from recent price requests (last X minutes)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes_lookback)
+        recent_symbols = (
+            self.db.query(RealtimePriceHistory.symbol)
+            .filter(RealtimePriceHistory.fetched_at >= cutoff_time)
+            .distinct()
+            .all()
+        )
+
+        for symbol_tuple in recent_symbols:
+            monitored_symbols.add(symbol_tuple[0])
+
+        # Convert to sorted list for consistent ordering
+        symbol_list = sorted(list(monitored_symbols))
+
+        # Limit to provider bulk limit
+        return symbol_list[:provider_bulk_limit]
 
     async def fetch_multiple_prices(self, symbols: List[str]) -> Dict[str, Dict]:
         """Fetch prices for multiple symbols using bulk operations when possible."""

@@ -39,16 +39,7 @@ logger = get_logger(__name__)
 # Background task for periodic market data updates
 async def periodic_price_updates():
     """Background task that periodically fetches prices to generate live activity."""
-    # Extended list of ASX symbols to rotate through
-    all_symbols = [
-        "CBA", "BHP", "CSL", "WBC", "ANZ", "TLS", "WOW", "MQG",
-        "TCL", "RIO", "FMG", "NCM", "COL", "WDS", "QBE", "SUN",
-        "JHX", "REA", "CAR", "XRO", "WTC", "CPU", "PME", "NXT"
-    ]
-
-    symbol_index = 0
     cycle_count = 0
-    last_fetched_symbols = set()  # Track recently fetched symbols to avoid duplicates
 
     while True:
         try:
@@ -74,33 +65,34 @@ async def periodic_price_updates():
                 # Create market data service
                 service = MarketDataService(db)
 
-                # Rotate through different symbols each cycle to avoid repetition
-                symbols_per_cycle = 4  # Fetch 4 different symbols each time
-                symbols_to_fetch = []
+                # Get symbols dynamically based on actual usage
+                # Check what providers are available and their bulk limits
+                enabled_providers = service.get_enabled_providers()
+                provider_bulk_limit = 10  # Conservative default
 
-                # Clear the last fetched set every few cycles to allow rotation
-                if cycle_count % 6 == 0:  # Every 6 cycles (90 minutes)
-                    last_fetched_symbols.clear()
-                    logger.info("Cleared recently fetched symbols cache for rotation")
+                for provider in enabled_providers:
+                    if provider.name == "yfinance":
+                        provider_bulk_limit = 50  # yfinance bulk limit
+                        break
+                    elif provider.name == "alpha_vantage" and provider.api_key:
+                        provider_bulk_limit = 100  # Alpha Vantage bulk limit
+                        break
 
-                # Select symbols that haven't been fetched recently
-                attempts = 0
-                while len(symbols_to_fetch) < symbols_per_cycle and attempts < len(all_symbols):
-                    current_symbol = all_symbols[symbol_index]
-                    if current_symbol not in last_fetched_symbols:
-                        symbols_to_fetch.append(current_symbol)
-                        last_fetched_symbols.add(current_symbol)
-                    symbol_index = (symbol_index + 1) % len(all_symbols)
-                    attempts += 1
+                # Get actively monitored symbols from portfolios and recent requests
+                symbols_to_fetch = service.get_actively_monitored_symbols(
+                    provider_bulk_limit=provider_bulk_limit,
+                    minutes_lookback=60
+                )
 
-                # If we couldn't find enough unique symbols, fill with remaining ones
-                while len(symbols_to_fetch) < symbols_per_cycle:
-                    current_symbol = all_symbols[symbol_index]
-                    if current_symbol not in symbols_to_fetch:  # Avoid duplicates in current cycle
-                        symbols_to_fetch.append(current_symbol)
-                    symbol_index = (symbol_index + 1) % len(all_symbols)
+                # If no symbols found from dynamic discovery, fall back to a small sample
+                if not symbols_to_fetch:
+                    fallback_symbols = ["CBA", "BHP", "WBC", "CSL"]
+                    symbols_to_fetch = fallback_symbols[:provider_bulk_limit]
+                    logger.info(f"No actively monitored symbols found, using fallback: {symbols_to_fetch}")
+                else:
+                    logger.info(f"Dynamic symbol discovery found {len(symbols_to_fetch)} symbols: {symbols_to_fetch}")
 
-                logger.info(f"Selected symbols for cycle {cycle_count + 1}: {symbols_to_fetch}")
+                logger.info(f"Selected symbols for cycle {cycle_count + 1} (limit {provider_bulk_limit}): {symbols_to_fetch}")
 
                 # Occasionally add some variety with system-level activities
                 if cycle_count % 3 == 0:  # Every 3rd cycle
@@ -140,7 +132,9 @@ async def periodic_price_updates():
                             "cycle_number": cycle_count + 1,
                             "symbols_processed": symbols_to_fetch,
                             "success_count": successful_fetches,
-                            "next_symbols": [all_symbols[(symbol_index + i) % len(all_symbols)] for i in range(4)]
+                            "dynamic_discovery": "enabled",
+                            "provider_bulk_limit": provider_bulk_limit,
+                            "sources": "portfolio_holdings_and_recent_requests"
                         }
                     )
 
