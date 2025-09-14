@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { PriceResponse } from '@/types/marketData'
+import { parseServerDate, getRelativeTime, isWithinTimeRange } from '@/utils/timezone'
 
 interface StreamingPriceDisplayProps {
   price: PriceResponse
@@ -55,32 +56,10 @@ export function StreamingPriceDisplay({
   }
 
   const formatUpdateTime = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp)
-      const now = new Date()
-      const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-
-      if (diffMinutes < 1) {
-        return 'Just now'
-      } else if (diffMinutes < 60) {
-        return `${diffMinutes}m ago`
-      } else {
-        return date.toLocaleTimeString()
-      }
-    } catch {
-      return 'Unknown'
-    }
+    return getRelativeTime(timestamp)
   }
 
-  const isStale = (() => {
-    try {
-      const updateTime = new Date(price.fetched_at)
-      const now = new Date()
-      return (now.getTime() - updateTime.getTime()) > 30 * 60 * 1000 // 30 minutes
-    } catch {
-      return false
-    }
-  })()
+  const isStale = !isWithinTimeRange(price.fetched_at, 30)
 
   if (compact) {
     return (

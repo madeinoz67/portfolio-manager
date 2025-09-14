@@ -3,7 +3,7 @@ Admin API endpoints for user management and system administration.
 """
 
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
@@ -996,29 +996,26 @@ class DashboardActivitiesResponse(BaseModel):
 
 def calculate_relative_time(timestamp: datetime) -> str:
     """Calculate relative time string from timestamp."""
-    # Get current time in the same timezone as the stored timestamps
-    # Since our timestamps appear to be in local time, let's use local time for comparison
-    from datetime import datetime as dt
-    import time
+    from src.utils.datetime_utils import utc_now
 
-    # Get local time for comparison
-    now = dt.now()
+    # Get current UTC time for comparison
+    now = utc_now()
 
-    # If timestamp doesn't have timezone info, assume it's in the same timezone as 'now'
-    if timestamp.tzinfo is None:
-        # Both are naive datetimes, can compare directly
-        diff = now - timestamp
-    else:
-        # Handle timezone-aware timestamps
-        diff = now - timestamp.replace(tzinfo=None)
+    # Ensure both timestamps are naive UTC for comparison
+    if timestamp.tzinfo is not None:
+        # Convert timezone-aware timestamp to naive UTC
+        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+    # Ensure now is also naive UTC (our utc_now should already be naive)
+    if hasattr(now, 'tzinfo') and now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+
+    # Calculate the difference
+    diff = now - timestamp
 
     # Handle future timestamps (should not happen, but just in case)
     if diff.total_seconds() < 0:
-        # If still negative, try with UTC comparison
-        now_utc = dt.utcnow()
-        diff = now_utc - timestamp
-        if diff.total_seconds() < 0:
-            return "just now"
+        return "just now"
 
     total_seconds = diff.total_seconds()
 

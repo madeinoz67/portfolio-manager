@@ -425,7 +425,7 @@ async def get_scheduler_status(
         # Calculate recent activity metrics
         total_activities = len(recent_activities)
         success_count = len([a for a in recent_activities if a.status == 'success'])
-        success_rate = success_count / total_activities if total_activities > 0 else 0.0
+        success_rate = (success_count / total_activities * 100) if total_activities > 0 else 0.0
 
         # Calculate average response time from activities with response_time_ms metadata
         response_times = []
@@ -444,7 +444,7 @@ async def get_scheduler_status(
         for provider in enabled_providers:
             provider_activities = [a for a in recent_activities if a.provider_id == provider.name]
             provider_success_count = len([a for a in provider_activities if a.status == 'success'])
-            provider_success_rate = provider_success_count / len(provider_activities) if provider_activities else 0.0
+            provider_success_rate = (provider_success_count / len(provider_activities) * 100) if provider_activities else 0.0
 
             # Get provider response times
             provider_response_times = []

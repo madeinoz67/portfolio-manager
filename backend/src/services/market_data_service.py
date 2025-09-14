@@ -87,7 +87,7 @@ class MarketDataService:
         for provider in providers:
             try:
                 start_time = datetime.utcnow()
-                price_data = await self._fetch_from_provider(symbol, provider)
+                price_data = await self._fetch_from_provider_single(symbol, provider)
                 end_time = datetime.utcnow()
 
                 if price_data:
@@ -589,7 +589,7 @@ class MarketDataService:
         """Fetch a single symbol with a specific provider."""
         try:
             start_time = datetime.utcnow()
-            price_data = await self._fetch_from_provider(symbol, provider)
+            price_data = await self._fetch_from_provider_single(symbol, provider)
             end_time = datetime.utcnow()
 
             if price_data:

@@ -9,6 +9,7 @@ import Button from '@/components/ui/Button'
 import DatePicker from '@/components/ui/DatePicker'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
+import { getCurrentDateInUserTimezone, formatDisplayDate, parseServerDate, convertLocalDateToUTC } from '@/utils/timezone'
 
 interface User {
   id: string
@@ -64,15 +65,17 @@ export default function Settings() {
     fetchUserProfile()
     fetchApiKeys()
     // Set default expiry to 90 days from now
-    const defaultExpiry = new Date()
-    defaultExpiry.setDate(defaultExpiry.getDate() + 90)
-    setNewKeyExpiryDate(defaultExpiry.toISOString().split('T')[0])
+    const today = new Date()
+    const defaultExpiry = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000)
+    const year = defaultExpiry.getFullYear()
+    const month = String(defaultExpiry.getMonth() + 1).padStart(2, '0')
+    const day = String(defaultExpiry.getDate()).padStart(2, '0')
+    setNewKeyExpiryDate(`${year}-${month}-${day}`)
   }, [])
 
   // Helper functions for date validation
   const getTodayDate = () => {
-    const today = new Date()
-    return today.toISOString().split('T')[0]
+    return getCurrentDateInUserTimezone()
   }
 
   const getMaxExpiryDate = () => {

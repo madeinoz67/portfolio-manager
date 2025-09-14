@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { MarketDataStatusTable } from '@/components/admin/MarketDataStatusTable'
 import { toggleMarketDataProvider, getDashboardActivities, forcePriceUpdate, controlScheduler } from '@/services/admin'
 import { DashboardActivity } from '@/types/admin'
+import { formatDisplayDateTime } from '@/utils/timezone'
 // import { useMarketDataStatus } from '@/hooks/useAdmin'
 // import LoadingSpinner from '@/components/ui/LoadingSpinner'
 // import ErrorMessage from '@/components/ui/ErrorMessage'
@@ -83,7 +84,7 @@ function MarketDataProviderCard({
 
   const statusConfig = getStatusConfig()
   const usagePercentage = (apiCallsToday / dailyLimit) * 100
-  const formattedTime = new Date(lastUpdate).toLocaleString()
+  const formattedTime = formatDisplayDateTime(lastUpdate)
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border ${statusConfig.borderColor} p-6`}>
@@ -578,7 +579,7 @@ export default function AdminMarketDataPage() {
 
         <MarketDataStatsCard
           title="Success Rate"
-          value={`${apiUsageData?.summary?.success_rate_today || 0}%`}
+          value={`${(apiUsageData?.summary?.success_rate_today || 0).toFixed(2)}%`}
           subtitle="Last 24 hours"
           trend={
             (apiUsageData?.summary?.success_rate_today || 0) > 95
@@ -589,7 +590,7 @@ export default function AdminMarketDataPage() {
           }
           trendValue={
             apiUsageData?.summary?.success_rate_today
-              ? apiUsageData.summary.success_rate_today > 95 ? '+0.2%' : apiUsageData.summary.success_rate_today > 80 ? '±0%' : '-2.1%'
+              ? ((apiUsageData.summary.success_rate_today) > 95 ? '+0.2%' : (apiUsageData.summary.success_rate_today) > 80 ? '±0%' : '-2.1%')
               : undefined
           }
           icon={
@@ -834,7 +835,7 @@ export default function AdminMarketDataPage() {
                   <span className="text-gray-600 dark:text-gray-400">Last Run:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
                     {schedulerStatus.scheduler?.last_run_at
-                      ? new Date(schedulerStatus.scheduler.last_run_at).toLocaleString()
+                      ? formatDisplayDateTime(schedulerStatus.scheduler.last_run_at)
                       : 'Never'
                     }
                   </span>
@@ -843,7 +844,7 @@ export default function AdminMarketDataPage() {
                   <span className="text-gray-600 dark:text-gray-400">Next Run:</span>
                   <span className="font-medium text-blue-600 dark:text-blue-400">
                     {schedulerStatus.scheduler?.next_run_at
-                      ? new Date(schedulerStatus.scheduler.next_run_at).toLocaleString()
+                      ? formatDisplayDateTime(schedulerStatus.scheduler.next_run_at)
                       : 'Not scheduled'
                     }
                   </span>
@@ -880,7 +881,7 @@ export default function AdminMarketDataPage() {
                         ? 'text-yellow-600 dark:text-yellow-400'
                         : 'text-red-600 dark:text-red-400'
                   }`}>
-                    {schedulerStatus.recent_activity?.success_rate || 0}%
+                    {(schedulerStatus.recent_activity?.success_rate || 0).toFixed(2)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -922,7 +923,9 @@ export default function AdminMarketDataPage() {
                       {activity.provider_name}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">{activity.relative_time}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {activity.relative_time} • {formatDisplayDateTime(activity.timestamp)}
+                  </div>
                 </div>
               </div>
             ))

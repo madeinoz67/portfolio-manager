@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button'
 import StockSelector from './StockSelector'
 import { TransactionCreate, TransactionType } from '@/types/transaction'
 import { Stock } from '@/hooks/useStocks'
+import { getCurrentDateInUserTimezone } from '@/utils/timezone'
 
 interface TransactionFormProps {
   portfolioId: string
@@ -27,7 +28,7 @@ export default function TransactionForm({
     quantity: initialData?.quantity || 0,
     price_per_share: initialData?.price_per_share || 0,
     fees: initialData?.fees || 0,
-    transaction_date: initialData?.transaction_date || new Date().toISOString().split('T')[0],
+    transaction_date: initialData?.transaction_date || getCurrentDateInUserTimezone(),
     notes: initialData?.notes || ''
   })
   
@@ -54,8 +55,12 @@ export default function TransactionForm({
     if (!formData.stock_symbol.trim()) {
       newErrors.stock_symbol = 'Stock symbol is required'
     } else if (!selectedStock && !isEditing) {
-      // Only require selectedStock validation for new transactions, not edits
-      newErrors.stock_symbol = 'Please select a valid stock from the list'
+      // For new transactions, allow valid stock symbols even if not in our local database
+      const isValidStockSymbol = /^[A-Za-z]{2,5}$/.test(formData.stock_symbol.trim())
+      if (!isValidStockSymbol) {
+        newErrors.stock_symbol = 'Please enter a valid stock symbol (2-5 letters, e.g., TLS, AAPL)'
+      }
+      // If it's a valid stock symbol format, allow it - the backend will validate against data providers
     }
 
     // Dynamic validation based on transaction type
@@ -156,7 +161,7 @@ export default function TransactionForm({
           quantity: 0,
           price_per_share: 0,
           fees: 0,
-          transaction_date: new Date().toISOString().split('T')[0],
+          transaction_date: getCurrentDateInUserTimezone(),
           notes: ''
         })
       } else {
@@ -326,7 +331,7 @@ export default function TransactionForm({
               id="transaction_date"
               value={formData.transaction_date}
               onChange={(e) => handleInputChange('transaction_date', e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
+              max={getCurrentDateInUserTimezone()}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
                 errors.transaction_date ? 'border-red-500' : 'border-gray-300'
               }`}

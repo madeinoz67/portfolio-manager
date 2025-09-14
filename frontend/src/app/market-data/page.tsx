@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Navigation from '@/components/layout/Navigation'
 import Button from '@/components/ui/Button'
+import { formatTimeWithTimezone } from '@/utils/timezone'
 
 interface PriceData {
   symbol: string
@@ -148,7 +149,7 @@ export default function MarketDataPage() {
               </p>
               {lastUpdated && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Last updated: {lastUpdated.toLocaleTimeString()}
+                  Last updated: {formatTimeWithTimezone(lastUpdated)}
                 </p>
               )}
             </div>
@@ -241,7 +242,7 @@ export default function MarketDataPage() {
                       )}
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {isLoading ? 'Fetching...' : priceInfo ?
-                          `Updated: ${new Date(priceInfo.fetched_at).toLocaleTimeString()}` :
+                          `Updated: ${formatTimeWithTimezone(new Date(priceInfo.fetched_at))}` :
                           'No price data'
                         }
                       </div>
