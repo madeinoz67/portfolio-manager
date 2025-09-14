@@ -5,6 +5,8 @@ FastAPI application entry point for Portfolio Management System.
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import asyncio
+from contextlib import asynccontextmanager
 
 from src.api.auth import router as auth_router
 from src.api.portfolios import router as portfolios_router
@@ -26,11 +28,215 @@ from src.core.exceptions import (
     general_exception_handler,
 )
 from src.core.logging import setup_logging, set_request_id, get_logger
-from src.database import engine, Base
+from src.database import engine, Base, get_db
+from src.services.market_data_service import MarketDataService
+from src.services.activity_service import log_provider_activity
 
 # Setup logging
 setup_logging(level="INFO")
 logger = get_logger(__name__)
+
+# Background task for periodic market data updates
+async def periodic_price_updates():
+    """Background task that periodically fetches prices to generate live activity."""
+    # Extended list of ASX symbols to rotate through
+    all_symbols = [
+        "CBA", "BHP", "CSL", "WBC", "ANZ", "TLS", "WOW", "MQG",
+        "TCL", "RIO", "FMG", "NCM", "COL", "WDS", "QBE", "SUN",
+        "JHX", "REA", "CAR", "XRO", "WTC", "CPU", "PME", "NXT"
+    ]
+
+    symbol_index = 0
+    cycle_count = 0
+    last_fetched_symbols = set()  # Track recently fetched symbols to avoid duplicates
+
+    while True:
+        try:
+            # Check if paused
+            if scheduler_paused:
+                logger.info("Scheduler is paused, waiting...")
+                await asyncio.sleep(30)  # Check every 30 seconds if still paused
+                continue
+
+            # Wait before first execution
+            await asyncio.sleep(60)  # Start after 1 minute
+
+            # Double-check pause status after wait
+            if scheduler_paused:
+                continue
+
+            logger.info(f"Starting periodic price update task - cycle {cycle_count + 1}")
+
+            # Get database session
+            db = next(get_db())
+
+            try:
+                # Create market data service
+                service = MarketDataService(db)
+
+                # Rotate through different symbols each cycle to avoid repetition
+                symbols_per_cycle = 4  # Fetch 4 different symbols each time
+                symbols_to_fetch = []
+
+                # Clear the last fetched set every few cycles to allow rotation
+                if cycle_count % 6 == 0:  # Every 6 cycles (90 minutes)
+                    last_fetched_symbols.clear()
+                    logger.info("Cleared recently fetched symbols cache for rotation")
+
+                # Select symbols that haven't been fetched recently
+                attempts = 0
+                while len(symbols_to_fetch) < symbols_per_cycle and attempts < len(all_symbols):
+                    current_symbol = all_symbols[symbol_index]
+                    if current_symbol not in last_fetched_symbols:
+                        symbols_to_fetch.append(current_symbol)
+                        last_fetched_symbols.add(current_symbol)
+                    symbol_index = (symbol_index + 1) % len(all_symbols)
+                    attempts += 1
+
+                # If we couldn't find enough unique symbols, fill with remaining ones
+                while len(symbols_to_fetch) < symbols_per_cycle:
+                    current_symbol = all_symbols[symbol_index]
+                    if current_symbol not in symbols_to_fetch:  # Avoid duplicates in current cycle
+                        symbols_to_fetch.append(current_symbol)
+                    symbol_index = (symbol_index + 1) % len(all_symbols)
+
+                logger.info(f"Selected symbols for cycle {cycle_count + 1}: {symbols_to_fetch}")
+
+                # Occasionally add some variety with system-level activities
+                if cycle_count % 3 == 0:  # Every 3rd cycle
+                    log_provider_activity(
+                        db_session=db,
+                        provider_id="system",
+                        activity_type="HEALTH_CHECK",
+                        description="System health check completed",
+                        status="success",
+                        metadata={
+                            "uptime_minutes": cycle_count * 15,
+                            "providers_available": len(service.get_enabled_providers()),
+                            "system_status": "healthy"
+                        }
+                    )
+
+                # Use simplified provider interface - providers handle bulk logic internally
+                logger.info(f"Fetching prices for {len(symbols_to_fetch)} symbols using provider adapters")
+                try:
+                    results = await service.fetch_multiple_prices(symbols_to_fetch)
+                    successful_fetches = len([result for result in results.values() if result is not None])
+                    logger.info(f"Fetch completed: {successful_fetches}/{len(symbols_to_fetch)} successful")
+
+                except Exception as e:
+                    logger.error(f"Error in fetch for periodic task: {e}")
+                    successful_fetches = 0
+
+                # Log bulk operation summary every few cycles
+                if cycle_count % 2 == 1:  # Every other cycle
+                    log_provider_activity(
+                        db_session=db,
+                        provider_id="system",
+                        activity_type="BATCH_SUMMARY",
+                        description=f"Batch update completed: {successful_fetches}/{len(symbols_to_fetch)} symbols updated",
+                        status="success" if successful_fetches > 0 else "warning",
+                        metadata={
+                            "cycle_number": cycle_count + 1,
+                            "symbols_processed": symbols_to_fetch,
+                            "success_count": successful_fetches,
+                            "next_symbols": [all_symbols[(symbol_index + i) % len(all_symbols)] for i in range(4)]
+                        }
+                    )
+
+                await service.close_session()
+                cycle_count += 1
+
+                logger.info(f"Completed periodic price update task - cycle {cycle_count}")
+
+            except Exception as e:
+                logger.error(f"Error in periodic price update task: {e}")
+            finally:
+                db.close()
+
+            # Wait for next cycle (15 minutes)
+            await asyncio.sleep(900)
+
+        except Exception as e:
+            logger.error(f"Fatal error in periodic task: {e}")
+            await asyncio.sleep(60)  # Wait before retrying
+
+
+async def pause_background_task() -> bool:
+    """Pause the background scheduler task."""
+    global scheduler_paused
+    try:
+        scheduler_paused = True
+        logger.info("Background scheduler paused by admin control")
+        return True
+    except Exception as e:
+        logger.error(f"Error pausing scheduler: {e}")
+        return False
+
+
+async def restart_background_task() -> bool:
+    """Restart/resume the background scheduler task."""
+    global background_task, scheduler_paused
+    try:
+        scheduler_paused = False
+
+        # If the task is dead, restart it
+        if background_task is None or background_task.done():
+            logger.info("Restarting background scheduler task...")
+            background_task = asyncio.create_task(periodic_price_updates())
+            logger.info("Background scheduler task restarted")
+
+            # Log system restart activity
+            try:
+                from src.database import get_db
+                from src.services.activity_service import log_provider_activity
+
+                db = next(get_db())
+                log_provider_activity(
+                    db_session=db,
+                    provider_id="system",
+                    activity_type="SCHEDULER_CONTROL",
+                    description="Scheduler restarted automatically by system",
+                    status="success",
+                    metadata={
+                        "restart_type": "automatic",
+                        "trigger": "task_failure_recovery"
+                    }
+                )
+                db.close()
+            except Exception as log_e:
+                logger.error(f"Failed to log system restart activity: {log_e}")
+        else:
+            logger.info("Background scheduler resumed from pause")
+
+        return True
+    except Exception as e:
+        logger.error(f"Error restarting scheduler: {e}")
+        return False
+
+# Background task handle and control
+background_task = None
+scheduler_paused = False
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan."""
+    global background_task
+
+    # Start background task
+    logger.info("Starting background tasks...")
+    background_task = asyncio.create_task(periodic_price_updates())
+
+    yield
+
+    # Cleanup background task
+    if background_task:
+        logger.info("Stopping background tasks...")
+        background_task.cancel()
+        try:
+            await background_task
+        except asyncio.CancelledError:
+            pass
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -39,6 +245,7 @@ app = FastAPI(
     version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Admin API contract error handler

@@ -7,6 +7,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Numeric, String, Uuid
 from sqlalchemy.orm import relationship
 
@@ -28,8 +30,8 @@ class Portfolio(Base):
     total_value = Column(Numeric(15, 2), default=Decimal("0.00"))
     daily_change = Column(Numeric(10, 2), default=Decimal("0.00"))
     daily_change_percent = Column(Numeric(5, 2), default=Decimal("0.00"))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
+    updated_at = Column(DateTime, default=now, onupdate=now)
     is_active = Column(Boolean, default=True)
 
     # Relationships

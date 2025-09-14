@@ -5,10 +5,11 @@ Tracks market data provider API calls for rate limiting and monitoring.
 """
 
 from datetime import datetime
+from src.utils.datetime_utils import now
 from typing import Optional
 import uuid
 
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, DECIMAL
 from sqlalchemy.dialects.postgresql import UUID
 
 from src.database import Base
@@ -20,17 +21,19 @@ class ApiUsageMetrics(Base):
     __tablename__ = "api_usage_metrics"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    provider_name = Column(String(50), nullable=False)  # 'alpha_vantage', 'yfinance'
-    symbol = Column(String(20), nullable=True)  # Stock symbol requested
-    endpoint = Column(String(100), nullable=False)  # API endpoint called
-    request_timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-    response_status = Column(Integer, nullable=False)  # HTTP status code
-    success = Column(Boolean, nullable=False)
-    error_message = Column(Text, nullable=True)
-    response_time_ms = Column(Integer, nullable=True)
-    rate_limit_remaining = Column(Integer, nullable=True)
-    rate_limit_total = Column(Integer, nullable=True)
-    created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    metric_id = Column(String(100), nullable=False)
+    provider_id = Column(String(50), nullable=False)  # 'alpha_vantage', 'yfinance'
+    user_id = Column(UUID(as_uuid=True), nullable=True)
+    portfolio_id = Column(UUID(as_uuid=True), nullable=True)
+    request_type = Column(String(50), nullable=False)
+    requests_count = Column(Integer, nullable=True)
+    data_points_fetched = Column(Integer, nullable=True)
+    cost_estimate = Column(DECIMAL(8, 4), nullable=True)
+    recorded_at = Column(DateTime, default=now, nullable=False)
+    time_bucket = Column(String(20), nullable=False)  # 'hourly', 'daily', or 'monthly'
+    rate_limit_hit = Column(Boolean, nullable=True)
+    error_count = Column(Integer, nullable=True)
+    avg_response_time_ms = Column(Integer, nullable=True)  # Average response time in milliseconds
 
     def __repr__(self) -> str:
-        return f"<ApiUsageMetrics(provider={self.provider_name}, symbol={self.symbol}, success={self.success})>"
+        return f"<ApiUsageMetrics(provider={self.provider_id}, requests={self.requests_count}, errors={self.error_count})>"

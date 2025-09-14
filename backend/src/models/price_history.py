@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, date
 from typing import TYPE_CHECKING
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Numeric, Uuid
 from sqlalchemy.orm import relationship
 
@@ -27,7 +29,7 @@ class PriceHistory(Base):
     close_price = Column(Numeric(10, 4), nullable=False)
     volume = Column(BigInteger)
     adjusted_close = Column(Numeric(10, 4))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
 
     # Relationships
     stock: "Stock" = relationship("Stock", back_populates="price_history")

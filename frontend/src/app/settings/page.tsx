@@ -8,6 +8,7 @@ import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
 import DatePicker from '@/components/ui/DatePicker'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface User {
   id: string
@@ -40,6 +41,7 @@ interface ApiKeyCreateResponse {
 export default function Settings() {
   const router = useRouter()
   const { addToast } = useToast()
+  const { user: authUser, isAdmin } = useAuth()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -388,6 +390,25 @@ export default function Settings() {
                 }`}>
                   {user?.is_active ? 'Active' : 'Inactive'}
                 </span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Role
+                </label>
+                <div className="mt-1">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    authUser?.role === 'admin'
+                      ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                  }`}>
+                    {authUser?.role === 'admin' ? 'Administrator' : 'User'}
+                  </span>
+                  {authUser?.role === 'admin' && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      You have administrative privileges. <a href="/admin" className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200">Access Admin Panel</a>
+                    </p>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">

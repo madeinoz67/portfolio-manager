@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Column, String, DateTime, Numeric, Integer, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -27,8 +29,8 @@ class RealtimePriceHistory(Base):
     market_cap = Column(Numeric(precision=20, scale=2), nullable=True)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("market_data_providers.id"), nullable=False)
     source_timestamp = Column(DateTime, nullable=False)  # Timestamp from the data provider
-    fetched_at = Column(DateTime, default=datetime.utcnow, nullable=False)  # When we fetched it
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    fetched_at = Column(DateTime, default=now, nullable=False)  # When we fetched it
+    created_at = Column(DateTime, default=now, nullable=False)
 
     # Relationships
     provider = relationship("MarketDataProvider", lazy="select")

@@ -9,6 +9,9 @@ import {
   AdminUserDetails,
   MarketDataStatus,
   AdminUsersListParams,
+  ProviderDetailResponse,
+  DashboardActivitiesResponse,
+  SchedulerStatusResponse,
   ApiError
 } from '@/types/admin'
 
@@ -191,6 +194,87 @@ export async function toggleMarketDataProvider(
 }
 
 /**
+ * Get detailed statistics and information for a specific provider
+ */
+export async function getProviderDetails(
+  providerId: string,
+  options: AdminApiOptions = {}
+): Promise<ProviderDetailResponse> {
+  const response = await adminFetch(`/api/v1/admin/market-data/providers/${providerId}/details`, {
+    method: 'GET',
+    ...options
+  })
+
+  return response.json()
+}
+
+/**
+ * Get recent dashboard activities with status and provider filtering
+ */
+export async function getDashboardActivities(options: AdminApiOptions = {}): Promise<DashboardActivitiesResponse> {
+  const response = await adminFetch('/api/v1/admin/dashboard/recent-activities', {
+    method: 'GET',
+    ...options
+  })
+
+  return response.json()
+}
+
+/**
+ * Get scheduler status and metrics (admin only)
+ */
+export async function getSchedulerStatus(options: AdminApiOptions = {}): Promise<SchedulerStatusResponse> {
+  const response = await adminFetch('/api/v1/market-data/scheduler/status', {
+    method: 'GET',
+    ...options
+  })
+
+  return response.json()
+}
+
+/**
+ * Force refresh price data for all symbols (admin only)
+ */
+export async function forcePriceUpdate(options: AdminApiOptions = {}): Promise<{
+  message: string
+  symbols_refreshed: number
+  symbols: string[]
+  refreshed_at: string
+}> {
+  const response = await adminFetch('/api/v1/market-data/refresh', {
+    method: 'POST',
+    body: JSON.stringify({
+      force: true
+    }),
+    ...options
+  })
+
+  return response.json()
+}
+
+/**
+ * Control scheduler (pause/restart) - admin only
+ */
+export async function controlScheduler(
+  action: 'pause' | 'restart',
+  options: AdminApiOptions = {}
+): Promise<{
+  success: boolean
+  message: string
+  new_status: string
+}> {
+  const response = await adminFetch('/api/v1/market-data/scheduler/control', {
+    method: 'POST',
+    body: JSON.stringify({
+      action
+    }),
+    ...options
+  })
+
+  return response.json()
+}
+
+/**
  * Admin API client with error handling and retry logic
  */
 export class AdminApiClient {
@@ -238,6 +322,35 @@ export class AdminApiClient {
 
   async toggleMarketDataProvider(providerId: string): Promise<{ message: string; isEnabled: boolean; providerId: string }> {
     return toggleMarketDataProvider(providerId, this.getOptions())
+  }
+
+  async getProviderDetails(providerId: string): Promise<ProviderDetailResponse> {
+    return getProviderDetails(providerId, this.getOptions())
+  }
+
+  async getDashboardActivities(): Promise<DashboardActivitiesResponse> {
+    return getDashboardActivities(this.getOptions())
+  }
+
+  async getSchedulerStatus(): Promise<SchedulerStatusResponse> {
+    return getSchedulerStatus(this.getOptions())
+  }
+
+  async forcePriceUpdate(): Promise<{
+    message: string
+    symbols_refreshed: number
+    symbols: string[]
+    refreshed_at: string
+  }> {
+    return forcePriceUpdate(this.getOptions())
+  }
+
+  async controlScheduler(action: 'pause' | 'restart'): Promise<{
+    success: boolean
+    message: string
+    new_status: string
+  }> {
+    return controlScheduler(action, this.getOptions())
   }
 }
 

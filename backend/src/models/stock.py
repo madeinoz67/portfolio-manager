@@ -8,6 +8,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Column, DateTime, Enum as SQLEnum, Numeric, String, Uuid
 from sqlalchemy.orm import relationship
 
@@ -40,8 +42,8 @@ class Stock(Base):
     daily_change_percent = Column(Numeric(5, 2))
     status = Column(SQLEnum(StockStatus), default=StockStatus.ACTIVE)
     last_price_update = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
+    updated_at = Column(DateTime, default=now, onupdate=now)
 
     # Relationships
     holdings: list["Holding"] = relationship(

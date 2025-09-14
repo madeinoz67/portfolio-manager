@@ -7,6 +7,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Column, DateTime, ForeignKey, Numeric, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -26,8 +28,8 @@ class Holding(Base):
     stock_id = Column(Uuid, ForeignKey("stocks.id"), nullable=False)
     quantity = Column(Numeric(12, 4), nullable=False)
     average_cost = Column(Numeric(10, 4), default=Decimal("0.0000"))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
+    updated_at = Column(DateTime, default=now, onupdate=now)
 
     # Relationships
     portfolio: "Portfolio" = relationship("Portfolio", back_populates="holdings")

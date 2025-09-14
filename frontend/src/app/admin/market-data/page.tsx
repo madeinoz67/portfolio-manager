@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { MarketDataStatusTable } from '@/components/admin/MarketDataStatusTable'
-import { toggleMarketDataProvider } from '@/services/admin'
+import { toggleMarketDataProvider, getDashboardActivities, forcePriceUpdate, controlScheduler } from '@/services/admin'
+import { DashboardActivity } from '@/types/admin'
 // import { useMarketDataStatus } from '@/hooks/useAdmin'
 // import LoadingSpinner from '@/components/ui/LoadingSpinner'
 // import ErrorMessage from '@/components/ui/ErrorMessage'
@@ -236,16 +237,21 @@ export default function AdminMarketDataPage() {
   const { user, token } = useAuth()
   const [marketDataStatus, setMarketDataStatus] = useState(null)
   const [apiUsageData, setApiUsageData] = useState(null)
+  const [schedulerStatus, setSchedulerStatus] = useState(null)
+  const [activities, setActivities] = useState<DashboardActivity[]>([])
+  const [activitiesLoading, setActivitiesLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [quickActionLoading, setQuickActionLoading] = useState(false)
+  const [quickActionMessage, setQuickActionMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       if (!user || !token) return
 
       try {
-        // Fetch both provider status and API usage data in parallel
-        const [statusResponse, usageResponse] = await Promise.all([
+        // Fetch provider status, API usage data, and scheduler status in parallel
+        const [statusResponse, usageResponse, schedulerResponse] = await Promise.all([
           fetch('http://localhost:8001/api/v1/admin/market-data/status', {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -257,20 +263,29 @@ export default function AdminMarketDataPage() {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
+          }),
+          fetch('http://localhost:8001/api/v1/market-data/scheduler/status', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
           })
         ])
 
-        if (statusResponse.ok && usageResponse.ok) {
-          const [statusData, usageData] = await Promise.all([
+        if (statusResponse.ok && usageResponse.ok && schedulerResponse.ok) {
+          const [statusData, usageData, schedulerData] = await Promise.all([
             statusResponse.json(),
-            usageResponse.json()
+            usageResponse.json(),
+            schedulerResponse.json()
           ])
           setMarketDataStatus(statusData)
           setApiUsageData(usageData)
+          setSchedulerStatus(schedulerData)
         } else {
           const statusError = statusResponse.ok ? null : statusResponse.status
           const usageError = usageResponse.ok ? null : usageResponse.status
-          setError(`API Error: Status ${statusError}, Usage ${usageError}`)
+          const schedulerError = schedulerResponse.ok ? null : schedulerResponse.status
+          setError(`API Error: Status ${statusError}, Usage ${usageError}, Scheduler ${schedulerError}`)
         }
       } catch (err) {
         setError(err.message)
@@ -282,6 +297,26 @@ export default function AdminMarketDataPage() {
     fetchData()
   }, [user, token])
 
+  // Fetch recent activities
+  useEffect(() => {
+    const fetchActivities = async () => {
+      if (!user || !token) return
+
+      try {
+        setActivitiesLoading(true)
+        const response = await getDashboardActivities({ token })
+        setActivities(response.activities)
+      } catch (err) {
+        console.error('Failed to fetch dashboard activities:', err)
+        // Keep existing activities on error
+      } finally {
+        setActivitiesLoading(false)
+      }
+    }
+
+    fetchActivities()
+  }, [user, token])
+
   const refetch = () => {
     setLoading(true)
     setError(null)
@@ -290,7 +325,7 @@ export default function AdminMarketDataPage() {
     if (currentToken) {
       const fetchData = async () => {
         try {
-          const [statusResponse, usageResponse] = await Promise.all([
+          const [statusResponse, usageResponse, schedulerResponse] = await Promise.all([
             fetch('http://localhost:8001/api/v1/admin/market-data/status', {
               headers: {
                 'Authorization': `Bearer ${currentToken}`,
@@ -302,20 +337,29 @@ export default function AdminMarketDataPage() {
                 'Authorization': `Bearer ${currentToken}`,
                 'Content-Type': 'application/json',
               },
+            }),
+            fetch('http://localhost:8001/api/v1/market-data/scheduler/status', {
+              headers: {
+                'Authorization': `Bearer ${currentToken}`,
+                'Content-Type': 'application/json',
+              },
             })
           ])
 
-          if (statusResponse.ok && usageResponse.ok) {
-            const [statusData, usageData] = await Promise.all([
+          if (statusResponse.ok && usageResponse.ok && schedulerResponse.ok) {
+            const [statusData, usageData, schedulerData] = await Promise.all([
               statusResponse.json(),
-              usageResponse.json()
+              usageResponse.json(),
+              schedulerResponse.json()
             ])
             setMarketDataStatus(statusData)
             setApiUsageData(usageData)
+            setSchedulerStatus(schedulerData)
           } else {
             const statusError = statusResponse.ok ? null : statusResponse.status
             const usageError = usageResponse.ok ? null : usageResponse.status
-            setError(`API Error: Status ${statusError}, Usage ${usageError}`)
+            const schedulerError = schedulerResponse.ok ? null : schedulerResponse.status
+            setError(`API Error: Status ${statusError}, Usage ${usageError}, Scheduler ${schedulerError}`)
           }
         } catch (err) {
           setError(err.message)
@@ -337,6 +381,114 @@ export default function AdminMarketDataPage() {
     } catch (err) {
       setError(`Failed to toggle provider: ${err.message}`)
     }
+  }
+
+  const handleSchedulerControl = async (action: 'pause' | 'restart') => {
+    if (!token) return
+
+    try {
+      const response = await fetch('http://localhost:8001/api/v1/market-data/scheduler/control', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `Failed to ${action} scheduler`)
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Refresh scheduler status after successful control action
+        refetch()
+      } else {
+        setError(result.message || `Failed to ${action} scheduler`)
+      }
+    } catch (err) {
+      setError(`Failed to ${action} scheduler: ${err.message}`)
+    }
+  }
+
+  // Quick Action Handlers
+  const handleForcePriceUpdate = async () => {
+    if (!token) return
+
+    setQuickActionLoading(true)
+    setQuickActionMessage(null)
+
+    try {
+      const result = await forcePriceUpdate({ token })
+      setQuickActionMessage(`✅ ${result.message} - ${result.symbols_refreshed} symbols updated`)
+
+      // Refresh data after successful update
+      setTimeout(() => {
+        refetch()
+        setQuickActionMessage(null)
+      }, 3000)
+    } catch (err) {
+      setQuickActionMessage(`❌ Failed to force price update: ${err.message}`)
+      setTimeout(() => setQuickActionMessage(null), 5000)
+    } finally {
+      setQuickActionLoading(false)
+    }
+  }
+
+  const handleSchedulerAction = async (action: 'pause' | 'restart') => {
+    if (!token) return
+
+    setQuickActionLoading(true)
+    setQuickActionMessage(null)
+
+    try {
+      const result = await controlScheduler(action, { token })
+      if (result.success) {
+        setQuickActionMessage(`✅ ${result.message}`)
+        // Refresh data after successful action
+        setTimeout(() => {
+          refetch()
+          setQuickActionMessage(null)
+        }, 2000)
+      } else {
+        setQuickActionMessage(`❌ ${result.message}`)
+        setTimeout(() => setQuickActionMessage(null), 5000)
+      }
+    } catch (err) {
+      setQuickActionMessage(`❌ Failed to ${action} scheduler: ${err.message}`)
+      setTimeout(() => setQuickActionMessage(null), 5000)
+    } finally {
+      setQuickActionLoading(false)
+    }
+  }
+
+  // Placeholder handlers for other quick actions
+  const handleProviderSettings = () => {
+    setQuickActionMessage("🚧 Provider Settings functionality coming soon!")
+    setTimeout(() => setQuickActionMessage(null), 3000)
+  }
+
+  const handleCacheManagement = () => {
+    setQuickActionMessage("🚧 Cache Management functionality coming soon!")
+    setTimeout(() => setQuickActionMessage(null), 3000)
+  }
+
+  const handleViewApiLogs = () => {
+    setQuickActionMessage("🚧 API Logs viewer functionality coming soon!")
+    setTimeout(() => setQuickActionMessage(null), 3000)
+  }
+
+  const handleFailoverTesting = () => {
+    setQuickActionMessage("🚧 Failover Testing functionality coming soon!")
+    setTimeout(() => setQuickActionMessage(null), 3000)
+  }
+
+  const handleExportReports = () => {
+    setQuickActionMessage("🚧 Export Reports functionality coming soon!")
+    setTimeout(() => setQuickActionMessage(null), 3000)
   }
 
   if (loading) {
@@ -469,6 +621,75 @@ export default function AdminMarketDataPage() {
             </svg>
           }
         />
+
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Quick Actions</h3>
+
+        {/* Quick Action Message */}
+        {quickActionMessage && (
+          <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <p className="text-sm text-blue-700 dark:text-blue-300">{quickActionMessage}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <button
+            onClick={handleForcePriceUpdate}
+            disabled={quickActionLoading}
+            className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div className="flex items-center gap-2">
+              <div className="font-medium text-gray-900 dark:text-white">Force Price Update</div>
+              {quickActionLoading && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              )}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Manually trigger price refresh</div>
+          </button>
+
+          <button
+            onClick={handleProviderSettings}
+            className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <div className="font-medium text-gray-900 dark:text-white">Provider Settings</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Configure API keys and limits</div>
+          </button>
+
+          <button
+            onClick={handleCacheManagement}
+            className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <div className="font-medium text-gray-900 dark:text-white">Cache Management</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Clear or refresh cached data</div>
+          </button>
+
+          <button
+            onClick={handleViewApiLogs}
+            className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <div className="font-medium text-gray-900 dark:text-white">View API Logs</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Review detailed request logs</div>
+          </button>
+
+          <button
+            onClick={handleFailoverTesting}
+            className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <div className="font-medium text-gray-900 dark:text-white">Failover Testing</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Test provider failover scenarios</div>
+          </button>
+
+          <button
+            onClick={handleExportReports}
+            className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <div className="font-medium text-gray-900 dark:text-white">Export Reports</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Generate usage and error reports</div>
+          </button>
+        </div>
       </div>
 
       {/* Market Data Providers */}
@@ -482,97 +703,234 @@ export default function AdminMarketDataPage() {
         />
       </div>
 
+      {/* Scheduler Status */}
+      {schedulerStatus && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Scheduler Status</h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleSchedulerControl('pause')}
+                disabled={schedulerStatus.scheduler?.status !== 'running'}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  schedulerStatus.scheduler?.status !== 'running'
+                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                    : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                }`}
+              >
+                Pause
+              </button>
+              <button
+                onClick={() => handleSchedulerControl('restart')}
+                disabled={schedulerStatus.scheduler?.status === 'running'}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  schedulerStatus.scheduler?.status === 'running'
+                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                    : schedulerStatus.scheduler?.status === 'error'
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
+              >
+                {schedulerStatus.scheduler?.status === 'paused'
+                  ? 'Resume'
+                  : schedulerStatus.scheduler?.status === 'error'
+                    ? 'Restart (Fix Error)'
+                    : 'Start'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            {/* Scheduler Status Card */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-lg ${
+                  schedulerStatus.scheduler?.status === 'running'
+                    ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+                    : schedulerStatus.scheduler?.status === 'paused'
+                      ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
+                      : schedulerStatus.scheduler?.status === 'error'
+                        ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                        : 'bg-gray-100 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400'
+                }`}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {schedulerStatus.scheduler?.status === 'running' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-5-9h2a3 3 0 013 3v1M3 11v2a3 3 0 003 3h.5" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 4h4.018a2 2 0 01.485.06l3.76.94" />
+                    )}
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                    Scheduler: {schedulerStatus.scheduler?.status || 'Unknown'}
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Status: {schedulerStatus.scheduler?.status === 'running'
+                      ? 'Active'
+                      : schedulerStatus.scheduler?.status === 'paused'
+                        ? 'Paused'
+                        : schedulerStatus.scheduler?.status === 'error'
+                          ? 'Error'
+                          : 'Stopped'}
+                  </p>
+                  {schedulerStatus.scheduler?.error_message && (
+                    <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded text-xs text-red-700 dark:text-red-400">
+                      <div className="font-medium">Error:</div>
+                      <div>{schedulerStatus.scheduler.error_message}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Total Runs:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {schedulerStatus.scheduler?.total_runs || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Successful:</span>
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    {schedulerStatus.scheduler?.successful_runs || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Failed:</span>
+                  <span className="font-medium text-red-600 dark:text-red-400">
+                    {schedulerStatus.scheduler?.failed_runs || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Restarts (1h):</span>
+                  <span className={`font-medium ${
+                    (schedulerStatus.scheduler?.restarts_last_hour || 0) > 2
+                      ? 'text-red-600 dark:text-red-400'
+                      : (schedulerStatus.scheduler?.restarts_last_hour || 0) > 0
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-green-600 dark:text-green-400'
+                  }`}>
+                    {schedulerStatus.scheduler?.restarts_last_hour || 0}
+                    {schedulerStatus.scheduler?.restart_trend === 'increasing' && (
+                      <span className="ml-1 text-xs">↑</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Restarts (24h):</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {schedulerStatus.scheduler?.restarts_last_24_hours || 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Timing Information */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-white">Timing</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Last Run:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {schedulerStatus.scheduler?.last_run_at
+                      ? new Date(schedulerStatus.scheduler.last_run_at).toLocaleString()
+                      : 'Never'
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Next Run:</span>
+                  <span className="font-medium text-blue-600 dark:text-blue-400">
+                    {schedulerStatus.scheduler?.next_run_at
+                      ? new Date(schedulerStatus.scheduler.next_run_at).toLocaleString()
+                      : 'Not scheduled'
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Uptime:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {schedulerStatus.scheduler?.uptime_seconds
+                      ? Math.floor(schedulerStatus.scheduler.uptime_seconds / 3600) + 'h ' +
+                        Math.floor((schedulerStatus.scheduler.uptime_seconds % 3600) / 60) + 'm'
+                      : '0m'
+                    }
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Activity Stats */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-white">Recent Activity</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Symbols Processed:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {schedulerStatus.recent_activity?.total_symbols_processed || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Success Rate:</span>
+                  <span className={`font-medium ${
+                    (schedulerStatus.recent_activity?.success_rate || 0) > 95
+                      ? 'text-green-600 dark:text-green-400'
+                      : (schedulerStatus.recent_activity?.success_rate || 0) > 80
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {schedulerStatus.recent_activity?.success_rate || 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Avg Response:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {schedulerStatus.recent_activity?.avg_response_time_ms || 0}ms
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recent Market Data Activity */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Recent Activity</h3>
         <div className="space-y-4">
-          {[
-            {
-              time: '2 minutes ago',
-              type: 'success',
-              message: 'Successfully updated prices for 25 symbols',
-              provider: 'Alpha Vantage'
-            },
-            {
-              time: '15 minutes ago',
-              type: 'success',
-              message: 'Batch price update completed for S&P 500 stocks',
-              provider: 'Yahoo Finance'
-            },
-            {
-              time: '1 hour ago',
-              type: 'info',
-              message: 'Switched to backup provider due to rate limiting',
-              provider: 'Alpha Vantage'
-            },
-            {
-              time: '3 hours ago',
-              type: 'warning',
-              message: 'High error rate detected, increased retry intervals',
-              provider: 'Yahoo Finance'
-            },
-            {
-              time: '6 hours ago',
-              type: 'info',
-              message: 'Daily rate limits reset for all providers',
-              provider: 'System'
-            },
-          ].map((activity, index) => (
-            <div key={index} className="flex items-start space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
-              <div className={`mt-1 w-2 h-2 rounded-full ${
-                activity.type === 'success'
-                  ? 'bg-green-500'
-                  : activity.type === 'warning'
-                    ? 'bg-yellow-500'
-                    : 'bg-blue-500'
-              }`} />
-              <div className="flex-1">
-                <div className="flex items-center space-x-2">
-                  <div className="text-sm text-gray-900 dark:text-white">{activity.message}</div>
-                  <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full">
-                    {activity.provider}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">{activity.time}</div>
-              </div>
+          {activitiesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Configuration Panel */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Quick Actions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <button className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <div className="font-medium text-gray-900 dark:text-white">Force Price Update</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Manually trigger price refresh</div>
-          </button>
-
-          <button className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <div className="font-medium text-gray-900 dark:text-white">Provider Settings</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Configure API keys and limits</div>
-          </button>
-
-          <button className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <div className="font-medium text-gray-900 dark:text-white">Cache Management</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Clear or refresh cached data</div>
-          </button>
-
-          <button className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <div className="font-medium text-gray-900 dark:text-white">View API Logs</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Review detailed request logs</div>
-          </button>
-
-          <button className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <div className="font-medium text-gray-900 dark:text-white">Failover Testing</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Test provider failover scenarios</div>
-          </button>
-
-          <button className="p-4 text-left rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <div className="font-medium text-gray-900 dark:text-white">Export Reports</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Generate usage and error reports</div>
-          </button>
+          ) : activities.length > 0 ? (
+            activities.map((activity) => (
+              <div key={activity.id} className="flex items-start space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
+                <div className={`mt-1 w-2 h-2 rounded-full ${
+                  activity.status === 'success'
+                    ? 'bg-green-500'
+                    : activity.status === 'warning'
+                      ? 'bg-yellow-500'
+                      : activity.status === 'error'
+                        ? 'bg-red-500'
+                        : 'bg-blue-500'
+                }`} />
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2">
+                    <div className="text-sm text-gray-900 dark:text-white">{activity.description}</div>
+                    <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full">
+                      {activity.provider_name}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">{activity.relative_time}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              No recent activity found
+            </div>
+          )}
         </div>
       </div>
     </div>

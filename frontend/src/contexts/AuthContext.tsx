@@ -219,6 +219,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     clearError()
   }
 
+  // Role utility functions
+  const isAdmin = (): boolean => {
+    return user?.role === 'admin'
+  }
+
+  const hasRole = (role: 'admin' | 'user'): boolean => {
+    return user?.role === role
+  }
+
+  const isAuthenticated = (): boolean => {
+    return user !== null && token !== null
+  }
+
   const value: AuthContextType = {
     user,
     token,
@@ -228,6 +241,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loading,
     error,
     clearError,
+    isAdmin,
+    hasRole,
+    isAuthenticated,
   }
 
   return (

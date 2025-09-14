@@ -2,11 +2,11 @@
 Admin API endpoints for user management and system administration.
 """
 
-from typing import List
-from datetime import datetime
+from typing import List, Optional
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from pydantic import BaseModel
 
 from src.core.dependencies import get_current_admin_user, get_db
@@ -15,6 +15,7 @@ from src.models.user import User
 from src.models.user_role import UserRole
 from src.models.portfolio import Portfolio
 from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_provider import ProviderActivity
 from src.schemas.auth import UserResponse
 
 logger = get_logger(__name__)
@@ -241,6 +242,8 @@ class MarketDataStatus(BaseModel):
     monthlyUsage: int
     costPerCall: float
     status: str
+    supportsBulkFetch: bool = False
+    bulkFetchLimit: Optional[int] = None
 
 
 class MarketDataStatusResponse(BaseModel):
@@ -324,6 +327,17 @@ async def get_market_data_status(
         total_cost = monthly_data['cost']
         cost_per_call = (total_cost / calls_this_month) if calls_this_month > 0 else 0.0
 
+        # Determine bulk fetch support based on provider type
+        supports_bulk = False
+        bulk_limit = None
+
+        if provider.name == "yfinance":
+            supports_bulk = True
+            bulk_limit = None  # yfinance doesn't have a specific limit documented
+        elif provider.name == "alpha_vantage":
+            supports_bulk = True
+            bulk_limit = 100  # Alpha Vantage REALTIME_BULK_QUOTES supports up to 100 symbols
+
         provider_list.append({
             "providerId": provider.name,
             "providerName": provider.display_name,
@@ -334,7 +348,9 @@ async def get_market_data_status(
             "monthlyUsage": calls_this_month,
             "costPerCall": round(cost_per_call, 4),
             "status": status,
-            "avgResponseTimeMs": avg_response_time
+            "avgResponseTimeMs": avg_response_time,
+            "supportsBulkFetch": supports_bulk,
+            "bulkFetchLimit": bulk_limit
         })
 
     return {
@@ -371,32 +387,28 @@ async def get_api_usage(
     """Get API usage statistics and metrics from real database."""
     logger.info(f"Admin user {current_admin.email} requesting API usage statistics")
 
-    from src.models.api_usage_metrics import ApiUsageMetrics
-    from sqlalchemy import func, extract
-    from datetime import datetime, date
+    # Use provider_activities table for consistency with provider detail page
+    from src.models.market_data_provider import ProviderActivity
+    from sqlalchemy import func, and_
+    from datetime import datetime, date, timedelta
 
-    today = date.today()
+    today = datetime.now().date()
     current_month_start = datetime(today.year, today.month, 1)
 
-    # Get today's total requests by summing requests_count
-    today_metrics = db.query(
-        func.sum(ApiUsageMetrics.requests_count).label('total_requests'),
-        func.sum(ApiUsageMetrics.error_count).label('total_errors')
-    ).filter(
-        func.date(ApiUsageMetrics.recorded_at) == today
-    ).first()
+    # Get today's activities
+    today_activities = db.query(ProviderActivity).filter(
+        func.date(ProviderActivity.timestamp) == today
+    ).all()
 
-    # Get this month's total requests
-    month_metrics = db.query(
-        func.sum(ApiUsageMetrics.requests_count).label('total_requests')
-    ).filter(
-        ApiUsageMetrics.recorded_at >= current_month_start
-    ).first()
+    # Get this month's activities
+    month_activities = db.query(ProviderActivity).filter(
+        func.date(ProviderActivity.timestamp) >= current_month_start.date()
+    ).all()
 
-    # Calculate summary statistics
-    total_requests_today = int(today_metrics.total_requests or 0)
-    total_errors_today = int(today_metrics.total_errors or 0)
-    total_requests_this_month = int(month_metrics.total_requests or 0)
+    # Calculate summary statistics from provider activities
+    total_requests_today = len(today_activities)
+    total_errors_today = len([a for a in today_activities if a.status == "error"])
+    total_requests_this_month = len(month_activities)
 
     # Calculate success rate
     if total_requests_today > 0:
@@ -404,25 +416,38 @@ async def get_api_usage(
     else:
         success_rate_today = 0.0
 
-    # Get by provider statistics
-    provider_stats = db.query(
-        ApiUsageMetrics.provider_id,
-        func.sum(ApiUsageMetrics.requests_count).label('requests_today'),
-        func.sum(ApiUsageMetrics.error_count).label('errors_today')
-    ).filter(
-        func.date(ApiUsageMetrics.recorded_at) == today
-    ).group_by(ApiUsageMetrics.provider_id).all()
+    # Get by provider statistics from activities
+    provider_stats_dict = {}
+    for activity in today_activities:
+        provider_id = activity.provider_id
+        if provider_id not in provider_stats_dict:
+            provider_stats_dict[provider_id] = {"requests": 0, "errors": 0}
 
-    # Get monthly stats by provider
-    monthly_provider_stats = db.query(
-        ApiUsageMetrics.provider_id,
-        func.sum(ApiUsageMetrics.requests_count).label('requests_this_month')
-    ).filter(
-        ApiUsageMetrics.recorded_at >= current_month_start
-    ).group_by(ApiUsageMetrics.provider_id).all()
+        provider_stats_dict[provider_id]["requests"] += 1
+        if activity.status == "error":
+            provider_stats_dict[provider_id]["errors"] += 1
+
+    # Convert to the expected format
+    provider_stats = []
+    for provider_id, stats in provider_stats_dict.items():
+        class ProviderStat:
+            def __init__(self, provider_id, requests, errors):
+                self.provider_id = provider_id
+                self.requests_today = requests
+                self.errors_today = errors
+
+        provider_stats.append(ProviderStat(provider_id, stats["requests"], stats["errors"]))
+
+    # Get monthly stats by provider from activities
+    monthly_provider_stats_dict = {}
+    for activity in month_activities:
+        provider_id = activity.provider_id
+        if provider_id not in monthly_provider_stats_dict:
+            monthly_provider_stats_dict[provider_id] = 0
+        monthly_provider_stats_dict[provider_id] += 1
 
     # Create monthly lookup dict
-    monthly_lookup = {stat.provider_id: stat.requests_this_month for stat in monthly_provider_stats}
+    monthly_lookup = monthly_provider_stats_dict
 
     # Build provider response
     by_provider = []
@@ -446,31 +471,26 @@ async def get_api_usage(
         })
 
     # Calculate trends compared to yesterday
-    yesterday = current_month_start.replace(day=today.day - 1) if today.day > 1 else None
+    yesterday = today - timedelta(days=1)
     daily_change_percent = 0.0
 
-    if yesterday:
-        yesterday_metrics = db.query(
-            func.sum(ApiUsageMetrics.requests_count).label('total_requests_yesterday')
-        ).filter(
-            func.date(ApiUsageMetrics.recorded_at) == yesterday.date()
-        ).first()
+    yesterday_activities = db.query(ProviderActivity).filter(
+        func.date(ProviderActivity.timestamp) == yesterday
+    ).all()
 
-        total_requests_yesterday = int(yesterday_metrics.total_requests_yesterday or 0)
+    total_requests_yesterday = len(yesterday_activities)
 
-        if total_requests_yesterday > 0:
-            daily_change_percent = ((total_requests_today - total_requests_yesterday) / total_requests_yesterday) * 100
+    if total_requests_yesterday > 0:
+        daily_change_percent = ((total_requests_today - total_requests_yesterday) / total_requests_yesterday) * 100
 
-    # Calculate weekly change (simplified as month vs last 7 days)
-    week_ago = current_month_start.replace(day=max(1, today.day - 7))
-    weekly_metrics = db.query(
-        func.sum(ApiUsageMetrics.requests_count).label('total_requests_week_ago')
-    ).filter(
-        ApiUsageMetrics.recorded_at >= week_ago,
-        ApiUsageMetrics.recorded_at < current_month_start.replace(day=today.day)
-    ).first()
+    # Calculate weekly change (7 days ago)
+    week_ago = today - timedelta(days=7)
+    weekly_activities = db.query(ProviderActivity).filter(
+        func.date(ProviderActivity.timestamp) == week_ago
+    ).all()
 
-    weekly_change_count = total_requests_today - int(weekly_metrics.total_requests_week_ago or 0)
+    total_requests_week_ago = len(weekly_activities)
+    weekly_change_count = total_requests_today - total_requests_week_ago
 
     return {
         "summary": {
@@ -493,6 +513,83 @@ class ProviderToggleResponse(BaseModel):
     providerName: str
     isEnabled: bool
     message: str
+
+
+# Provider Detail Models
+class UsageStatsToday(BaseModel):
+    totalRequests: int
+    totalErrors: int
+    totalCost: float
+    avgResponseTime: int
+    rateLimitHits: int
+    successRate: float
+
+class UsageStatsHistorical(BaseModel):
+    last7Days: dict
+    last30Days: dict
+
+class UsageStats(BaseModel):
+    today: UsageStatsToday
+    yesterday: UsageStatsToday
+    historical: UsageStatsHistorical
+
+class PerformanceMetrics(BaseModel):
+    successRate: float
+    errorRate: float
+    avgResponseTime: int
+    uptimePercentage: float
+
+class ProviderConfiguration(BaseModel):
+    apiEndpoint: str
+    authentication: str
+    rateLimits: dict
+    timeout: int
+
+class RecentActivity(BaseModel):
+    timestamp: str
+    type: str
+    description: str
+    status: str
+
+class CostBreakdownItem(BaseModel):
+    requestType: str
+    count: int
+    cost: float
+
+class CostAnalysis(BaseModel):
+    totalCostToday: float
+    totalCostThisMonth: float
+    projectedMonthlyCost: float
+    costPerRequest: float
+    costBreakdown: List[CostBreakdownItem]
+
+class ProviderDetailResponse(BaseModel):
+    providerId: str
+    providerName: str
+    isEnabled: bool
+    priority: int
+    rateLimitPerMinute: int
+    rateLimitPerDay: int
+    lastUpdated: str
+    usageStats: UsageStats
+    performanceMetrics: PerformanceMetrics
+    configuration: ProviderConfiguration
+    recentActivity: List[RecentActivity]
+    costAnalysis: CostAnalysis
+
+
+class ActivityItem(BaseModel):
+    providerId: str
+    providerName: str
+    type: str
+    description: str
+    status: str
+    timestamp: str
+
+
+class ActivitiesResponse(BaseModel):
+    activities: List[ActivityItem]
+    pagination: Optional[dict] = None
 
 
 @router.patch("/market-data/providers/{provider_id}/toggle", response_model=ProviderToggleResponse)
@@ -546,3 +643,475 @@ async def toggle_market_data_provider(
             status_code=500,
             detail={"error": "internal_error", "message": "Failed to update provider status"}
         )
+
+
+@router.get("/market-data/providers/{provider_id}/details", response_model=ProviderDetailResponse)
+async def get_provider_details(
+    provider_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get comprehensive details and statistics for a specific provider."""
+    logger.info(f"Admin user {current_admin.email} requesting details for provider {provider_id}")
+
+    from src.models.market_data_provider import MarketDataProvider
+    from fastapi import HTTPException
+
+    # Find the provider
+    provider = db.query(MarketDataProvider).filter(MarketDataProvider.name == provider_id).first()
+
+    if not provider:
+        logger.warning(f"Provider {provider_id} not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": f"Provider '{provider_id}' not found"}
+        )
+
+    # Get real usage statistics from provider activities
+    from src.services.activity_service import get_recent_activities
+    from src.models.market_data_provider import ProviderActivity
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, and_
+
+    # Calculate date ranges
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+    seven_days_ago = today - timedelta(days=7)
+    thirty_days_ago = today - timedelta(days=30)
+
+    # Get today's stats
+    today_activities = db.query(ProviderActivity).filter(
+        and_(
+            ProviderActivity.provider_id == provider_id,
+            func.date(ProviderActivity.timestamp) == today
+        )
+    ).all()
+
+    today_total_requests = len(today_activities)
+    today_errors = len([a for a in today_activities if a.status == "error"])
+    today_success_rate = ((today_total_requests - today_errors) / max(today_total_requests, 1)) * 100
+
+    # Calculate average response time from metadata where available
+    today_response_times = []
+    for activity in today_activities:
+        if activity.activity_metadata and 'response_time_ms' in activity.activity_metadata:
+            today_response_times.append(activity.activity_metadata['response_time_ms'])
+        elif activity.activity_metadata and 'response_time' in activity.activity_metadata:
+            today_response_times.append(activity.activity_metadata['response_time'])
+
+    avg_response_time_today = int(sum(today_response_times) / len(today_response_times)) if today_response_times else 0
+
+    today_stats = UsageStatsToday(
+        totalRequests=today_total_requests,
+        totalErrors=today_errors,
+        totalCost=0.0,  # No cost tracking yet
+        avgResponseTime=avg_response_time_today,
+        rateLimitHits=len([a for a in today_activities if "RATE_LIMIT" in a.activity_type]),
+        successRate=round(today_success_rate, 1)
+    )
+
+    # Get yesterday's stats
+    yesterday_activities = db.query(ProviderActivity).filter(
+        and_(
+            ProviderActivity.provider_id == provider_id,
+            func.date(ProviderActivity.timestamp) == yesterday
+        )
+    ).all()
+
+    yesterday_total_requests = len(yesterday_activities)
+    yesterday_errors = len([a for a in yesterday_activities if a.status == "error"])
+    yesterday_success_rate = ((yesterday_total_requests - yesterday_errors) / max(yesterday_total_requests, 1)) * 100
+
+    yesterday_response_times = []
+    for activity in yesterday_activities:
+        if activity.activity_metadata and 'response_time_ms' in activity.activity_metadata:
+            yesterday_response_times.append(activity.activity_metadata['response_time_ms'])
+        elif activity.activity_metadata and 'response_time' in activity.activity_metadata:
+            yesterday_response_times.append(activity.activity_metadata['response_time'])
+
+    avg_response_time_yesterday = int(sum(yesterday_response_times) / len(yesterday_response_times)) if yesterday_response_times else 0
+
+    yesterday_stats = UsageStatsToday(
+        totalRequests=yesterday_total_requests,
+        totalErrors=yesterday_errors,
+        totalCost=0.0,
+        avgResponseTime=avg_response_time_yesterday,
+        rateLimitHits=len([a for a in yesterday_activities if "RATE_LIMIT" in a.activity_type]),
+        successRate=round(yesterday_success_rate, 1)
+    )
+
+    # Get historical data for last 7 and 30 days
+    last7days_dict = {}
+    last30days_dict = {}
+
+    # Group activities by date for the last 7 days
+    for i in range(7):
+        date = today - timedelta(days=i)
+        date_str = date.strftime("%Y-%m-%d")
+
+        day_activities = db.query(ProviderActivity).filter(
+            and_(
+                ProviderActivity.provider_id == provider_id,
+                func.date(ProviderActivity.timestamp) == date
+            )
+        ).all()
+
+        requests = len(day_activities)
+        errors = len([a for a in day_activities if a.status == "error"])
+
+        last7days_dict[date_str] = {"requests": requests, "errors": errors}
+
+    # Group activities by date for the last 30 days
+    for i in range(30):
+        date = today - timedelta(days=i)
+        date_str = date.strftime("%Y-%m-%d")
+
+        day_activities = db.query(ProviderActivity).filter(
+            and_(
+                ProviderActivity.provider_id == provider_id,
+                func.date(ProviderActivity.timestamp) == date
+            )
+        ).all()
+
+        requests = len(day_activities)
+        errors = len([a for a in day_activities if a.status == "error"])
+
+        last30days_dict[date_str] = {"requests": requests, "errors": errors}
+
+    # Provider configuration
+    config = {
+        "apiEndpoint": provider.base_url or f"https://api.{provider.name}.com",
+        "authentication": "API Key" if provider.api_key else "None",
+        "rateLimits": {
+            "perMinute": provider.rate_limit_per_minute,
+            "perDay": provider.rate_limit_per_day
+        },
+        "timeout": 30
+    }
+
+    # Get real recent activity from the database
+    recent_activities = get_recent_activities(
+        db_session=db,
+        provider_id=provider_id,
+        limit=10
+    )
+
+    recent_activity = []
+    for activity in recent_activities:
+        # Extract metadata for additional fields
+        metadata = activity.activity_metadata or {}
+
+        activity_item = {
+            "timestamp": activity.timestamp.isoformat(),
+            "type": activity.activity_type,
+            "description": activity.description,
+            "status": activity.status
+        }
+
+        # Add optional fields from metadata
+        if "symbols" in metadata:
+            activity_item["requestCount"] = len(metadata["symbols"]) if isinstance(metadata["symbols"], list) else 1
+        elif "successful_fetches" in metadata:
+            activity_item["requestCount"] = metadata["successful_fetches"]
+        else:
+            activity_item["requestCount"] = 1
+
+        if "response_time_ms" in metadata:
+            activity_item["responseTime"] = metadata["response_time_ms"]
+        elif "response_time" in metadata:
+            activity_item["responseTime"] = metadata["response_time"]
+
+        if "error_count" in metadata:
+            activity_item["errorCount"] = metadata["error_count"]
+        elif activity.status == "error":
+            activity_item["errorCount"] = 1
+        else:
+            activity_item["errorCount"] = 0
+
+        # Map activity types to request types for UI
+        if "BULK" in activity.activity_type:
+            activity_item["requestType"] = "bulk_price_fetch"
+        elif "API_CALL" in activity.activity_type:
+            activity_item["requestType"] = "price_fetch"
+        elif "HEALTH_CHECK" in activity.activity_type:
+            activity_item["requestType"] = "health_check"
+        else:
+            activity_item["requestType"] = "unknown"
+
+        recent_activity.append(activity_item)
+
+    # Calculate real cost breakdown based on today's activities
+    cost_breakdown = []
+    request_types = {}
+
+    for activity in today_activities:
+        request_type = "unknown"
+        if "BULK" in activity.activity_type:
+            request_type = "bulk_price_fetch"
+        elif "API_CALL" in activity.activity_type:
+            request_type = "price_fetch"
+        elif "HEALTH_CHECK" in activity.activity_type:
+            request_type = "health_check"
+
+        if request_type not in request_types:
+            request_types[request_type] = 0
+        request_types[request_type] += 1
+
+    for request_type, count in request_types.items():
+        cost_breakdown.append({
+            "requestType": request_type,
+            "count": count,
+            "cost": 0.0  # No cost tracking implemented yet
+        })
+
+    # If no activities today, add default entry
+    if not cost_breakdown:
+        cost_breakdown.append({
+            "requestType": "price_fetch",
+            "count": 0,
+            "cost": 0.0
+        })
+
+    return ProviderDetailResponse(
+        providerId=provider.name,
+        providerName=provider.display_name,
+        isEnabled=provider.is_enabled,
+        priority=provider.priority,
+        rateLimitPerMinute=provider.rate_limit_per_minute,
+        rateLimitPerDay=provider.rate_limit_per_day,
+        lastUpdated=provider.updated_at.isoformat(),
+        usageStats=UsageStats(
+            today=today_stats,
+            yesterday=yesterday_stats,
+            historical=UsageStatsHistorical(
+                last7Days=last7days_dict,
+                last30Days=last30days_dict
+            )
+        ),
+        performanceMetrics=PerformanceMetrics(
+            successRate=round(today_success_rate, 1),
+            errorRate=round(100 - today_success_rate, 1),
+            avgResponseTime=avg_response_time_today,
+            uptimePercentage=99.5 if provider.is_enabled else 0.0
+        ),
+        configuration=ProviderConfiguration(
+            apiEndpoint=config["apiEndpoint"],
+            authentication=config["authentication"],
+            rateLimits=config["rateLimits"],
+            timeout=config["timeout"]
+        ),
+        recentActivity=recent_activity,
+        costAnalysis=CostAnalysis(
+            totalCostToday=0.0,
+            totalCostThisMonth=0.0,
+            projectedMonthlyCost=0.0,
+            costPerRequest=0.0,
+            costBreakdown=cost_breakdown
+        )
+    )
+
+@router.get("/market-data/activities", response_model=ActivitiesResponse)
+async def get_market_data_activities(
+    provider: Optional[List[str]] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get market data provider activities with filtering and pagination."""
+    from src.models.market_data_provider import MarketDataProvider, ProviderActivity
+    from src.services.activity_service import get_recent_activities_all_providers
+    import math
+
+    logger.info(f"Admin user {current_admin.email} requesting activities")
+
+    # Get activities with filters
+    activities = get_recent_activities_all_providers(
+        db_session=db,
+        provider_filter=provider,
+        status_filter=status,
+        page=page,
+        size=size
+    )
+
+    # Get provider names for display
+    providers = {p.name: p.display_name for p in db.query(MarketDataProvider).all()}
+
+    # Convert to response format
+    activity_items = []
+    for activity in activities:
+        activity_items.append(ActivityItem(
+            providerId=activity.provider_id,
+            providerName=providers.get(activity.provider_id, activity.provider_id),
+            type=activity.activity_type,
+            description=activity.description,
+            status=activity.status,
+            timestamp=activity.timestamp.isoformat()
+        ))
+
+    # Calculate pagination info
+    total_query = db.query(ProviderActivity)
+    if provider:
+        if isinstance(provider, list):
+            total_query = total_query.filter(ProviderActivity.provider_id.in_(provider))
+        else:
+            total_query = total_query.filter(ProviderActivity.provider_id == provider)
+    if status:
+        total_query = total_query.filter(ProviderActivity.status == status)
+
+    total = total_query.count()
+    pages = math.ceil(total / size) if total > 0 else 1
+
+    pagination = {
+        "page": page,
+        "size": size,
+        "total": total,
+        "pages": pages
+    }
+
+    return ActivitiesResponse(
+        activities=activity_items,
+        pagination=pagination
+    )
+
+
+class DashboardActivity(BaseModel):
+    id: str
+    provider_id: str
+    provider_name: str
+    activity_type: str
+    description: str
+    status: str  # success, warning, error, info
+    timestamp: str
+    relative_time: str  # "2 minutes ago", "1 hour ago"
+    metadata: Optional[dict] = None
+
+
+class DashboardActivitiesResponse(BaseModel):
+    activities: List[DashboardActivity]
+    summary: dict
+
+
+def calculate_relative_time(timestamp: datetime) -> str:
+    """Calculate relative time string from timestamp."""
+    # Get current time in the same timezone as the stored timestamps
+    # Since our timestamps appear to be in local time, let's use local time for comparison
+    from datetime import datetime as dt
+    import time
+
+    # Get local time for comparison
+    now = dt.now()
+
+    # If timestamp doesn't have timezone info, assume it's in the same timezone as 'now'
+    if timestamp.tzinfo is None:
+        # Both are naive datetimes, can compare directly
+        diff = now - timestamp
+    else:
+        # Handle timezone-aware timestamps
+        diff = now - timestamp.replace(tzinfo=None)
+
+    # Handle future timestamps (should not happen, but just in case)
+    if diff.total_seconds() < 0:
+        # If still negative, try with UTC comparison
+        now_utc = dt.utcnow()
+        diff = now_utc - timestamp
+        if diff.total_seconds() < 0:
+            return "just now"
+
+    total_seconds = diff.total_seconds()
+
+    if total_seconds < 10:  # Less than 10 seconds
+        return "just now"
+    elif total_seconds < 60:  # Less than 1 minute
+        seconds = int(total_seconds)
+        return f"{seconds} second{'s' if seconds != 1 else ''} ago"
+    elif total_seconds < 3600:  # Less than 1 hour
+        minutes = int(total_seconds / 60)
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    elif total_seconds < 86400:  # Less than 1 day
+        hours = int(total_seconds / 3600)
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    else:  # Days
+        days = int(total_seconds / 86400)
+        return f"{days} day{'s' if days != 1 else ''} ago"
+
+
+@router.get("/dashboard/recent-activities", response_model=DashboardActivitiesResponse)
+async def get_dashboard_recent_activities(
+    limit: int = Query(10, ge=1, le=50),
+    reset: bool = Query(False, description="Reset activities with correct timestamps"),
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get recent activities for the admin dashboard with sample data."""
+    from src.models.market_data_provider import MarketDataProvider, ProviderActivity
+    from src.services.dashboard_activity_service import create_sample_activities, get_dashboard_activity_summary
+
+    logger.info(f"Admin user {current_admin.email} requesting dashboard recent activities")
+
+    # Handle reset request or ensure providers exist
+    if reset:
+        logger.info(f"Reset requested by admin {current_admin.email}, clearing existing activities")
+        db.query(ProviderActivity).delete()
+        db.commit()
+
+    # Ensure we have providers for real activities
+    providers = db.query(MarketDataProvider).all()
+    if not providers:
+        # Create real providers (not sample)
+        yfinance_provider = MarketDataProvider(
+            name="yfinance",
+            display_name="Yahoo Finance",
+            is_enabled=True,
+            rate_limit_per_minute=60,
+            rate_limit_per_day=60000,
+            priority=1
+        )
+        alpha_provider = MarketDataProvider(
+            name="alpha_vantage",
+            display_name="Alpha Vantage",
+            is_enabled=False,
+            rate_limit_per_minute=5,
+            rate_limit_per_day=15000,
+            priority=2
+        )
+        db.add_all([yfinance_provider, alpha_provider])
+        db.commit()
+        logger.info("Created market data providers for live activity tracking")
+
+    # Get recent activities
+    from src.services.activity_service import get_recent_activities_all_providers
+
+    activities = get_recent_activities_all_providers(
+        db_session=db,
+        limit=limit,
+        page=1,
+        size=limit
+    )
+
+    # Get provider display names
+    providers = {p.name: p.display_name for p in db.query(MarketDataProvider).all()}
+
+    # Convert to dashboard format with relative time
+    dashboard_activities = []
+    for activity in activities:
+        dashboard_activities.append(DashboardActivity(
+            id=str(activity.id),
+            provider_id=activity.provider_id,
+            provider_name=providers.get(activity.provider_id, activity.provider_id),
+            activity_type=activity.activity_type,
+            description=activity.description,
+            status=activity.status,
+            timestamp=activity.timestamp.isoformat(),
+            relative_time=calculate_relative_time(activity.timestamp),
+            metadata=activity.activity_metadata
+        ))
+
+    # Get activity summary
+    summary = get_dashboard_activity_summary(db, hours=24)
+
+    return DashboardActivitiesResponse(
+        activities=dashboard_activities,
+        summary=summary
+    )

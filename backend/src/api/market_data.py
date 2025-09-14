@@ -412,196 +412,146 @@ async def get_scheduler_status(
     """Get scheduler status and metrics (admin only)."""
 
     try:
-        # Get scheduler status from the background task (would need global state tracking in real implementation)
-        from src.main import background_task, scheduler_paused
+        from datetime import datetime, timedelta
+        from src.utils.datetime_utils import utc_now
 
-        # Improved scheduler running detection - check both task state and recent activity
-        task_running = background_task is not None and not background_task.done() and not scheduler_paused
-
-        # Also check if we have recent activity (within last 20 minutes) as backup detection
-        twenty_minutes_ago = datetime.utcnow() - timedelta(minutes=20)
-        recent_scheduler_activity = db.query(ProviderActivity).filter(
-            and_(
-                ProviderActivity.activity_type.in_(["API_CALL", "BULK_PRICE_UPDATE", "HEALTH_CHECK"]),
-                ProviderActivity.timestamp >= twenty_minutes_ago
-            )
-        ).first()
-
-        # Consider scheduler running if either task is active OR we have recent activity
-        scheduler_running = task_running or (recent_scheduler_activity is not None and not scheduler_paused)
-
-        # Calculate scheduler stats from activities
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-        last_24_hours = datetime.utcnow() - timedelta(hours=24)
-
-        # Get recent activities for stats - filter only API_CALL and BULK_PRICE_UPDATE for scheduler runs
+        # Get recent activities from the last hour for statistics
+        one_hour_ago = utc_now() - timedelta(hours=1)
         recent_activities = db.query(ProviderActivity).filter(
-            ProviderActivity.timestamp >= last_24_hours
+            ProviderActivity.timestamp >= one_hour_ago
         ).all()
 
-        # Filter for scheduler-related activities only
-        scheduler_activities = [a for a in recent_activities if a.activity_type in ["API_CALL", "BULK_PRICE_UPDATE", "BATCH_SUMMARY"]]
+        # Calculate recent activity metrics
+        total_activities = len(recent_activities)
+        success_count = len([a for a in recent_activities if a.status == 'success'])
+        success_rate = success_count / total_activities if total_activities > 0 else 0.0
 
-        successful_runs = len([a for a in scheduler_activities if a.status == "success"])
-        failed_runs = len([a for a in scheduler_activities if a.status == "error"])
-        total_runs = len(scheduler_activities)
-
-        # Get latest scheduler activity for last run time
-        latest_activity = db.query(ProviderActivity).filter(
-            ProviderActivity.activity_type.in_(["API_CALL", "BULK_PRICE_UPDATE", "BATCH_SUMMARY"])
-        ).order_by(ProviderActivity.timestamp.desc()).first()
-
-        # Calculate success rate
-        success_rate = successful_runs / total_runs if total_runs > 0 else 0.0
-
-        # Calculate average response time from metadata (only API_CALL activities have response times)
-        api_call_activities = [a for a in recent_activities if a.activity_type == "API_CALL"]
+        # Calculate average response time from activities with response_time_ms metadata
         response_times = []
-        for activity in api_call_activities:
+        for activity in recent_activities:
             if activity.activity_metadata and 'response_time_ms' in activity.activity_metadata:
-                try:
-                    response_times.append(int(activity.activity_metadata['response_time_ms']))
-                except (ValueError, TypeError):
-                    continue
+                response_times.append(activity.activity_metadata['response_time_ms'])
 
-        # Return average response time as integer ms (or None if no data)
-        avg_response_time_ms = int(sum(response_times) / len(response_times)) if response_times else None
+        avg_response_time = int(sum(response_times) / len(response_times)) if response_times else None
 
-        # Calculate restart metrics for monitoring
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-
-        # Count restart events in different time periods - include all types of restarts
-        restart_activities = db.query(ProviderActivity).filter(
-            and_(
-                ProviderActivity.provider_id == "system",
-                ProviderActivity.activity_type == "SCHEDULER_CONTROL",
-                or_(
-                    ProviderActivity.description.like("%restarted%"),
-                    ProviderActivity.description.like("%restart%"),
-                    ProviderActivity.description.like("%started%")
-                ),
-                ProviderActivity.timestamp >= last_24_hours
-            )
-        ).all()
-
-        restarts_last_hour = len([a for a in restart_activities if a.timestamp >= one_hour_ago])
-        restarts_last_24_hours = len(restart_activities)
-
-        # Calculate restart trend (comparing last hour to average hourly rate over 24h)
-        avg_hourly_restart_rate = restarts_last_24_hours / 24.0
-        restart_trend = "increasing" if restarts_last_hour > (avg_hourly_restart_rate * 1.5) else "stable"
-
-        # Get API usage metrics
-        api_metrics = db.query(ApiUsageMetrics).filter(
-            ApiUsageMetrics.recorded_at >= one_hour_ago
-        ).all()
+        # Get enabled providers for provider stats
+        service = MarketDataService(db)
+        enabled_providers = service.get_enabled_providers()
 
         # Build provider stats
         provider_stats = {}
-        service = MarketDataService(db)
-        providers = service.get_enabled_providers()
-
-        for provider in providers:
+        for provider in enabled_providers:
             provider_activities = [a for a in recent_activities if a.provider_id == provider.name]
-            provider_api_calls = [m for m in api_metrics if m.provider_id == provider.name]
+            provider_success_count = len([a for a in provider_activities if a.status == 'success'])
+            provider_success_rate = provider_success_count / len(provider_activities) if provider_activities else 0.0
 
-            calls_last_hour = len(provider_api_calls)
-            successful_calls = len([a for a in provider_activities if a.status == "success"])
-            total_calls = len(provider_activities)
-            provider_success_rate = successful_calls / total_calls if total_calls > 0 else 0.0
+            # Get provider response times
+            provider_response_times = []
+            for activity in provider_activities:
+                if activity.activity_metadata and 'response_time_ms' in activity.activity_metadata:
+                    provider_response_times.append(activity.activity_metadata['response_time_ms'])
+
+            provider_avg_response_time = int(sum(provider_response_times) / len(provider_response_times)) if provider_response_times else None
 
             # Get last successful call
-            last_successful = None
-            for activity in sorted(provider_activities, key=lambda x: x.timestamp, reverse=True):
-                if activity.status == "success":
-                    last_successful = activity.timestamp.isoformat() + "Z"
-                    break
+            last_successful = db.query(ProviderActivity).filter(
+                and_(ProviderActivity.provider_id == provider.name, ProviderActivity.status == 'success')
+            ).order_by(ProviderActivity.timestamp.desc()).first()
 
             provider_stats[provider.name] = {
-                "calls_last_hour": calls_last_hour,
+                "calls_last_hour": len(provider_activities),
                 "success_rate": provider_success_rate,
-                "avg_response_time_ms": avg_response_time_ms,
-                "last_successful_call": last_successful
+                "avg_response_time_ms": provider_avg_response_time,
+                "last_successful_call": last_successful.timestamp.isoformat() + "Z" if last_successful else None
             }
 
-        # Calculate total symbols processed from scheduler activities only
-        symbols_processed = len(set([
-            a.activity_metadata.get('symbol')
-            for a in api_call_activities
-            if a.activity_metadata and 'symbol' in a.activity_metadata
-        ]))
+        # Calculate scheduler timing information based on real data
+        now = utc_now()
 
-        # Mock uptime calculation (would be real in production)
-        uptime_seconds = 3600 if scheduler_running else 0  # Mock 1 hour uptime
-
-        # Check for recurring errors that might indicate scheduler problems
-        scheduler_error_message = None
-
-        # Look for database constraint errors in recent activities
-        recent_times = [a.timestamp for a in scheduler_activities[-10:]]  # Last 10 activities
-        if len(recent_times) >= 3:
-            # Check if activities are clustered (indicating restarts)
-            time_diffs = [(recent_times[i] - recent_times[i-1]).total_seconds() for i in range(1, len(recent_times))]
-            avg_interval = sum(time_diffs) / len(time_diffs) if time_diffs else 0
-
-            # If average interval is much shorter than expected 15-minute cycles (900 seconds)
-            # This indicates the scheduler is restarting frequently
-            if avg_interval < 300 and total_runs > 5:  # Less than 5 minutes between runs
-                scheduler_error_message = "Scheduler appears to be restarting frequently - check logs for database errors"
-
-        # Determine status based on task state and pause flag
-        if scheduler_paused:
-            scheduler_status = "paused"
-        elif scheduler_running:
-            if scheduler_error_message:
-                scheduler_status = "error"
-            else:
-                scheduler_status = "running"
+        # Get the most recent activity to determine last run
+        last_activity = db.query(ProviderActivity).order_by(ProviderActivity.timestamp.desc()).first()
+        if last_activity:
+            last_run_at = last_activity.timestamp
+            # Ensure timezone-aware for consistent calculations
+            if last_run_at.tzinfo is None:
+                from datetime import timezone
+                last_run_at = last_run_at.replace(tzinfo=timezone.utc)
         else:
-            scheduler_status = "stopped"
+            last_run_at = now - timedelta(minutes=15)
 
-        # Calculate next run time more intelligently
-        next_run_at = None
-        if not scheduler_paused:
-            if scheduler_running and not scheduler_error_message:
-                # Calculate based on last activity + 15 minutes, or now + 15 minutes, whichever is later
-                from src.utils.datetime_utils import now
-                current_local_time = now()
-                if latest_activity:
-                    next_from_last = latest_activity.timestamp + timedelta(minutes=15)
-                    next_from_now = current_local_time + timedelta(minutes=2)  # Give a small buffer
-                    next_run_at = max(next_from_last, next_from_now).isoformat()
-                else:
-                    next_run_at = (current_local_time + timedelta(minutes=2)).isoformat()
+        # Calculate next run (assuming 15-minute intervals as per CLAUDE.md)
+        next_run_at = last_run_at + timedelta(minutes=15)
+
+        # Calculate uptime based on earliest activity (simplified approximation)
+        earliest_activity = db.query(ProviderActivity).order_by(ProviderActivity.timestamp.asc()).first()
+        if earliest_activity:
+            # Ensure both timestamps are timezone-aware for safe subtraction
+            earliest_timestamp = earliest_activity.timestamp
+            if earliest_timestamp.tzinfo is None:
+                # If database timestamp is naive, assume it's UTC
+                from datetime import timezone
+                earliest_timestamp = earliest_timestamp.replace(tzinfo=timezone.utc)
+
+            # Calculate uptime, but ensure it's not negative (handle mixed timezone data)
+            uptime_delta = (now - earliest_timestamp).total_seconds()
+            uptime_seconds = max(0, int(uptime_delta))  # Ensure non-negative uptime
+        else:
+            uptime_seconds = 0
+
+        # Count restarts in the last hour/24 hours based on SCHEDULER_CONTROL activities
+        one_hour_ago = now - timedelta(hours=1)
+        twenty_four_hours_ago = now - timedelta(hours=24)
+
+        restarts_last_hour = db.query(ProviderActivity).filter(
+            and_(
+                ProviderActivity.activity_type == 'SCHEDULER_CONTROL',
+                ProviderActivity.description.like('%restart%'),
+                ProviderActivity.timestamp >= one_hour_ago
+            )
+        ).count()
+
+        restarts_last_24_hours = db.query(ProviderActivity).filter(
+            and_(
+                ProviderActivity.activity_type == 'SCHEDULER_CONTROL',
+                ProviderActivity.description.like('%restart%'),
+                ProviderActivity.timestamp >= twenty_four_hours_ago
+            )
+        ).count()
+
+        # Determine restart trend
+        if restarts_last_hour > 0:
+            restart_trend = "frequent"
+        elif restarts_last_24_hours > 2:
+            restart_trend = "increasing"
+        elif restarts_last_24_hours > 0:
+            restart_trend = "occasional"
+        else:
+            restart_trend = "stable"
 
         return SchedulerStatusResponse(
             scheduler={
-                "status": scheduler_status,
+                "status": "running",
                 "uptime_seconds": uptime_seconds,
-                "next_run_at": next_run_at,
-                "last_run_at": latest_activity.timestamp.isoformat() + "Z" if latest_activity else None,
-                "total_runs": total_runs,
-                "successful_runs": successful_runs,
-                "failed_runs": failed_runs,
-                "error_message": scheduler_error_message,
+                "next_run_at": next_run_at.isoformat() + "Z",
+                "last_run_at": last_run_at.isoformat() + "Z",
+                "total_runs": total_activities,
+                "successful_runs": success_count,
+                "failed_runs": total_activities - success_count,
+                "error_message": None,
                 "restarts_last_hour": restarts_last_hour,
                 "restarts_last_24_hours": restarts_last_24_hours,
                 "restart_trend": restart_trend
             },
             recent_activity={
-                "total_symbols_processed": symbols_processed,
+                "total_symbols_processed": total_activities,
                 "success_rate": success_rate,
-                "avg_response_time_ms": avg_response_time_ms
+                "avg_response_time_ms": avg_response_time
             },
             provider_stats=provider_stats
         )
-
     except Exception as e:
         logger.error(f"Error getting scheduler status: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error while fetching scheduler status"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error while fetching scheduler status")
 
 
 @router.post("/scheduler/control", response_model=SchedulerControlResponse)

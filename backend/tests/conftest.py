@@ -11,6 +11,7 @@ from src.database import get_db, Base
 from src.models.user import User
 from src.models.portfolio import Portfolio
 from src.models.stock import Stock
+from src.models.user_role import UserRole
 from src.core.auth import get_password_hash, create_access_token
 
 
@@ -111,3 +112,57 @@ def test_data(db):
 def valid_jwt_token(test_data):
     """Provide a valid JWT token for testing."""
     return test_data.access_token
+
+
+def get_admin_jwt_token(db_session) -> str:
+    """Create or get JWT token for admin user."""
+    # Look for existing admin user or create one
+    admin_user = db_session.query(User).filter(User.role == UserRole.ADMIN).first()
+
+    if not admin_user:
+        admin_user = User(
+            email="admin@test.com",
+            first_name="Admin",
+            last_name="User",
+            password_hash=get_password_hash("adminpassword"),
+            role=UserRole.ADMIN,
+            is_active=True
+        )
+        db_session.add(admin_user)
+        db_session.commit()
+        db_session.refresh(admin_user)
+
+    return create_access_token(data={"sub": admin_user.email})
+
+
+def get_user_jwt_token(db_session) -> str:
+    """Create or get JWT token for regular user."""
+    # Look for existing regular user or create one
+    regular_user = db_session.query(User).filter(User.role == UserRole.USER).first()
+
+    if not regular_user:
+        regular_user = User(
+            email="user@test.com",
+            first_name="Regular",
+            last_name="User",
+            password_hash=get_password_hash("userpassword"),
+            role=UserRole.USER,
+            is_active=True
+        )
+        db_session.add(regular_user)
+        db_session.commit()
+        db_session.refresh(regular_user)
+
+    return create_access_token(data={"sub": regular_user.email})
+
+
+@pytest.fixture
+def db_session():
+    """Provide database session for testing."""
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)

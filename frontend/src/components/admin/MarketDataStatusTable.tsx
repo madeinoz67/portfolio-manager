@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { MarketDataProvider } from '@/types/admin'
 import { toggleMarketDataProvider } from '@/services/admin'
 
@@ -95,6 +96,7 @@ interface ProviderRowProps {
 
 function ProviderRow({ provider, onToggle }: ProviderRowProps) {
   const [isToggling, setIsToggling] = useState(false)
+  const router = useRouter()
 
   const handleToggle = async () => {
     if (!onToggle || isToggling) return
@@ -105,6 +107,10 @@ function ProviderRow({ provider, onToggle }: ProviderRowProps) {
     } finally {
       setIsToggling(false)
     }
+  }
+
+  const handleProviderClick = () => {
+    router.push(`/admin/market-data/providers/${provider.providerId}`)
   }
 
   const getStatusConfig = (status: string) => {
@@ -168,23 +174,45 @@ function ProviderRow({ provider, onToggle }: ProviderRowProps) {
             </div>
           </div>
           <div className="ml-4">
-            <div className="text-sm font-medium text-gray-900 dark:text-white">
-              {provider.providerName}
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {provider.providerId}
-            </div>
+            <button
+              onClick={handleProviderClick}
+              className="text-left"
+            >
+              <div className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline">
+                {provider.providerName}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {provider.providerId}
+              </div>
+            </button>
           </div>
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
-          {statusConfig.icon && <span className="mr-1">{statusConfig.icon}</span>}
-          {provider.status.replace('_', ' ')}
-        </span>
-        {!provider.isEnabled && (
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disabled</div>
-        )}
+        <div className="flex flex-col space-y-1">
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
+            {statusConfig.icon && <span className="mr-1">{statusConfig.icon}</span>}
+            {provider.status.replace('_', ' ')}
+          </span>
+          {!provider.isEnabled && (
+            <div className="text-xs text-gray-500 dark:text-gray-400">Disabled</div>
+          )}
+          {provider.supportsBulkFetch && provider.isEnabled && (
+            <div className="flex items-center space-x-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300">
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Bulk Enabled
+              </span>
+              {provider.bulkFetchLimit && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  ({provider.bulkFetchLimit} max)
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="text-sm text-gray-900 dark:text-white">

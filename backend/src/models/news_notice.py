@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Column, DateTime, Enum as SQLEnum, ForeignKey, String, Text, Uuid
 from sqlalchemy.orm import relationship
 
@@ -40,8 +42,8 @@ class NewsNotice(Base):
     source = Column(String(200), nullable=True)
     external_url = Column(String(1000), nullable=True)
     document_url = Column(String(1000), nullable=True)  # Link to paperless document
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
+    updated_at = Column(DateTime, default=now, onupdate=now)
 
     # Relationships
     stock: "Stock" = relationship("Stock", back_populates="news_notices")
