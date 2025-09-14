@@ -2,7 +2,7 @@
 FastAPI application entry point for Portfolio Management System.
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -13,7 +13,6 @@ from src.api.transactions import router as transactions_router
 from src.api.performance import router as performance_router
 from src.api.api_keys import router as api_keys_router
 from src.api.market_data import router as market_data_router
-from src.api.admin_market_data import router as admin_market_data_router
 from src.api.admin import router as admin_router
 from src.core.exceptions import (
     PortfolioError,
@@ -42,7 +41,51 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Admin API contract error handler
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Convert HTTPException to contract-compliant error format for admin endpoints."""
+    # Check if this is an admin endpoint request
+    if request.url.path.startswith("/api/v1/admin/"):
+        error_code = "unknown"
+        message = str(exc.detail)
+
+        # Map HTTP status codes to error codes per contract
+        if exc.status_code == 401:
+            error_code = "unauthorized"
+            message = "Authentication required"
+        elif exc.status_code == 403:
+            if "Admin access required" in str(exc.detail):
+                error_code = "forbidden"
+                message = "Admin role required"
+            else:
+                # Handle missing Authorization header (403 from HTTPBearer)
+                error_code = "unauthorized"
+                message = "Authentication required"
+                # Change status code to 401 for contract compliance
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": error_code, "message": message}
+                )
+        elif exc.status_code == 404:
+            error_code = "not_found"
+            if "User not found" in str(exc.detail):
+                message = "User not found"
+        elif exc.status_code == 422:
+            error_code = "validation_error"
+
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": error_code, "message": message}
+        )
+
+    # For non-admin endpoints, return standard format
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 # Add exception handlers
+app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(PortfolioError, portfolio_exception_handler)
 app.add_exception_handler(TransactionError, transaction_exception_handler)
 app.add_exception_handler(StockNotFoundError, stock_not_found_exception_handler)
@@ -96,7 +139,6 @@ app.include_router(transactions_router)
 app.include_router(performance_router)
 app.include_router(api_keys_router)
 app.include_router(market_data_router)
-app.include_router(admin_market_data_router)
 app.include_router(admin_router)
 
 
