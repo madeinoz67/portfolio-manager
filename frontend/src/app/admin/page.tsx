@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import PortfolioUpdateMetrics from '@/components/admin/PortfolioUpdateMetrics'
 // import { useSystemMetrics } from '@/hooks/useAdmin'
 // import LoadingSpinner from '@/components/ui/LoadingSpinner'
 // import ErrorMessage from '@/components/ui/ErrorMessage'
@@ -324,10 +323,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Portfolio Update Metrics Section */}
-      <div className="mt-12">
-        <PortfolioUpdateMetrics />
-      </div>
     </div>
   )
 }
