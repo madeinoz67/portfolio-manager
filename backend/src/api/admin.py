@@ -279,14 +279,16 @@ async def get_market_data_status(
     # Use ProviderActivity table for accurate live usage data (consistent with api-usage endpoint)
     from src.models.market_data_provider import ProviderActivity
 
-    # Get today's usage stats per provider from activity logs
+    # Get today's usage stats per provider from activity logs (exclude system activities)
     today_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) == today
+        func.date(ProviderActivity.timestamp) == today,
+        ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
-    # Get monthly usage stats per provider from activity logs
+    # Get monthly usage stats per provider from activity logs (exclude system activities)
     monthly_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) >= current_month_start.date()
+        func.date(ProviderActivity.timestamp) >= current_month_start.date(),
+        ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
     # Group activities by provider for today
