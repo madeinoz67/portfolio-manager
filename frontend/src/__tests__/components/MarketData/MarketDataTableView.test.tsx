@@ -16,12 +16,11 @@ const mockPriceData: Record<string, PriceResponse> = {
     volume: 1250000,
     market_cap: 289500000000,
     fetched_at: '2025-01-15T14:30:00Z',
-    provider: 'yahoo',
     cached: false,
     trend: {
+      trend: 'up',
       change: 1.77,
-      change_percent: 1.05,
-      direction: 'up'
+      change_percent: 1.05
     }
   },
   BHP: {
@@ -35,12 +34,11 @@ const mockPriceData: Record<string, PriceResponse> = {
     volume: 3500000,
     market_cap: 195000000000,
     fetched_at: '2025-01-15T14:30:00Z',
-    provider: 'yahoo',
     cached: false,
     trend: {
+      trend: 'up',
       change: 0.11,
-      change_percent: 0.27,
-      direction: 'up'
+      change_percent: 0.27
     }
   }
 };
@@ -188,12 +186,11 @@ describe('MarketDataTableView', () => {
         price: 150.00,
         currency: 'USD',
         fetched_at: '2025-01-15T14:30:00Z',
-        provider: 'yahoo',
         cached: false,
         trend: {
+          trend: 'down' as const,
           change: -2.50,
-          change_percent: -1.64,
-          direction: 'down' as const
+          change_percent: -1.64
         }
       }
     };
@@ -219,7 +216,6 @@ describe('MarketDataTableView', () => {
         price: 300.00,
         currency: 'USD',
         fetched_at: '2025-01-15T14:30:00Z',
-        provider: 'yahoo',
         cached: false
         // No trend data
       }
@@ -237,5 +233,62 @@ describe('MarketDataTableView', () => {
     const neutralIndicator = screen.getByLabelText('No trend data');
     expect(neutralIndicator).toBeInTheDocument();
     expect(neutralIndicator.closest('td')).toHaveClass('text-gray-600');
+  });
+
+  it('colors change and change% columns based on trend direction', () => {
+    const mixedData = {
+      UP_STOCK: {
+        symbol: 'UP_STOCK',
+        price: 100.00,
+        currency: 'USD',
+        fetched_at: '2025-01-15T14:30:00Z',
+        cached: false,
+        trend: {
+          trend: 'up' as const,
+          change: 2.50,
+          change_percent: 2.5
+        }
+      },
+      DOWN_STOCK: {
+        symbol: 'DOWN_STOCK',
+        price: 80.00,
+        currency: 'USD',
+        fetched_at: '2025-01-15T14:30:00Z',
+        cached: false,
+        trend: {
+          trend: 'down' as const,
+          change: -1.50,
+          change_percent: -1.84
+        }
+      }
+    };
+
+    render(
+      <MarketDataTableView
+        symbols={['UP_STOCK', 'DOWN_STOCK']}
+        priceData={mixedData}
+        onRemoveSymbol={mockOnRemoveSymbol}
+      />
+    );
+
+    // Check positive change colors (green)
+    expect(screen.getByText('+$2.50')).toBeInTheDocument();
+    expect(screen.getByText('+2.50%')).toBeInTheDocument();
+
+    // Find the cells containing the positive change values and check their colors
+    const posChangeCell = screen.getByText('+$2.50').closest('td');
+    const posPercentCell = screen.getByText('+2.50%').closest('td');
+    expect(posChangeCell).toHaveClass('text-green-600');
+    expect(posPercentCell).toHaveClass('text-green-600');
+
+    // Check negative change colors (red)
+    expect(screen.getByText('-$1.50')).toBeInTheDocument();
+    expect(screen.getByText('-1.84%')).toBeInTheDocument();
+
+    // Find the cells containing the negative change values and check their colors
+    const negChangeCell = screen.getByText('-$1.50').closest('td');
+    const negPercentCell = screen.getByText('-1.84%').closest('td');
+    expect(negChangeCell).toHaveClass('text-red-600');
+    expect(negPercentCell).toHaveClass('text-red-600');
   });
 });

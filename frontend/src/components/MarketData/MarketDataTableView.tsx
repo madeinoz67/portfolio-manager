@@ -37,13 +37,13 @@ export function MarketDataTableView({
   }
 
   const formatChange = (change: number, isPositive: boolean) => {
-    const sign = isPositive ? '+' : ''
+    const sign = isPositive ? '+' : (change < 0 ? '-' : '')
     return `${sign}$${Math.abs(change).toFixed(2)}`
   }
 
   const formatChangePercent = (changePercent: number, isPositive: boolean) => {
-    const sign = isPositive ? '+' : ''
-    return `${sign}${changePercent.toFixed(2)}%`
+    const sign = isPositive ? '+' : (changePercent < 0 ? '-' : '')
+    return `${sign}${Math.abs(changePercent).toFixed(2)}%`
   }
 
   if (symbols.length === 0) {
@@ -156,8 +156,8 @@ export function MarketDataTableView({
               )
             }
 
-            const isPositive = price.trend ? price.trend.direction === 'up' : false
-            const isNegative = price.trend ? price.trend.direction === 'down' : false
+            const isPositive = price.trend ? price.trend.trend === 'up' : false
+            const isNegative = price.trend ? price.trend.trend === 'down' : false
             const changeColor = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
 
             // Determine trend indicator colors and icons
@@ -168,7 +168,7 @@ export function MarketDataTableView({
                 )
               }
 
-              if (price.trend.direction === 'up') {
+              if (price.trend.trend === 'up') {
                 return (
                   <svg
                     className="w-4 h-4 fill-current"
@@ -180,7 +180,7 @@ export function MarketDataTableView({
                 )
               }
 
-              if (price.trend.direction === 'down') {
+              if (price.trend.trend === 'down') {
                 return (
                   <svg
                     className="w-4 h-4 fill-current"
@@ -199,8 +199,8 @@ export function MarketDataTableView({
 
             const getTrendColor = () => {
               if (!price.trend) return 'text-gray-600 dark:text-gray-400'
-              if (price.trend.direction === 'up') return 'text-green-600 dark:text-green-400'
-              if (price.trend.direction === 'down') return 'text-red-600 dark:text-red-400'
+              if (price.trend.trend === 'up') return 'text-green-600 dark:text-green-400'
+              if (price.trend.trend === 'down') return 'text-red-600 dark:text-red-400'
               return 'text-gray-600 dark:text-gray-400'
             }
 
