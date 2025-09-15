@@ -403,7 +403,7 @@ async def logout_user(
         # Audit logging
         audit_service = AuditService(db)
         audit_service.log_user_logout(
-            user_id=current_user.id,
+            user_id=str(current_user.id),
             ip_address=getattr(request.client, 'host', None) if request.client else None,
             user_agent=request.headers.get('User-Agent')
         )

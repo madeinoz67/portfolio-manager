@@ -678,7 +678,7 @@ class MarketDataService:
                     status="success",
                     metadata={
                         "symbol": symbol,
-                        "price": price_data.get('price'),
+                        "price": str(price_data.get('price')) if price_data.get('price') is not None else None,
                         "provider": provider.name,
                         "response_time_ms": response_time_ms
                     }

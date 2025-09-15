@@ -132,7 +132,7 @@ async def create_transaction(
         if transaction:
             audit_service.log_transaction_created(
                 transaction=transaction,
-                user_id=current_user.id,
+                user_id=str(current_user.id),
                 ip_address=getattr(request.client, 'host', None) if request.client else None,
                 user_agent=request.headers.get('User-Agent')
             )
@@ -250,7 +250,7 @@ async def update_transaction(
             if updated_transaction:
                 audit_service.log_transaction_updated(
                     transaction=updated_transaction,
-                    user_id=current_user.id,
+                    user_id=str(current_user.id),
                     changes=changes,
                     ip_address=getattr(request.client, 'host', None) if request.client else None,
                     user_agent=request.headers.get('User-Agent')
