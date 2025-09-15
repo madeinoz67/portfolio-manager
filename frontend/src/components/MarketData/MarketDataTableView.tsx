@@ -158,7 +158,16 @@ export function MarketDataTableView({
 
             const isPositive = price.trend ? price.trend.trend === 'up' : false
             const isNegative = price.trend ? price.trend.trend === 'down' : false
-            const changeColor = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            const isNeutral = price.trend ? (price.trend.trend === 'neutral' || price.trend.change === 0) : false
+
+            const getChangeColor = () => {
+              if (isNeutral || (price.trend && Math.abs(price.trend.change) === 0)) {
+                return 'text-gray-600 dark:text-gray-400'
+              }
+              return isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            }
+
+            const changeColor = getChangeColor()
 
             // Determine trend indicator colors and icons
             const getTrendIcon = () => {

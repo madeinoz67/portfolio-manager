@@ -294,4 +294,39 @@ describe('MarketDataTableView', () => {
     expect(negChangeCell).toHaveClass('text-red-600');
     expect(negPercentCell).toHaveClass('text-red-600');
   });
+
+  it('displays neutral/zero changes with grey color', () => {
+    const neutralData = {
+      NEUTRAL_STOCK: {
+        symbol: 'NEUTRAL_STOCK',
+        price: 50.00,
+        currency: 'USD',
+        fetched_at: '2025-01-15T14:30:00Z',
+        cached: false,
+        trend: {
+          trend: 'neutral' as const,
+          change: 0.00,
+          change_percent: 0.00
+        }
+      }
+    };
+
+    render(
+      <MarketDataTableView
+        symbols={['NEUTRAL_STOCK']}
+        priceData={neutralData}
+        onRemoveSymbol={mockOnRemoveSymbol}
+      />
+    );
+
+    // Check neutral change colors (grey)
+    expect(screen.getByText('$0.00')).toBeInTheDocument();
+    expect(screen.getByText('0.00%')).toBeInTheDocument();
+
+    // Find the cells containing the neutral change values and check their colors
+    const neutralChangeCell = screen.getByText('$0.00').closest('td');
+    const neutralPercentCell = screen.getByText('0.00%').closest('td');
+    expect(neutralChangeCell).toHaveClass('text-gray-600');
+    expect(neutralPercentCell).toHaveClass('text-gray-600');
+  });
 });
