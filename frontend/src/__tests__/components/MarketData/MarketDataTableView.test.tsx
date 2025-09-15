@@ -173,10 +173,11 @@ describe('MarketDataTableView', () => {
       />
     );
 
-    // Should show up arrow for positive trend
+    // Should show up arrow for positive trend with rounded background
     const upArrow = screen.getByLabelText('Up trend');
     expect(upArrow).toBeInTheDocument();
-    expect(upArrow.closest('td')).toHaveClass('text-green-600');
+    expect(upArrow).toHaveClass('rounded-full');
+    expect(upArrow).toHaveClass('bg-green-100');
   });
 
   it('displays down trend indicator for negative trends', () => {
@@ -203,10 +204,11 @@ describe('MarketDataTableView', () => {
       />
     );
 
-    // Should show down arrow for negative trend
+    // Should show down arrow for negative trend with rounded background
     const downArrow = screen.getByLabelText('Down trend');
     expect(downArrow).toBeInTheDocument();
-    expect(downArrow.closest('td')).toHaveClass('text-red-600');
+    expect(downArrow).toHaveClass('rounded-full');
+    expect(downArrow).toHaveClass('bg-red-100');
   });
 
   it('displays neutral trend indicator when no trend data', () => {
@@ -229,10 +231,11 @@ describe('MarketDataTableView', () => {
       />
     );
 
-    // Should show neutral indicator
+    // Should show neutral indicator with rounded background
     const neutralIndicator = screen.getByLabelText('No trend data');
     expect(neutralIndicator).toBeInTheDocument();
-    expect(neutralIndicator.closest('td')).toHaveClass('text-gray-600');
+    expect(neutralIndicator).toHaveClass('rounded-full');
+    expect(neutralIndicator).toHaveClass('bg-gray-100');
   });
 
   it('colors change and change% columns based on trend direction', () => {

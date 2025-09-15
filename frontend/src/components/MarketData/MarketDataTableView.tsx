@@ -164,44 +164,50 @@ export function MarketDataTableView({
             const getTrendIcon = () => {
               if (!price.trend) {
                 return (
-                  <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full" aria-label="No trend data" />
+                  <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
+                    <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
+                  </div>
                 )
               }
 
               if (price.trend.trend === 'up') {
                 return (
-                  <svg
-                    className="w-4 h-4 fill-current"
-                    viewBox="0 0 20 20"
-                    aria-label="Up trend"
-                  >
-                    <path d="M10 2L15 8H5L10 2Z" />
-                  </svg>
+                  <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center" aria-label="Up trend">
+                    <svg
+                      className="w-3 h-3 fill-current text-green-600 dark:text-green-400"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M10 3l6 7H4l6-7z" />
+                    </svg>
+                  </div>
                 )
               }
 
               if (price.trend.trend === 'down') {
                 return (
-                  <svg
-                    className="w-4 h-4 fill-current"
-                    viewBox="0 0 20 20"
-                    aria-label="Down trend"
-                  >
-                    <path d="M10 18L5 12H15L10 18Z" />
-                  </svg>
+                  <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center" aria-label="Down trend">
+                    <svg
+                      className="w-3 h-3 fill-current text-red-600 dark:text-red-400"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M10 17L4 10h12l-6 7z" />
+                    </svg>
+                  </div>
                 )
               }
 
               return (
-                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full" aria-label="No trend data" />
+                <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
+                  <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
+                </div>
               )
             }
 
             const getTrendColor = () => {
-              if (!price.trend) return 'text-gray-600 dark:text-gray-400'
+              if (!price.trend) return 'text-black dark:text-white'
               if (price.trend.trend === 'up') return 'text-green-600 dark:text-green-400'
               if (price.trend.trend === 'down') return 'text-red-600 dark:text-red-400'
-              return 'text-gray-600 dark:text-gray-400'
+              return 'text-black dark:text-white'
             }
 
             return (
@@ -228,7 +234,7 @@ export function MarketDataTableView({
                     {formatPrice(price.price)}
                   </span>
                 </td>
-                <td className={`py-4 px-2 sm:px-4 text-center ${getTrendColor()}`}>
+                <td className="py-4 px-2 sm:px-4 text-center">
                   <div className="flex justify-center items-center">
                     {getTrendIcon()}
                   </div>
