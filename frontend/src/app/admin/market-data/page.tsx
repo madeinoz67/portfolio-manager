@@ -265,7 +265,7 @@ export default function AdminMarketDataPage() {
               'Content-Type': 'application/json',
             },
           }),
-          fetch('http://localhost:8001/api/v1/market-data/scheduler/status', {
+          fetch('http://localhost:8001/api/v1/admin/scheduler/status', {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
@@ -339,7 +339,7 @@ export default function AdminMarketDataPage() {
                 'Content-Type': 'application/json',
               },
             }),
-            fetch('http://localhost:8001/api/v1/market-data/scheduler/status', {
+            fetch('http://localhost:8001/api/v1/admin/scheduler/status', {
               headers: {
                 'Authorization': `Bearer ${currentToken}`,
                 'Content-Type': 'application/json',
@@ -388,7 +388,7 @@ export default function AdminMarketDataPage() {
     if (!token) return
 
     try {
-      const response = await fetch('http://localhost:8001/api/v1/market-data/scheduler/control', {
+      const response = await fetch('http://localhost:8001/api/v1/admin/scheduler/control', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -712,9 +712,9 @@ export default function AdminMarketDataPage() {
             <div className="flex space-x-2">
               <button
                 onClick={() => handleSchedulerControl('pause')}
-                disabled={schedulerStatus.scheduler?.status !== 'running'}
+                disabled={schedulerStatus.state !== 'running'}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  schedulerStatus.scheduler?.status !== 'running'
+                  schedulerStatus.state !== 'running'
                     ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                     : 'bg-yellow-600 hover:bg-yellow-700 text-white'
                 }`}
@@ -723,18 +723,18 @@ export default function AdminMarketDataPage() {
               </button>
               <button
                 onClick={() => handleSchedulerControl('restart')}
-                disabled={schedulerStatus.scheduler?.status === 'running'}
+                disabled={schedulerStatus.state === 'running'}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  schedulerStatus.scheduler?.status === 'running'
+                  schedulerStatus.state === 'running'
                     ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                    : schedulerStatus.scheduler?.status === 'error'
+                    : schedulerStatus.state === 'error'
                       ? 'bg-red-600 hover:bg-red-700 text-white'
                       : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
-                {schedulerStatus.scheduler?.status === 'paused'
+                {schedulerStatus.state === 'paused'
                   ? 'Resume'
-                  : schedulerStatus.scheduler?.status === 'error'
+                  : schedulerStatus.state === 'error'
                     ? 'Restart (Fix Error)'
                     : 'Start'}
               </button>
@@ -746,16 +746,16 @@ export default function AdminMarketDataPage() {
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <div className={`p-2 rounded-lg ${
-                  schedulerStatus.scheduler?.status === 'running'
+                  schedulerStatus.state === 'running'
                     ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400'
-                    : schedulerStatus.scheduler?.status === 'paused'
+                    : schedulerStatus.state === 'paused'
                       ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
-                      : schedulerStatus.scheduler?.status === 'error'
+                      : schedulerStatus.state === 'error'
                         ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                         : 'bg-gray-100 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400'
                 }`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {schedulerStatus.scheduler?.status === 'running' ? (
+                    {schedulerStatus.state === 'running' ? (
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-5-9h2a3 3 0 013 3v1M3 11v2a3 3 0 003 3h.5" />
                     ) : (
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 4h4.018a2 2 0 01.485.06l3.76.94" />
@@ -764,18 +764,18 @@ export default function AdminMarketDataPage() {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                    Scheduler: {schedulerStatus.scheduler?.status || 'Unknown'}
+                    Scheduler: {schedulerStatus.state || 'Unknown'}
                   </h4>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Status: {schedulerStatus.scheduler?.status === 'running'
+                    Status: {schedulerStatus.state === 'running'
                       ? 'Active'
-                      : schedulerStatus.scheduler?.status === 'paused'
+                      : schedulerStatus.state === 'paused'
                         ? 'Paused'
-                        : schedulerStatus.scheduler?.status === 'error'
+                        : schedulerStatus.state === 'error'
                           ? 'Error'
                           : 'Stopped'}
                   </p>
-                  {schedulerStatus.scheduler?.error_message && (
+                  {schedulerStatus.errorMessage && (
                     <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded text-xs text-red-700 dark:text-red-400">
                       <div className="font-medium">Error:</div>
                       <div>{schedulerStatus.scheduler.error_message}</div>
@@ -788,32 +788,32 @@ export default function AdminMarketDataPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Total Runs:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {schedulerStatus.scheduler?.total_runs || 0}
+                    {schedulerStatus.total_runs || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Successful:</span>
                   <span className="font-medium text-green-600 dark:text-green-400">
-                    {schedulerStatus.scheduler?.successful_runs || 0}
+                    {schedulerStatus.successful_runs || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Failed:</span>
                   <span className="font-medium text-red-600 dark:text-red-400">
-                    {schedulerStatus.scheduler?.failed_runs || 0}
+                    {schedulerStatus.failed_runs || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Restarts (1h):</span>
                   <span className={`font-medium ${
-                    (schedulerStatus.scheduler?.restarts_last_hour || 0) > 2
+                    (schedulerStatus.restarts_last_hour || 0) > 2
                       ? 'text-red-600 dark:text-red-400'
-                      : (schedulerStatus.scheduler?.restarts_last_hour || 0) > 0
+                      : (schedulerStatus.restarts_last_hour || 0) > 0
                         ? 'text-yellow-600 dark:text-yellow-400'
                         : 'text-green-600 dark:text-green-400'
                   }`}>
-                    {schedulerStatus.scheduler?.restarts_last_hour || 0}
-                    {schedulerStatus.scheduler?.restart_trend === 'increasing' && (
+                    {schedulerStatus.restarts_last_hour || 0}
+                    {schedulerStatus.restart_trend === 'increasing' && (
                       <span className="ml-1 text-xs">↑</span>
                     )}
                   </span>
@@ -821,7 +821,7 @@ export default function AdminMarketDataPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Restarts (24h):</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {schedulerStatus.scheduler?.restarts_last_24_hours || 0}
+                    {schedulerStatus.restarts_last_24_hours || 0}
                   </span>
                 </div>
               </div>
@@ -834,7 +834,7 @@ export default function AdminMarketDataPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Last Run:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {schedulerStatus.scheduler?.last_run_at
+                    {schedulerStatus.lastRun
                       ? formatDisplayDateTime(schedulerStatus.scheduler.last_run_at)
                       : 'Never'
                     }
@@ -843,7 +843,7 @@ export default function AdminMarketDataPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Next Run:</span>
                   <span className="font-medium text-blue-600 dark:text-blue-400">
-                    {schedulerStatus.scheduler?.next_run_at
+                    {schedulerStatus.nextRun
                       ? formatDisplayDateTime(schedulerStatus.scheduler.next_run_at)
                       : 'Not scheduled'
                     }
@@ -852,7 +852,7 @@ export default function AdminMarketDataPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Uptime:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {schedulerStatus.scheduler?.uptime_seconds
+                    {schedulerStatus.uptimeSeconds
                       ? Math.floor(schedulerStatus.scheduler.uptime_seconds / 3600) + 'h ' +
                         Math.floor((schedulerStatus.scheduler.uptime_seconds % 3600) / 60) + 'm'
                       : '0m'

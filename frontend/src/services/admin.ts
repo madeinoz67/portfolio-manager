@@ -263,7 +263,7 @@ export async function controlScheduler(
   message: string
   new_status: string
 }> {
-  const response = await adminFetch('/api/v1/market-data/scheduler/control', {
+  const response = await adminFetch('/api/v1/admin/scheduler/control', {
     method: 'POST',
     body: JSON.stringify({
       action
