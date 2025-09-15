@@ -228,11 +228,43 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan."""
     global background_task
 
+    # Create database tables
+    logger.info("Creating database tables...")
+    try:
+        # Import all models to ensure they're registered with Base
+        from src.models import user, portfolio, stock, transaction, holding, news_notice  # noqa: F401
+        from src.models import market_data_provider, realtime_price_history, portfolio_valuation  # noqa: F401
+        from src.models import sse_connection, poll_interval_config, api_usage_metrics  # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        raise
+
+    # Initialize portfolio update queue
+    logger.info("Initializing portfolio update queue...")
+    try:
+        from src.services.portfolio_update_queue import initialize_portfolio_queue
+        await initialize_portfolio_queue()
+        logger.info("Portfolio update queue initialized and started successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize portfolio update queue: {e}")
+        # Don't raise - let the app start but queue will be unavailable
+
     # Start background task
     logger.info("Starting background tasks...")
     background_task = asyncio.create_task(periodic_price_updates())
 
     yield
+
+    # Shutdown portfolio update queue
+    logger.info("Shutting down portfolio update queue...")
+    try:
+        from src.services.portfolio_update_queue import shutdown_portfolio_queue
+        await shutdown_portfolio_queue()
+        logger.info("Portfolio update queue shut down successfully")
+    except Exception as e:
+        logger.error(f"Failed to shutdown portfolio update queue: {e}")
 
     # Cleanup background task
     if background_task:
@@ -327,21 +359,7 @@ async def add_request_id(request: Request, call_next):
         logger.error(f"Request failed: {str(e)}", extra={"request_id": request_id})
         raise
 
-# Database startup event
-@app.on_event("startup")
-async def create_tables():
-    """Create database tables on application startup."""
-    logger.info("Creating database tables...")
-    try:
-        # Import all models to ensure they're registered with Base
-        from src.models import user, portfolio, stock, transaction, holding, news_notice  # noqa: F401
-        from src.models import market_data_provider, realtime_price_history, portfolio_valuation  # noqa: F401
-        from src.models import sse_connection, poll_interval_config, api_usage_metrics  # noqa: F401
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create database tables: {e}")
-        raise
+# Startup events moved to lifespan context manager above
 
 # Include API routers
 app.include_router(auth_router)
