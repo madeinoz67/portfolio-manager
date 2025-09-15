@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import PortfolioUpdateMetrics from '@/components/admin/PortfolioUpdateMetrics'
 // import { useSystemMetrics } from '@/hooks/useAdmin'
 // import LoadingSpinner from '@/components/ui/LoadingSpinner'
 // import ErrorMessage from '@/components/ui/ErrorMessage'
@@ -311,8 +312,21 @@ export default function AdminDashboard() {
               <div className="font-medium text-gray-900 dark:text-white">Market Data Status</div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Monitor data provider status</div>
             </a>
+
+            <a
+              href="/admin/portfolio-metrics"
+              className="block w-full text-left p-3 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+            >
+              <div className="font-medium text-gray-900 dark:text-white">Portfolio Update Monitoring</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Real-time portfolio update metrics</div>
+            </a>
           </div>
         </div>
+      </div>
+
+      {/* Portfolio Update Metrics Section */}
+      <div className="mt-12">
+        <PortfolioUpdateMetrics />
       </div>
     </div>
   )

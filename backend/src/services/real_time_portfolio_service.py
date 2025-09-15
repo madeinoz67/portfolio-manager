@@ -14,6 +14,7 @@ from sqlalchemy import desc, and_
 from src.core.logging import LoggerMixin
 from src.models import Portfolio, Holding, Stock, RealtimePriceHistory
 from src.services.dynamic_portfolio_service import DynamicPortfolioService, PortfolioValue
+from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
 
 
 class RealTimePortfolioService(LoggerMixin):
@@ -22,6 +23,7 @@ class RealTimePortfolioService(LoggerMixin):
     def __init__(self, db: Session):
         self.db = db
         self.dynamic_service = DynamicPortfolioService(db)
+        self.metrics_service = PortfolioUpdateMetricsService(db)
 
     def update_portfolios_for_symbol(self, symbol: str) -> List[Portfolio]:
         """
@@ -147,6 +149,9 @@ class RealTimePortfolioService(LoggerMixin):
         Returns:
             True if portfolio was updated successfully
         """
+        start_time = datetime.utcnow()
+        processing_start = datetime.utcnow()
+
         try:
             # Calculate new portfolio values using dynamic service
             portfolio_value = self.dynamic_service.calculate_portfolio_value(
@@ -177,12 +182,44 @@ class RealTimePortfolioService(LoggerMixin):
             portfolio.updated_at = datetime.utcnow()
             self.db.commit()
 
+            # Record successful update metrics
+            end_time = datetime.utcnow()
+            duration_ms = int((end_time - start_time).total_seconds() * 1000)
+
+            self.metrics_service.record_portfolio_update(
+                portfolio_id=str(portfolio.id),
+                symbols_updated=[symbol],
+                update_duration_ms=duration_ms,
+                status="success",
+                trigger_type="market_data_change",
+                update_source="automated",
+                price_change_timestamp=price_data.fetched_at if price_data else None,
+                processing_start_timestamp=processing_start
+            )
+
             self.log_debug(f"Updated portfolio {portfolio.id}: value={portfolio_value.total_value}, "
                           f"change={total_daily_change}, change%={portfolio.daily_change_percent}")
 
             return True
 
         except Exception as e:
+            # Record failed update metrics
+            end_time = datetime.utcnow()
+            duration_ms = int((end_time - start_time).total_seconds() * 1000)
+
+            self.metrics_service.record_portfolio_update(
+                portfolio_id=str(portfolio.id),
+                symbols_updated=[symbol],
+                update_duration_ms=duration_ms,
+                status="error",
+                trigger_type="market_data_change",
+                update_source="automated",
+                error_message=str(e),
+                error_type="portfolio_update_error",
+                price_change_timestamp=price_data.fetched_at if price_data else None,
+                processing_start_timestamp=processing_start
+            )
+
             self.log_error(f"Error updating portfolio {portfolio.id} for symbol {symbol}", error=str(e))
             self.db.rollback()
             return False
@@ -199,6 +236,9 @@ class RealTimePortfolioService(LoggerMixin):
         Returns:
             True if portfolio was updated successfully
         """
+        start_time = datetime.utcnow()
+        processing_start = datetime.utcnow()
+
         try:
             # Calculate new portfolio values using dynamic service
             portfolio_value = self.dynamic_service.calculate_portfolio_value(
@@ -230,12 +270,46 @@ class RealTimePortfolioService(LoggerMixin):
             portfolio.updated_at = datetime.utcnow()
             self.db.commit()
 
+            # Record successful bulk update metrics
+            end_time = datetime.utcnow()
+            duration_ms = int((end_time - start_time).total_seconds() * 1000)
+            symbols_list = list(symbol_price_data.keys())
+
+            self.metrics_service.record_portfolio_update(
+                portfolio_id=str(portfolio.id),
+                symbols_updated=symbols_list,
+                update_duration_ms=duration_ms,
+                status="success",
+                trigger_type="bulk_market_data",
+                update_source="automated",
+                coalesced_count=len(symbols_list),  # Number of symbols processed together
+                processing_start_timestamp=processing_start
+            )
+
             self.log_debug(f"Bulk updated portfolio {portfolio.id}: value={portfolio_value.total_value}, "
                           f"change={total_daily_change}, change%={portfolio.daily_change_percent}")
 
             return True
 
         except Exception as e:
+            # Record failed bulk update metrics
+            end_time = datetime.utcnow()
+            duration_ms = int((end_time - start_time).total_seconds() * 1000)
+            symbols_list = list(symbol_price_data.keys())
+
+            self.metrics_service.record_portfolio_update(
+                portfolio_id=str(portfolio.id),
+                symbols_updated=symbols_list,
+                update_duration_ms=duration_ms,
+                status="error",
+                trigger_type="bulk_market_data",
+                update_source="automated",
+                error_message=str(e),
+                error_type="bulk_portfolio_update_error",
+                coalesced_count=len(symbols_list),
+                processing_start_timestamp=processing_start
+            )
+
             self.log_error(f"Error bulk updating portfolio {portfolio.id}", error=str(e))
             self.db.rollback()
             return False
