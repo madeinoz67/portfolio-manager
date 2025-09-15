@@ -601,7 +601,7 @@ export default function AdminMarketDataPage() {
         />
 
         <MarketDataStatsCard
-          title="Monthly Calls"
+          title="Total API Calls"
           value={apiUsageData?.summary?.total_requests_this_month?.toLocaleString() || '0'}
           subtitle="This month"
           trend={
