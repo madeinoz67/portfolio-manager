@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, validator
 
 from src.models.transaction import TransactionType, SourceType
 from src.schemas.stock import StockResponse
+from src.utils.datetime_utils import now
 
 
 class TransactionCreate(BaseModel):
@@ -52,6 +53,8 @@ class TransactionCreate(BaseModel):
             raise ValueError(f'Invalid date type: {type(v)}. Expected date, datetime, or string.')
 
         # Validate date is not in the future
+        # Users enter dates in their local timezone, so validate against local date
+        # The frontend handles timezone conversion for storage
         if result_date > date.today():
             raise ValueError('Transaction date cannot be in the future')
 
@@ -89,6 +92,7 @@ class TransactionUpdate(BaseModel):
 
     @validator('transaction_date')
     def validate_transaction_date(cls, v):
+        # Users work in local timezone, validate against local date
         if v and v > date.today():
             raise ValueError('Transaction date cannot be in the future')
         return v
