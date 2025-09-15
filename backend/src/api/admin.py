@@ -1427,6 +1427,12 @@ class SchedulerStatus(BaseModel):
     errorMessage: Optional[str] = None
     configuration: dict
     uptimeSeconds: Optional[int] = None
+    # Execution metrics for admin UI
+    totalRuns: int = 0
+    successful: int = 0
+    failed: int = 0
+    symbolsProcessed: int = 0
+    successRate: float = 0.0
 
 
 class SchedulerControlRequest(BaseModel):
@@ -1483,7 +1489,13 @@ async def get_scheduler_status(
         pauseUntil=status_info["pause_until"],
         errorMessage=status_info["error_message"],
         configuration=status_info["configuration"],
-        uptimeSeconds=status_info["uptime_seconds"]
+        uptimeSeconds=status_info["uptime_seconds"],
+        # Execution metrics from scheduler service
+        totalRuns=status_info.get("total_executions", 0),
+        successful=status_info.get("successful_executions", 0),
+        failed=status_info.get("failed_executions", 0),
+        symbolsProcessed=status_info.get("total_symbols_processed", 0),
+        successRate=status_info.get("success_rate_percent", 0.0)
     )
 
 
@@ -1619,7 +1631,13 @@ async def control_scheduler(
                 pauseUntil=status_info["pause_until"],
                 errorMessage=status_info["error_message"],
                 configuration=status_info["configuration"],
-                uptimeSeconds=status_info["uptime_seconds"]
+                uptimeSeconds=status_info["uptime_seconds"],
+                # Execution metrics from scheduler service
+                totalRuns=status_info.get("total_executions", 0),
+                successful=status_info.get("successful_executions", 0),
+                failed=status_info.get("failed_executions", 0),
+                symbolsProcessed=status_info.get("total_symbols_processed", 0),
+                successRate=status_info.get("success_rate_percent", 0.0)
             )
         )
 
