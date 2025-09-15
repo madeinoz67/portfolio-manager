@@ -11,7 +11,7 @@ The Portfolio Manager includes a comprehensive metric monitoring system that tra
 Each system component has its own dedicated metrics table following the pattern: `<system>_api_usage_metrics`
 
 Currently implemented:
-- **`market_data_api_usage_metrics`**: Tracks market data provider API calls (Yahoo Finance, Alpha Vantage, etc.)
+- **`market_data_usage_metrics`**: Tracks market data provider API calls (Yahoo Finance, Alpha Vantage, etc.)
 - **`portfolio_api_usage_metrics`**: (Future) Will track portfolio-related API usage
 
 ### Database Schema
@@ -19,7 +19,7 @@ Currently implemented:
 #### Market Data API Usage Metrics Table
 
 ```sql
-CREATE TABLE market_data_api_usage_metrics (
+CREATE TABLE market_data_usage_metrics (
     id INTEGER PRIMARY KEY,
     provider_id VARCHAR(50) NOT NULL,        -- 'yfinance', 'alpha_vantage', etc.
     metric_id VARCHAR(100) NOT NULL,
@@ -141,17 +141,17 @@ The system includes smart Alembic migrations that:
 # Migration: 069a794bf481_rename_api_usage_metrics_to_market_data_.py
 def upgrade() -> None:
     # Smart migration handling existing tables
-    if 'api_usage_metrics' in existing_tables and 'market_data_api_usage_metrics' in existing_tables:
+    if 'api_usage_metrics' in existing_tables and 'market_data_usage_metrics' in existing_tables:
         # Copy data from old to new if new is empty
-        result = conn.execute(sa.text("SELECT COUNT(*) FROM market_data_api_usage_metrics"))
+        result = conn.execute(sa.text("SELECT COUNT(*) FROM market_data_usage_metrics"))
         if result.scalar() == 0:
             conn.execute(sa.text('''
-                INSERT INTO market_data_api_usage_metrics
+                INSERT INTO market_data_usage_metrics
                 SELECT * FROM api_usage_metrics
             '''))
         op.drop_table('api_usage_metrics')
     elif 'api_usage_metrics' in existing_tables:
-        op.rename_table('api_usage_metrics', 'market_data_api_usage_metrics')
+        op.rename_table('api_usage_metrics', 'market_data_usage_metrics')
 ```
 
 ## Usage Examples
@@ -159,12 +159,12 @@ def upgrade() -> None:
 ### Monitoring Market Data Provider Performance
 
 ```python
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 
 # Query provider performance over last 24 hours
-recent_metrics = db.query(ApiUsageMetrics)\
-    .filter(ApiUsageMetrics.recorded_at >= datetime.now() - timedelta(hours=24))\
-    .group_by(ApiUsageMetrics.provider_id)\
+recent_metrics = db.query(MarketDataUsageMetrics)\
+    .filter(MarketDataUsageMetrics.recorded_at >= datetime.now() - timedelta(hours=24))\
+    .group_by(MarketDataUsageMetrics.provider_id)\
     .all()
 
 for metric in recent_metrics:
@@ -177,15 +177,15 @@ for metric in recent_metrics:
 
 ```python
 # Get rate limit events by provider
-rate_limit_events = db.query(ApiUsageMetrics)\
-    .filter(ApiUsageMetrics.rate_limit_hit == True)\
-    .filter(ApiUsageMetrics.recorded_at >= start_date)\
-    .group_by(ApiUsageMetrics.provider_id)\
+rate_limit_events = db.query(MarketDataUsageMetrics)\
+    .filter(MarketDataUsageMetrics.rate_limit_hit == True)\
+    .filter(MarketDataUsageMetrics.recorded_at >= start_date)\
+    .group_by(MarketDataUsageMetrics.provider_id)\
     .all()
 
 # Calculate cost estimates
-total_cost = db.query(func.sum(ApiUsageMetrics.cost_estimate))\
-    .filter(ApiUsageMetrics.recorded_at >= billing_period_start)\
+total_cost = db.query(func.sum(MarketDataUsageMetrics.cost_estimate))\
+    .filter(MarketDataUsageMetrics.recorded_at >= billing_period_start)\
     .scalar()
 ```
 
@@ -197,7 +197,7 @@ total_cost = db.query(func.sum(ApiUsageMetrics.cost_estimate))\
 - **Mixed metrics**: Portfolio and market data metrics in same table
 
 ### After Refactor (Solutions)
-- **Clear system identification**: `market_data_api_usage_metrics` clearly indicates market data monitoring
+- **Clear system identification**: `market_data_usage_metrics` clearly indicates market data monitoring
 - **Focused debugging**: Issues can be quickly traced to specific system components
 - **Scalable architecture**: Easy to add new system-specific metrics tables
 - **Better performance**: System-specific indexes and queries
@@ -233,12 +233,12 @@ total_cost = db.query(func.sum(ApiUsageMetrics.cost_estimate))\
 ### Common Issues
 
 1. **Missing Metrics Data**
-   - Verify table exists: `SELECT * FROM market_data_api_usage_metrics LIMIT 1;`
+   - Verify table exists: `SELECT * FROM market_data_usage_metrics LIMIT 1;`
    - Check model imports in `src/main.py`
    - Ensure migrations are applied: `alembic upgrade head`
 
 2. **Import Errors**
-   - Update imports: `from src.models.market_data_api_usage_metrics import ApiUsageMetrics`
+   - Update imports: `from src.models.market_data_usage_metrics import MarketDataUsageMetrics`
    - Check `__init__.py` exports
 
 3. **Admin Dashboard Empty**

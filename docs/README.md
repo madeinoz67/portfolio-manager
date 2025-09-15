@@ -71,7 +71,7 @@ docs/
 - **Monitoring Dashboard**: Live metrics with 10-second auto-refresh
 
 #### Metric Monitoring System ([Full Guide](./metric-monitoring-system.md))
-- **System-Specific Tables**: Dedicated metrics tables per system (market_data_api_usage_metrics)
+- **System-Specific Tables**: Dedicated metrics tables per system (market_data_usage_metrics)
 - **API Usage Tracking**: Comprehensive logging of all market data provider calls
 - **Performance Monitoring**: Response times, rate limits, and error tracking
 - **Admin Analytics**: Real-time metrics visibility and cost estimation
