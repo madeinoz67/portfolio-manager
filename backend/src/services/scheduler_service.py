@@ -72,7 +72,7 @@ class SchedulerConfiguration:
 class MarketDataSchedulerService:
     """Service for managing market data scheduler operations."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, auto_start: bool = True):
         self.db = db
         self._state = SchedulerState.STOPPED
         self._config = SchedulerConfiguration()
@@ -80,6 +80,10 @@ class MarketDataSchedulerService:
         self._next_run = None
         self._pause_until = None
         self._error_message = None
+
+        # Auto-start the scheduler for production use
+        if auto_start:
+            self._auto_start()
 
     @property
     def state(self) -> SchedulerState:
@@ -109,6 +113,18 @@ class MarketDataSchedulerService:
             "configuration": self._config.to_dict(),
             "uptime_seconds": self._calculate_uptime_seconds()
         }
+
+    def _auto_start(self) -> None:
+        """Automatically start the scheduler with default configuration."""
+        try:
+            self._state = SchedulerState.RUNNING
+            self._error_message = None
+            self._calculate_next_run()
+            logger.info("Market data scheduler auto-started with 15min intervals")
+        except Exception as e:
+            logger.error(f"Failed to auto-start scheduler: {e}")
+            self._state = SchedulerState.ERROR
+            self._error_message = str(e)
 
     def start(self, config_override: Optional[Dict[str, Any]] = None) -> bool:
         """
