@@ -12,7 +12,7 @@ import Navigation from '@/components/layout/Navigation'
 import Button from '@/components/ui/Button'
 
 export default function PortfoliosPage() {
-  const { portfolios, loading, error, createPortfolio } = usePortfolios()
+  const { portfolios, loading, error, createPortfolio, fetchPortfolios } = usePortfolios()
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'value' | 'change' | 'created'>('name')
@@ -29,6 +29,11 @@ export default function PortfoliosPage() {
       addToast('Failed to create portfolio', 'error')
       return false
     }
+  }
+
+  const handlePortfolioDeleted = () => {
+    addToast('Portfolio deleted successfully', 'success')
+    fetchPortfolios()
   }
 
   // Calculate portfolio statistics
@@ -255,7 +260,11 @@ export default function PortfoliosPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredAndSortedPortfolios.map((portfolio) => (
-              <PortfolioCard key={portfolio.id} portfolio={portfolio} />
+              <PortfolioCard
+                key={portfolio.id}
+                portfolio={portfolio}
+                onDeleted={handlePortfolioDeleted}
+              />
             ))}
           </div>
         )}
