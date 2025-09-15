@@ -4,7 +4,7 @@ Transaction API schemas for validation and serialization.
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field, validator
@@ -20,14 +20,42 @@ class TransactionCreate(BaseModel):
     quantity: Decimal = Field(..., ge=0)
     price_per_share: Decimal = Field(..., ge=0)
     fees: Decimal = Field(default=Decimal("0.00"), ge=0)
-    transaction_date: date
+    transaction_date: Union[date, datetime, str]
     notes: Optional[str] = Field(None, max_length=1000)
 
-    @validator('transaction_date')
+    @validator('transaction_date', pre=True)
     def validate_transaction_date(cls, v):
-        if v > date.today():
+        """
+        Handle datetime strings from frontend and convert to date.
+        Accepts: date objects, datetime objects, or ISO datetime strings.
+        Always returns a date object.
+        """
+        if isinstance(v, str):
+            # Parse ISO datetime string (e.g., "2025-09-14T16:00:00.000Z")
+            try:
+                # Try parsing as datetime first
+                if 'T' in v:
+                    parsed_dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                    result_date = parsed_dt.date()
+                else:
+                    # Parse as date-only string
+                    result_date = datetime.fromisoformat(v).date()
+            except ValueError:
+                raise ValueError(f'Invalid date format: {v}. Expected ISO date or datetime string.')
+        elif isinstance(v, datetime):
+            # Extract date from datetime
+            result_date = v.date()
+        elif isinstance(v, date):
+            # Already a date
+            result_date = v
+        else:
+            raise ValueError(f'Invalid date type: {type(v)}. Expected date, datetime, or string.')
+
+        # Validate date is not in the future
+        if result_date > date.today():
             raise ValueError('Transaction date cannot be in the future')
-        return v
+
+        return result_date
 
 
 class TransactionResponse(BaseModel):
