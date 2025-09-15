@@ -380,3 +380,111 @@ class TestSchedulerPauseFunctionality:
 
         finally:
             app.dependency_overrides.clear()
+
+    def test_scheduler_can_be_restarted_when_running(self, db_session: Session):
+        """Test that a running scheduler can be restarted via API (stop then start)."""
+        client = TestClient(app)
+        admin_token = get_admin_jwt_token(db_session)
+
+        # Override db dependency
+        app.dependency_overrides[get_db] = lambda: db_session
+
+        try:
+            # Setup: start scheduler
+            scheduler = get_scheduler_service(db_session)
+            scheduler.start()
+            assert scheduler.state == SchedulerState.RUNNING
+
+            # Test restarting via admin API endpoint
+            response = client.post(
+                "/api/v1/admin/scheduler/control",
+                json={"action": "restart"},
+                headers={"Authorization": f"Bearer {admin_token}"}
+            )
+
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+            data = response.json()
+
+            # Verify response structure
+            assert data["success"] is True
+            assert "restarted" in data["message"].lower()
+            assert data["newState"] == "running"
+
+            # Verify scheduler is still running after restart
+            updated_scheduler = get_scheduler_service(db_session)
+            assert updated_scheduler.state == SchedulerState.RUNNING
+
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_scheduler_can_be_restarted_when_paused(self, db_session: Session):
+        """Test that a paused scheduler can be restarted via API."""
+        client = TestClient(app)
+        admin_token = get_admin_jwt_token(db_session)
+
+        # Override db dependency
+        app.dependency_overrides[get_db] = lambda: db_session
+
+        try:
+            # Setup: start then pause scheduler
+            scheduler = get_scheduler_service(db_session)
+            scheduler.start()
+            scheduler.pause()
+            assert scheduler.state == SchedulerState.PAUSED
+
+            # Test restarting via admin API endpoint
+            response = client.post(
+                "/api/v1/admin/scheduler/control",
+                json={"action": "restart"},
+                headers={"Authorization": f"Bearer {admin_token}"}
+            )
+
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+            data = response.json()
+
+            # Verify response structure
+            assert data["success"] is True
+            assert "restarted" in data["message"].lower()
+            assert data["newState"] == "running"
+
+            # Verify scheduler is running after restart
+            updated_scheduler = get_scheduler_service(db_session)
+            assert updated_scheduler.state == SchedulerState.RUNNING
+
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_scheduler_can_be_restarted_when_stopped(self, db_session: Session):
+        """Test that a stopped scheduler can be restarted via API."""
+        client = TestClient(app)
+        admin_token = get_admin_jwt_token(db_session)
+
+        # Override db dependency
+        app.dependency_overrides[get_db] = lambda: db_session
+
+        try:
+            # Ensure scheduler is stopped
+            scheduler = get_scheduler_service(db_session)
+            assert scheduler.state == SchedulerState.STOPPED
+
+            # Test restarting via admin API endpoint
+            response = client.post(
+                "/api/v1/admin/scheduler/control",
+                json={"action": "restart"},
+                headers={"Authorization": f"Bearer {admin_token}"}
+            )
+
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+            data = response.json()
+
+            # Verify response structure
+            assert data["success"] is True
+            assert "restarted" in data["message"].lower()
+            assert data["newState"] == "running"
+
+            # Verify scheduler is running after restart
+            updated_scheduler = get_scheduler_service(db_session)
+            assert updated_scheduler.state == SchedulerState.RUNNING
+
+        finally:
+            app.dependency_overrides.clear()

@@ -1497,7 +1497,7 @@ async def control_scheduler(
     """Control scheduler operations (start, stop, pause, resume)."""
     logger.info(f"Admin user {current_admin.email} requesting scheduler control: {control_request.action}")
 
-    from src.services.scheduler_service import get_scheduler_service
+    from src.services.scheduler_service import get_scheduler_service, SchedulerState
     from src.services.audit_service import AuditService
     from fastapi import HTTPException
 
@@ -1561,6 +1561,33 @@ async def control_scheduler(
                 audit_service.log_scheduler_resumed(
                     scheduler_name=scheduler_name,
                     admin_user_id=str(current_admin.id),
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+
+        elif control_request.action == "restart":
+            # Restart means: stop if running/paused, then start
+            current_state = scheduler_service.state
+
+            # Step 1: Stop the scheduler if it's not already stopped
+            stop_success = True
+            if current_state != SchedulerState.STOPPED:
+                stop_success = scheduler_service.stop("admin_restart")
+
+            # Step 2: Start the scheduler
+            if stop_success:
+                success = scheduler_service.start(control_request.configuration)
+                message = "Scheduler restarted successfully" if success else "Failed to restart scheduler"
+            else:
+                success = False
+                message = "Failed to restart scheduler - could not stop existing scheduler"
+
+            if success:
+                # Create audit log for restart
+                audit_service.log_scheduler_started(
+                    scheduler_name=scheduler_name,
+                    admin_user_id=str(current_admin.id),
+                    scheduler_config=control_request.configuration,
                     ip_address=getattr(request.client, 'host', None) if request.client else None,
                     user_agent=request.headers.get('User-Agent')
                 )
