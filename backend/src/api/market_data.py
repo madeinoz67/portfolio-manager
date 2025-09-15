@@ -178,7 +178,7 @@ def build_price_response(
             "company_name": price_data.get("company_name")
         }
 
-    # Calculate trend if trend service is available
+    # Calculate trend if trend service is available, fallback to neutral if no data
     if trend_service:
         try:
             trend_data = trend_service.calculate_trend(symbol)
@@ -189,11 +189,31 @@ def build_price_response(
                     change_percent=float(trend_data.change_percent),
                     opening_price=float(trend_data.opening_price) if trend_data.opening_price else None
                 )
+            else:
+                # Fallback to neutral trend when no opening price data available
+                base_data["trend"] = TrendData(
+                    trend="neutral",
+                    change=0.0,
+                    change_percent=0.0,
+                    opening_price=None
+                )
         except Exception as e:
             logger.warning(f"Failed to calculate trend for {symbol}: {e}")
-            base_data["trend"] = None
+            # Fallback to neutral trend on error
+            base_data["trend"] = TrendData(
+                trend="neutral",
+                change=0.0,
+                change_percent=0.0,
+                opening_price=None
+            )
     else:
-        base_data["trend"] = None
+        # Always provide neutral trend when no trend service available
+        base_data["trend"] = TrendData(
+            trend="neutral",
+            change=0.0,
+            change_percent=0.0,
+            opening_price=None
+        )
 
     return PriceResponse(**base_data)
 

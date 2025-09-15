@@ -4,15 +4,11 @@ import React, { useState, useEffect } from 'react'
 import Navigation from '@/components/layout/Navigation'
 import Button from '@/components/ui/Button'
 import { formatDisplayDateTime } from '@/utils/timezone'
+import { StreamingPriceDisplay } from '@/components/MarketData/StreamingPriceDisplay'
+import { PriceResponse } from '@/types/marketData'
 
-interface PriceData {
-  symbol: string
-  price: number
-  volume?: number
-  market_cap?: number
-  fetched_at: string
-  cached: boolean
-}
+// Use the comprehensive PriceResponse type instead of basic PriceData
+type PriceData = PriceResponse
 
 export default function MarketDataPage() {
   const [symbols, setSymbols] = useState<string[]>([])
@@ -247,55 +243,31 @@ export default function MarketDataPage() {
                   key={symbol}
                   className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border dark:border-gray-700"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-xl font-bold text-gray-900 dark:text-white">{symbol}</div>
-                    <div className={`text-xs px-2 py-1 rounded-full ${
-                      priceInfo?.cached
-                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-                        : priceInfo
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                        : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                    }`}>
-                      {isLoading ? 'Loading...' : priceInfo?.cached ? 'Cached' : priceInfo ? 'Live' : 'No Data'}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {isLoading ? (
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-9 w-24 rounded"></div>
-                      ) : priceInfo ? (
-                        `$${priceInfo.price.toFixed(2)}`
-                      ) : (
-                        <span className="text-gray-500">--</span>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      {priceInfo?.volume && (
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                          Volume: {priceInfo.volume.toLocaleString()}
+                  {isLoading ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xl font-bold text-gray-900 dark:text-white">{symbol}</div>
+                        <div className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded-full">
+                          Loading...
                         </div>
-                      )}
-                      {priceInfo?.market_cap && (
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                          Market Cap: ${(priceInfo.market_cap / 1e9).toFixed(1)}B
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {isLoading ? 'Fetching...' : priceInfo ?
-                          (() => {
-                            try {
-                              const formattedDate = formatDisplayDateTime(priceInfo.fetched_at);
-                              return formattedDate === 'Invalid Date' ? 'Date unavailable' : `Updated: ${formattedDate}`;
-                            } catch {
-                              return 'Date unavailable';
-                            }
-                          })() :
-                          'No price data'
-                        }
                       </div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-9 w-24 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
                     </div>
-                  </div>
+                  ) : priceInfo ? (
+                    <StreamingPriceDisplay
+                      price={priceInfo}
+                      showVolume={true}
+                      showMarketCap={true}
+                      showUpdateTime={true}
+                      compact={false}
+                    />
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="text-xl font-bold text-gray-900 dark:text-white mb-2">{symbol}</div>
+                      <span className="text-gray-500">No price data available</span>
+                    </div>
+                  )}
                 </div>
               )
             })}
