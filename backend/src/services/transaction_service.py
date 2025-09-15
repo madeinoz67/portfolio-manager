@@ -15,6 +15,7 @@ from src.core.logging import LoggerMixin
 from src.models import Portfolio, Stock, Transaction, Holding
 from src.models.transaction import TransactionType, SourceType
 from src.schemas.transaction import TransactionCreate, TransactionResponse
+from src.services.audit_service import AuditService
 
 
 class TransactionService(LoggerMixin):
@@ -174,6 +175,10 @@ def process_transaction(
         transaction_with_stock = db.query(Transaction).options(
             joinedload(Transaction.stock)
         ).filter(Transaction.id == transaction.id).first()
+
+        # Create audit log for transaction creation
+        # Note: We can't get user_id here since this service doesn't have access to request context
+        # The audit logging will need to be added at the API layer where we have access to current_user
 
         service.log_info("Transaction processed successfully",
                         transaction_id=str(transaction.id),
