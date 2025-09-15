@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from src.main import app
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from tests.conftest import get_admin_jwt_token, get_user_jwt_token
 
 client = TestClient(app)

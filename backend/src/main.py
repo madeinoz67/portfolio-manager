@@ -234,7 +234,7 @@ async def lifespan(app: FastAPI):
         # Import all models to ensure they're registered with Base
         from src.models import user, portfolio, stock, transaction, holding, news_notice  # noqa: F401
         from src.models import market_data_provider, realtime_price_history, portfolio_valuation  # noqa: F401
-        from src.models import sse_connection, poll_interval_config, api_usage_metrics  # noqa: F401
+        from src.models import sse_connection, poll_interval_config, market_data_api_usage_metrics  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:

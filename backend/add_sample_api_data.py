@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.database import get_db
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from datetime import datetime, timedelta
 import random
 

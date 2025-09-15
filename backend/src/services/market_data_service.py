@@ -17,7 +17,7 @@ from sqlalchemy import desc, and_
 
 from src.models.market_data_provider import MarketDataProvider
 from src.models.realtime_price_history import RealtimePriceHistory
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.utils.datetime_utils import to_iso_string
 from src.models.holding import Holding
 from src.models.stock import Stock

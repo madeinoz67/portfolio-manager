@@ -8,7 +8,7 @@ from datetime import datetime, date
 from sqlalchemy.orm import Session
 from src.models.user import User
 from src.models.user_role import UserRole
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 
 
@@ -179,7 +179,7 @@ class TestRealDataDatabaseSchema:
     def test_api_usage_metrics_fields_exist(self, db_session: Session):
         """Test that required fields exist in api_usage_metrics table"""
         # This test should pass with correct schema
-        from src.models.api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 
         # Create a test record to verify all expected fields exist
         usage = ApiUsageMetrics(
@@ -274,7 +274,7 @@ class TestRealMarketDataEnhancements:
         from src.api.admin import get_api_usage
         from src.models.user import User
         from src.models.user_role import UserRole
-        from src.models.api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
         from datetime import datetime, date, timedelta
 
         # Create admin user
@@ -322,7 +322,7 @@ class TestRealMarketDataEnhancements:
         from src.api.admin import get_market_data_status
         from src.models.user import User
         from src.models.user_role import UserRole
-        from src.models.api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 
         # Create admin user
         admin_user = User(
@@ -362,7 +362,7 @@ class TestRealMarketDataEnhancements:
         # For now, this is a placeholder test to verify the data structure
         # would be available for implementing real recent activity
 
-        from src.models.api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
         from datetime import datetime, timedelta
 
         # Add recent activity events that could be used for activity tracking

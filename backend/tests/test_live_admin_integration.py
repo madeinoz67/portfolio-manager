@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from fastapi.testclient import TestClient
 
 from src.models.stock import Stock, StockStatus
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.models.user import User
 from src.models.user_role import UserRole

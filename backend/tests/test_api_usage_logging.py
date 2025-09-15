@@ -8,7 +8,7 @@ and that datetime objects are properly stored in the database.
 import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.services.market_data_service import MarketDataService
 

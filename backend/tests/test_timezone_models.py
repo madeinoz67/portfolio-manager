@@ -15,7 +15,7 @@ from src.models.holding import Holding
 from src.models.stock import Stock
 from src.models.transaction import Transaction
 from src.models.api_key import ApiKey
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.models.news_notice import NewsNotice
 from src.models.poll_interval_config import PollIntervalConfig

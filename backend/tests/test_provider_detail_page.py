@@ -12,7 +12,7 @@ from src.main import app
 from src.models.user import User
 from src.models.user_role import UserRole
 from src.models.market_data_provider import MarketDataProvider
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.core.auth import create_access_token, get_password_hash
 
 

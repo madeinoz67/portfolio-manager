@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from src.database import SessionLocal
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 from src.utils.datetime_utils import now
 
 def add_realistic_api_usage():

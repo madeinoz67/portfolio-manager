@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from src.database import engine
-from src.models.api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_api_usage_metrics import ApiUsageMetrics
 
 
 class TestApiUsageMetricsTableTDD:
