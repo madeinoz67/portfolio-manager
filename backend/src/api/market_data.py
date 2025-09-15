@@ -28,6 +28,7 @@ from src.models.sse_connection import SSEConnection
 from src.models.api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import ProviderActivity
 from src.services.market_data_service import MarketDataService
+from src.services.trend_calculation_service import TrendCalculationService
 from src.services.activity_service import log_provider_activity
 from src.core.logging import get_logger
 from sqlalchemy import func, and_, or_
@@ -37,7 +38,98 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/market-data", tags=["market-data"])
 
 
+def build_price_response(
+    symbol: str,
+    price_record,
+    price_data: Dict = None,
+    cached: bool = False,
+    trend_service: TrendCalculationService = None
+) -> PriceResponse:
+    """Build comprehensive price response with trend data."""
+    # Use price_record if available, otherwise price_data
+    if price_record:
+        base_data = {
+            "symbol": symbol,
+            "price": float(price_record.price),
+            "volume": price_record.volume,
+            "market_cap": float(price_record.market_cap) if price_record.market_cap else None,
+            "fetched_at": price_record.fetched_at.isoformat() + "Z",
+            "cached": cached,
+
+            # Extended price information
+            "opening_price": float(price_record.opening_price) if price_record.opening_price else None,
+            "high_price": float(price_record.high_price) if price_record.high_price else None,
+            "low_price": float(price_record.low_price) if price_record.low_price else None,
+            "previous_close": float(price_record.previous_close) if price_record.previous_close else None,
+
+            # Market metrics
+            "fifty_two_week_high": float(price_record.fifty_two_week_high) if price_record.fifty_two_week_high else None,
+            "fifty_two_week_low": float(price_record.fifty_two_week_low) if price_record.fifty_two_week_low else None,
+            "dividend_yield": float(price_record.dividend_yield) if price_record.dividend_yield else None,
+            "pe_ratio": float(price_record.pe_ratio) if price_record.pe_ratio else None,
+            "beta": float(price_record.beta) if price_record.beta else None,
+
+            # Metadata
+            "currency": price_record.currency or "USD",
+            "company_name": price_record.company_name
+        }
+    else:
+        # Fallback to price_data
+        base_data = {
+            "symbol": symbol,
+            "price": float(price_data["price"]),
+            "volume": price_data.get("volume"),
+            "market_cap": float(price_data["market_cap"]) if price_data.get("market_cap") else None,
+            "fetched_at": price_data["source_timestamp"].isoformat() + "Z",
+            "cached": cached,
+
+            # Extended price information
+            "opening_price": float(price_data["open_price"]) if price_data.get("open_price") else None,
+            "high_price": float(price_data["high_price"]) if price_data.get("high_price") else None,
+            "low_price": float(price_data["low_price"]) if price_data.get("low_price") else None,
+            "previous_close": float(price_data["previous_close"]) if price_data.get("previous_close") else None,
+
+            # Market metrics
+            "fifty_two_week_high": float(price_data["fifty_two_week_high"]) if price_data.get("fifty_two_week_high") else None,
+            "fifty_two_week_low": float(price_data["fifty_two_week_low"]) if price_data.get("fifty_two_week_low") else None,
+            "dividend_yield": float(price_data["dividend_yield"]) if price_data.get("dividend_yield") else None,
+            "pe_ratio": float(price_data["pe_ratio"]) if price_data.get("pe_ratio") else None,
+            "beta": float(price_data["beta"]) if price_data.get("beta") else None,
+
+            # Metadata
+            "currency": price_data.get("currency", "USD"),
+            "company_name": price_data.get("company_name")
+        }
+
+    # Calculate trend if trend service is available
+    if trend_service:
+        try:
+            trend_data = trend_service.calculate_trend(symbol)
+            if trend_data:
+                base_data["trend"] = TrendData(
+                    trend=trend_data.trend.value,
+                    change=float(trend_data.change),
+                    change_percent=float(trend_data.change_percent),
+                    opening_price=float(trend_data.opening_price) if trend_data.opening_price else None
+                )
+        except Exception as e:
+            logger.warning(f"Failed to calculate trend for {symbol}: {e}")
+            base_data["trend"] = None
+    else:
+        base_data["trend"] = None
+
+    return PriceResponse(**base_data)
+
+
 # Pydantic models
+class TrendData(BaseModel):
+    """Price trend information."""
+    trend: str  # 'up', 'down', 'neutral'
+    change: float
+    change_percent: float
+    opening_price: Optional[float] = None
+
+
 class PriceResponse(BaseModel):
     symbol: str
     price: float
@@ -45,6 +137,26 @@ class PriceResponse(BaseModel):
     market_cap: Optional[float] = None
     fetched_at: str
     cached: bool = False
+
+    # Extended price information
+    opening_price: Optional[float] = None
+    high_price: Optional[float] = None
+    low_price: Optional[float] = None
+    previous_close: Optional[float] = None
+
+    # Trend information
+    trend: Optional[TrendData] = None
+
+    # Market metrics
+    fifty_two_week_high: Optional[float] = None
+    fifty_two_week_low: Optional[float] = None
+    dividend_yield: Optional[float] = None
+    pe_ratio: Optional[float] = None
+    beta: Optional[float] = None
+
+    # Metadata
+    currency: Optional[str] = "USD"
+    company_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -92,23 +204,22 @@ async def get_price(
     current_user: User = Depends(get_current_user_flexible),
     db: Session = Depends(get_db)
 ):
-    """Get current price for a specific symbol."""
+    """Get current price for a specific symbol with comprehensive market data and trend information."""
 
     symbol = symbol.upper()
     service = MarketDataService(db)
+    trend_service = TrendCalculationService(db)
 
     try:
         # First check cache
         cached_price = service.get_latest_price(symbol, max_age_minutes=30)
 
         if cached_price:
-            return PriceResponse(
+            return build_price_response(
                 symbol=symbol,
-                price=float(cached_price.price),
-                volume=cached_price.volume,
-                market_cap=float(cached_price.market_cap) if cached_price.market_cap else None,
-                fetched_at=cached_price.fetched_at.isoformat() + "Z",
-                cached=True
+                price_record=cached_price,
+                cached=True,
+                trend_service=trend_service
             )
 
         # Fetch fresh data if not in cache
@@ -120,13 +231,12 @@ async def get_price(
                 detail=f"Price data not available for symbol {symbol}"
             )
 
-        return PriceResponse(
+        return build_price_response(
             symbol=symbol,
-            price=float(price_data["price"]),
-            volume=price_data.get("volume"),
-            market_cap=float(price_data["market_cap"]) if price_data.get("market_cap") else None,
-            fetched_at=price_data["source_timestamp"].isoformat() + "Z",
-            cached=False
+            price_record=None,
+            price_data=price_data,
+            cached=False,
+            trend_service=trend_service
         )
 
     except HTTPException:
@@ -147,7 +257,7 @@ async def get_bulk_prices(
     current_user: User = Depends(get_current_user_flexible),
     db: Session = Depends(get_db)
 ):
-    """Get current prices for multiple symbols."""
+    """Get current prices for multiple symbols with comprehensive market data and trends."""
 
     if len(symbols) > 50:
         raise HTTPException(
@@ -157,6 +267,7 @@ async def get_bulk_prices(
 
     symbols = [s.upper() for s in symbols]
     service = MarketDataService(db)
+    trend_service = TrendCalculationService(db)
 
     try:
         # Fetch each symbol individually for simplicity
@@ -170,13 +281,11 @@ async def get_bulk_prices(
                 cached_price = service.get_latest_price(symbol, max_age_minutes=30)
 
                 if cached_price:
-                    prices[symbol] = PriceResponse(
+                    prices[symbol] = build_price_response(
                         symbol=symbol,
-                        price=float(cached_price.price),
-                        volume=cached_price.volume,
-                        market_cap=float(cached_price.market_cap) if cached_price.market_cap else None,
-                        fetched_at=cached_price.fetched_at.isoformat() + "Z",
-                        cached=True
+                        price_record=cached_price,
+                        cached=True,
+                        trend_service=trend_service
                     )
                     cached_count += 1
                 else:
@@ -184,13 +293,12 @@ async def get_bulk_prices(
                     price_data = await service.fetch_price(symbol)
 
                     if price_data:
-                        prices[symbol] = PriceResponse(
+                        prices[symbol] = build_price_response(
                             symbol=symbol,
-                            price=float(price_data["price"]),
-                            volume=price_data.get("volume"),
-                            market_cap=float(price_data["market_cap"]) if price_data.get("market_cap") else None,
-                            fetched_at=price_data["source_timestamp"].isoformat() + "Z",
-                            cached=False
+                            price_record=None,
+                            price_data=price_data,
+                            cached=False,
+                            trend_service=trend_service
                         )
                         fresh_count += 1
             except Exception as e:

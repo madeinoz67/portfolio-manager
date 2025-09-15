@@ -527,12 +527,31 @@ class MarketDataService:
                 return {
                     "symbol": symbol,  # Keep original symbol format
                     "price": Decimal(str(round(current_price, 4))),
+
+                    # Extended price information for trend calculations
+                    "open_price": Decimal(str(round(info.get('open', current_price), 4))) if info and info.get('open') else None,
+                    "high_price": Decimal(str(round(info.get('dayHigh', current_price), 4))) if info and info.get('dayHigh') else None,
+                    "low_price": Decimal(str(round(info.get('dayLow', current_price), 4))) if info and info.get('dayLow') else None,
+                    "previous_close": Decimal(str(round(info.get('previousClose', current_price), 4))) if info and info.get('previousClose') else None,
+
+                    # Volume and market data
                     "volume": volume,
                     "market_cap": info.get('marketCap') if info else None,
-                    "source_timestamp": utc_now(),
-                    "provider": "yfinance",
+
+                    # Extended market information
+                    "fifty_two_week_high": Decimal(str(round(info.get('fiftyTwoWeekHigh', current_price), 4))) if info and info.get('fiftyTwoWeekHigh') else None,
+                    "fifty_two_week_low": Decimal(str(round(info.get('fiftyTwoWeekLow', current_price), 4))) if info and info.get('fiftyTwoWeekLow') else None,
+                    "dividend_yield": Decimal(str(round(info.get('dividendYield', 0) * 100, 2))) if info and info.get('dividendYield') else None,
+                    "pe_ratio": Decimal(str(round(info.get('trailingPE', 0), 2))) if info and info.get('trailingPE') else None,
+                    "beta": Decimal(str(round(info.get('beta', 1.0), 2))) if info and info.get('beta') else None,
+
+                    # Metadata
+                    "currency": info.get('currency', 'AUD') if info else 'AUD',
                     "company_name": info.get('shortName') if info else None,
-                    "currency": info.get('currency', 'AUD') if info else 'AUD'
+
+                    # System fields
+                    "source_timestamp": utc_now(),
+                    "provider": "yfinance"
                 }
 
             # Run in thread pool to avoid blocking async event loop
@@ -810,21 +829,104 @@ class MarketDataService:
             price_record = RealtimePriceHistory(
                 symbol=symbol,
                 price=price_data["price"],
+
+                # Extended price information for trend calculations
+                opening_price=price_data.get("open_price"),
+                high_price=price_data.get("high_price"),
+                low_price=price_data.get("low_price"),
+                previous_close=price_data.get("previous_close"),
+
+                # Volume and market data
                 volume=price_data.get("volume"),
                 market_cap=price_data.get("market_cap"),
+
+                # Extended market information
+                fifty_two_week_high=price_data.get("fifty_two_week_high"),
+                fifty_two_week_low=price_data.get("fifty_two_week_low"),
+                dividend_yield=price_data.get("dividend_yield"),
+                pe_ratio=price_data.get("pe_ratio"),
+                beta=price_data.get("beta"),
+
+                # Metadata
+                currency=price_data.get("currency", "USD"),
+                company_name=price_data.get("company_name"),
+
+                # System fields
                 provider_id=provider.id,
                 source_timestamp=price_data["source_timestamp"],
-                fetched_at=datetime.utcnow()
+                fetched_at=utc_now()
             )
 
             self.db.add(price_record)
             self.db.commit()
 
-            logger.info(f"Stored price data for {symbol}: ${price_data['price']}")
+            logger.info(f"Stored comprehensive price data for {symbol}: ${price_data['price']}")
+            return price_record
 
         except Exception as e:
-            logger.error(f"Error storing price data for {symbol}: {e}")
+            logger.error(f"Error storing comprehensive price data for {symbol}: {e}")
             self.db.rollback()
+            raise
+
+    def _store_comprehensive_price_data(self, symbol: str, price_data: Dict, provider: MarketDataProvider, db_session: Session) -> RealtimePriceHistory:
+        """Store comprehensive price data with custom session (for testing)."""
+        try:
+            price_record = RealtimePriceHistory(
+                symbol=symbol,
+                price=price_data["price"],
+
+                # Extended price information for trend calculations
+                opening_price=price_data.get("open_price"),
+                high_price=price_data.get("high_price"),
+                low_price=price_data.get("low_price"),
+                previous_close=price_data.get("previous_close"),
+
+                # Volume and market data
+                volume=price_data.get("volume"),
+                market_cap=price_data.get("market_cap"),
+
+                # Extended market information
+                fifty_two_week_high=price_data.get("fifty_two_week_high"),
+                fifty_two_week_low=price_data.get("fifty_two_week_low"),
+                dividend_yield=price_data.get("dividend_yield"),
+                pe_ratio=price_data.get("pe_ratio"),
+                beta=price_data.get("beta"),
+
+                # Metadata
+                currency=price_data.get("currency", "USD"),
+                company_name=price_data.get("company_name"),
+
+                # System fields
+                provider_id=provider.id,
+                source_timestamp=price_data["source_timestamp"],
+                fetched_at=utc_now()
+            )
+
+            db_session.add(price_record)
+            db_session.commit()
+            logger.info(f"Stored comprehensive price data for {symbol}: ${price_data['price']}")
+            return price_record
+
+        except Exception as e:
+            logger.error(f"Error storing comprehensive price data for {symbol}: {e}")
+            db_session.rollback()
+            raise
+
+    def get_latest_opening_price(self, symbol: str) -> Optional[Decimal]:
+        """Get the latest opening price for a symbol."""
+        record = self.db.query(RealtimePriceHistory)\
+            .filter(RealtimePriceHistory.symbol == symbol)\
+            .order_by(desc(RealtimePriceHistory.fetched_at))\
+            .first()
+        return record.opening_price if record else None
+
+    def get_latest_price_value(self, symbol: str) -> Optional[Decimal]:
+        """Get the latest current price value for a symbol."""
+        record = self.db.query(RealtimePriceHistory)\
+            .filter(RealtimePriceHistory.symbol == symbol)\
+            .order_by(desc(RealtimePriceHistory.fetched_at))\
+            .first()
+        return record.price if record else None
 
     def _log_api_usage(self, provider: MarketDataProvider, symbol: str, status_code: int,
                       success: bool, error_message: Optional[str] = None):
