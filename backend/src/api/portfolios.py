@@ -6,7 +6,7 @@ from typing import Annotated, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -22,6 +22,7 @@ from src.schemas.portfolio import (
 from src.schemas.holding import HoldingResponse
 from src.schemas.news_notice import NewsNoticeResponse
 from src.services.dynamic_portfolio_service import DynamicPortfolioService
+from src.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/portfolios", tags=["Portfolios"])
 
@@ -44,6 +45,7 @@ async def list_portfolios(
 @router.post("", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)
 async def create_portfolio(
     portfolio_data: PortfolioCreate,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> PortfolioResponse:
@@ -53,11 +55,27 @@ async def create_portfolio(
         description=portfolio_data.description,
         owner_id=current_user.id
     )
-    
+
     db.add(portfolio)
     db.commit()
     db.refresh(portfolio)
-    
+
+    # Audit logging
+    try:
+        audit_service = AuditService(db)
+        audit_service.log_portfolio_created(
+            portfolio=portfolio,
+            user_id=str(current_user.id),
+            ip_address=getattr(request.client, 'host', None) if request.client else None,
+            user_agent=request.headers.get('User-Agent')
+        )
+        db.commit()  # Commit audit log
+    except Exception as e:
+        # Log error but don't fail the operation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create audit log for portfolio creation: {e}")
+
     return PortfolioResponse.model_validate(portfolio)
 
 
@@ -88,6 +106,7 @@ async def get_portfolio(
 async def update_portfolio(
     portfolio_id: UUID,
     portfolio_data: PortfolioUpdate,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> PortfolioResponse:
@@ -97,20 +116,42 @@ async def update_portfolio(
         Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).first()
-    
+
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portfolio not found"
         )
-    
-    # Update fields that were provided
+
+    # Capture changes for audit log
+    changes = {}
     for field, value in portfolio_data.model_dump(exclude_unset=True).items():
+        old_value = getattr(portfolio, field)
+        if old_value != value:
+            changes[field] = {"old": old_value, "new": value}
         setattr(portfolio, field, value)
-    
+
     db.commit()
     db.refresh(portfolio)
-    
+
+    # Audit logging (only if there were actual changes)
+    if changes:
+        try:
+            audit_service = AuditService(db)
+            audit_service.log_portfolio_updated(
+                portfolio=portfolio,
+                user_id=str(current_user.id),
+                changes=changes,
+                ip_address=getattr(request.client, 'host', None) if request.client else None,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.commit()  # Commit audit log
+        except Exception as e:
+            # Log error but don't fail the operation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to create audit log for portfolio update: {e}")
+
     return PortfolioResponse.model_validate(portfolio)
 
 
@@ -142,6 +183,7 @@ async def delete_portfolio(
 async def delete_portfolio_with_confirmation(
     portfolio_id: UUID,
     confirmation: PortfolioDeleteConfirmation,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> dict:
@@ -165,9 +207,30 @@ async def delete_portfolio_with_confirmation(
             detail="Confirmation name does not match portfolio name"
         )
 
+    # Store portfolio name before deletion for audit log
+    portfolio_name = portfolio.name
+
     # Soft delete
     portfolio.is_active = False
     db.commit()
+
+    # Audit logging
+    try:
+        audit_service = AuditService(db)
+        audit_service.log_portfolio_deleted(
+            portfolio_id=str(portfolio_id),
+            portfolio_name=portfolio_name,
+            user_id=str(current_user.id),
+            is_hard_delete=False,
+            ip_address=getattr(request.client, 'host', None) if request.client else None,
+            user_agent=request.headers.get('User-Agent')
+        )
+        db.commit()  # Commit audit log
+    except Exception as e:
+        # Log error but don't fail the operation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create audit log for portfolio deletion: {e}")
 
     return {"message": "Portfolio deleted successfully"}
 
@@ -176,6 +239,7 @@ async def delete_portfolio_with_confirmation(
 async def hard_delete_portfolio_with_confirmation(
     portfolio_id: UUID,
     confirmation: PortfolioDeleteConfirmation,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user_flexible)]
 ) -> dict:
@@ -199,9 +263,30 @@ async def hard_delete_portfolio_with_confirmation(
             detail="Confirmation name does not match portfolio name"
         )
 
+    # Store portfolio name before deletion for audit log
+    portfolio_name = portfolio.name
+
+    # Create audit log before deletion (since portfolio will be deleted)
+    try:
+        audit_service = AuditService(db)
+        audit_service.log_portfolio_deleted(
+            portfolio_id=str(portfolio_id),
+            portfolio_name=portfolio_name,
+            user_id=str(current_user.id),
+            is_hard_delete=True,
+            ip_address=getattr(request.client, 'host', None) if request.client else None,
+            user_agent=request.headers.get('User-Agent')
+        )
+        # Don't commit yet - we'll commit after the deletion
+    except Exception as e:
+        # Log error but don't fail the operation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create audit log for portfolio hard deletion: {e}")
+
     # Hard delete - cascade will handle holdings and transactions
     db.delete(portfolio)
-    db.commit()
+    db.commit()  # Commit both deletion and audit log
 
     return {"message": "Portfolio permanently deleted"}
 
