@@ -314,6 +314,11 @@ class MarketDataService:
                 }
             )
 
+            # Trigger bulk portfolio updates for all successfully fetched symbols
+            successful_symbols = list(price_data.keys())
+            if successful_symbols:
+                self._trigger_bulk_portfolio_updates(successful_symbols)
+
         return price_data
 
     async def _fetch_from_provider_single(self, symbol: str, provider: MarketDataProvider) -> Optional[Dict]:
@@ -824,7 +829,7 @@ class MarketDataService:
             return {symbol: None for symbol in symbols}
 
     async def _store_price_data(self, symbol: str, price_data: Dict, provider: MarketDataProvider):
-        """Store price data in the database."""
+        """Store price data in the database and trigger portfolio updates."""
         try:
             price_record = RealtimePriceHistory(
                 symbol=symbol,
@@ -861,6 +866,10 @@ class MarketDataService:
             self.db.commit()
 
             logger.info(f"Stored comprehensive price data for {symbol}: ${price_data['price']}")
+
+            # Trigger real-time portfolio updates for this symbol
+            self._trigger_portfolio_updates(symbol)
+
             return price_record
 
         except Exception as e:
@@ -1006,6 +1015,87 @@ class MarketDataService:
             fresh_prices.update(new_prices)
 
         return fresh_prices
+
+    def _trigger_portfolio_updates(self, symbol: str):
+        """
+        Trigger real-time portfolio updates for a symbol using the update queue.
+        This method is called after price data is stored to update affected portfolios.
+        """
+        try:
+            from src.services.portfolio_update_queue import get_portfolio_update_queue
+            from src.services.real_time_portfolio_service import RealTimePortfolioService
+
+            # Find portfolios that contain this symbol
+            portfolio_service = RealTimePortfolioService(self.db)
+            affected_portfolios = portfolio_service._find_portfolios_with_symbol(symbol)
+
+            if affected_portfolios:
+                # Queue updates for each affected portfolio instead of executing immediately
+                queue = get_portfolio_update_queue()
+
+                for portfolio in affected_portfolios:
+                    queued = queue.queue_portfolio_update(
+                        portfolio_id=str(portfolio.id),
+                        symbols=[symbol],
+                        priority=1  # Normal priority for price updates
+                    )
+
+                    if queued:
+                        logger.debug(f"Queued portfolio update for {portfolio.id} after {symbol} price change")
+                    else:
+                        logger.warning(f"Rate limited portfolio update for {portfolio.id} after {symbol} price change")
+
+                logger.info(f"Queued portfolio updates for {len(affected_portfolios)} portfolios after {symbol} price change")
+
+        except Exception as e:
+            logger.error(f"Error queuing portfolio updates for symbol {symbol}: {e}")
+            # Don't re-raise - this should not fail the price storage operation
+
+    def _trigger_bulk_portfolio_updates(self, symbols: List[str]):
+        """
+        Trigger bulk real-time portfolio updates for multiple symbols using the queue.
+        More efficient than individual updates when multiple prices change.
+        """
+        try:
+            from src.services.portfolio_update_queue import get_portfolio_update_queue
+            from src.services.real_time_portfolio_service import RealTimePortfolioService
+
+            # Find all unique portfolios affected by these symbols
+            portfolio_service = RealTimePortfolioService(self.db)
+            all_affected_portfolios = set()
+
+            for symbol in symbols:
+                portfolios = portfolio_service._find_portfolios_with_symbol(symbol)
+                all_affected_portfolios.update(portfolios)
+
+            if all_affected_portfolios:
+                # Queue bulk updates for each affected portfolio
+                queue = get_portfolio_update_queue()
+                queued_count = 0
+
+                for portfolio in all_affected_portfolios:
+                    # Find which symbols from the bulk update affect this portfolio
+                    portfolio_symbols = []
+                    for symbol in symbols:
+                        symbol_portfolios = portfolio_service._find_portfolios_with_symbol(symbol)
+                        if portfolio in symbol_portfolios:
+                            portfolio_symbols.append(symbol)
+
+                    if portfolio_symbols:
+                        queued = queue.queue_portfolio_update(
+                            portfolio_id=str(portfolio.id),
+                            symbols=portfolio_symbols,
+                            priority=2  # Higher priority for bulk operations
+                        )
+
+                        if queued:
+                            queued_count += 1
+
+                logger.info(f"Queued bulk portfolio updates for {queued_count}/{len(all_affected_portfolios)} unique portfolios after {len(symbols)} price changes")
+
+        except Exception as e:
+            logger.error(f"Error queuing bulk portfolio updates for symbols {symbols}: {e}")
+            # Don't re-raise - this should not fail the price storage operation
 
 
 # Helper functions for activity logging (used by tests)
