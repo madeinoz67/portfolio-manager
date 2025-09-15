@@ -3,6 +3,7 @@
 import React from 'react'
 import { PriceResponse } from '@/types/marketData'
 import { parseServerDate, getRelativeTime, isWithinTimeRange } from '@/utils/timezone'
+import { TrendIndicator, PriceTrendDisplay } from './TrendIndicator'
 
 interface StreamingPriceDisplayProps {
   price: PriceResponse
@@ -68,7 +69,15 @@ export function StreamingPriceDisplay({
           <span className="font-medium text-gray-900 dark:text-gray-100">
             {formatPrice(price.price)}
           </span>
-          {hasChange && (
+          {price.trend ? (
+            <TrendIndicator
+              trend={price.trend}
+              size="sm"
+              showIcon={true}
+              showChange={true}
+              showPercentage={true}
+            />
+          ) : hasChange && (
             <span className={`text-sm font-medium ${changeColor}`}>
               {isPositive ? '+' : ''}{change.toFixed(2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
             </span>
@@ -117,7 +126,17 @@ export function StreamingPriceDisplay({
         </div>
       </div>
 
-      {hasChange && (
+      {/* Display trend information if available, fallback to change from previous price */}
+      {price.trend ? (
+        <TrendIndicator
+          trend={price.trend}
+          size="md"
+          showIcon={true}
+          showChange={true}
+          showPercentage={true}
+          className="mb-2"
+        />
+      ) : hasChange && (
         <div className={`flex items-center space-x-1 ${changeColor}`}>
           <span className="font-medium">
             {isPositive ? '+' : ''}{change.toFixed(2)}
@@ -131,7 +150,31 @@ export function StreamingPriceDisplay({
         </div>
       )}
 
-      <div className="flex items-center space-x-6 text-sm text-gray-600 dark:text-gray-400">
+      <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
+        {price.opening_price && (
+          <div>
+            <span className="font-medium">Open:</span> {formatPrice(price.opening_price)}
+          </div>
+        )}
+
+        {price.previous_close && (
+          <div>
+            <span className="font-medium">Prev Close:</span> {formatPrice(price.previous_close)}
+          </div>
+        )}
+
+        {price.high_price && (
+          <div>
+            <span className="font-medium">High:</span> {formatPrice(price.high_price)}
+          </div>
+        )}
+
+        {price.low_price && (
+          <div>
+            <span className="font-medium">Low:</span> {formatPrice(price.low_price)}
+          </div>
+        )}
+
         {showVolume && price.volume && (
           <div>
             <span className="font-medium">Volume:</span> {formatVolume(price.volume)}

@@ -1,3 +1,11 @@
+// Trend information
+export interface TrendData {
+  trend: 'up' | 'down' | 'neutral'
+  change: number
+  change_percent: number
+  opening_price?: number
+}
+
 // Backend API Response Types
 export interface PriceResponse {
   symbol: string
@@ -6,6 +14,26 @@ export interface PriceResponse {
   market_cap?: number
   fetched_at: string
   cached: boolean
+
+  // Extended price information
+  opening_price?: number
+  high_price?: number
+  low_price?: number
+  previous_close?: number
+
+  // Trend information
+  trend?: TrendData
+
+  // Market metrics
+  fifty_two_week_high?: number
+  fifty_two_week_low?: number
+  dividend_yield?: number
+  pe_ratio?: number
+  beta?: number
+
+  // Metadata
+  currency?: string
+  company_name?: string
 }
 
 export interface BulkPriceResponse {
