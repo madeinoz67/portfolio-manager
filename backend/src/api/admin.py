@@ -17,6 +17,12 @@ from src.models.portfolio import Portfolio
 from src.models.api_usage_metrics import ApiUsageMetrics
 from src.models.market_data_provider import ProviderActivity
 from src.schemas.auth import UserResponse
+from src.schemas.audit_log import (
+    AuditLogResponse, AuditLogEntry, AuditLogPagination,
+    AuditLogFilters, AuditLogMetadata, AuditLogStats,
+    AuditLogStatsResponse, AuditLogExportRequest
+)
+from src.models.audit_log import AuditLog, AuditEventType
 from src.utils.datetime_utils import to_iso_string, utc_now
 
 logger = get_logger(__name__)
@@ -1112,4 +1118,272 @@ async def get_dashboard_recent_activities(
     return DashboardActivitiesResponse(
         activities=dashboard_activities,
         summary=summary
+    )
+
+
+# Audit Log Endpoints
+
+@router.get("/audit-logs", response_model=AuditLogResponse)
+async def get_audit_logs(
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=1000, description="Items per page"),
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    entity_type: Optional[str] = Query(None, description="Filter by entity type"),
+    entity_id: Optional[str] = Query(None, description="Filter by entity ID"),
+    date_from: Optional[str] = Query(None, description="Filter events from this date (ISO format)"),
+    date_to: Optional[str] = Query(None, description="Filter events until this date (ISO format)"),
+    search: Optional[str] = Query(None, description="Full-text search in event descriptions"),
+    sort_by: str = Query("timestamp", description="Sort field"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order")
+) -> AuditLogResponse:
+    """
+    Get audit logs with pagination, filtering, and search.
+    Admin access required.
+    """
+    from datetime import datetime
+    import time
+
+    start_time = time.time()
+    logger.info(f"Admin user {admin_user.email} requesting audit logs")
+
+    # Build query with filters
+    query = db.query(AuditLog).join(User, AuditLog.user_id == User.id)
+
+    # Apply filters
+    if user_id:
+        try:
+            import uuid
+            user_uuid = uuid.UUID(user_id)
+            query = query.filter(AuditLog.user_id == user_uuid)
+        except ValueError:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user ID format"
+            )
+
+    if event_type:
+        try:
+            event_type_enum = AuditEventType(event_type)
+            query = query.filter(AuditLog.event_type == event_type_enum)
+        except ValueError:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid event type: {event_type}"
+            )
+
+    if entity_type:
+        query = query.filter(AuditLog.entity_type == entity_type)
+
+    if entity_id:
+        query = query.filter(AuditLog.entity_id == entity_id)
+
+    if date_from:
+        try:
+            from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            query = query.filter(AuditLog.timestamp >= from_date)
+        except ValueError:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date_from format. Use ISO format."
+            )
+
+    if date_to:
+        try:
+            to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+            query = query.filter(AuditLog.timestamp <= to_date)
+        except ValueError:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date_to format. Use ISO format."
+            )
+
+    if search:
+        query = query.filter(AuditLog.event_description.ilike(f"%{search}%"))
+
+    # Get total count for pagination
+    total_items = query.count()
+
+    # Apply sorting
+    if sort_by == "timestamp":
+        sort_column = AuditLog.timestamp
+    elif sort_by == "event_type":
+        sort_column = AuditLog.event_type
+    elif sort_by == "user_id":
+        sort_column = AuditLog.user_id
+    else:
+        sort_column = AuditLog.timestamp
+
+    if sort_order == "desc":
+        query = query.order_by(sort_column.desc())
+    else:
+        query = query.order_by(sort_column.asc())
+
+    # Apply pagination
+    offset = (page - 1) * limit
+    total_pages = (total_items + limit - 1) // limit  # Ceiling division
+    audit_logs = query.offset(offset).limit(limit).all()
+
+    # Build response data
+    audit_entries = []
+    for audit_log in audit_logs:
+        audit_entries.append(AuditLogEntry(
+            id=audit_log.id,
+            event_type=audit_log.event_type.value,
+            event_description=audit_log.event_description,
+            user_id=str(audit_log.user_id),
+            user_email=audit_log.user.email,
+            entity_type=audit_log.entity_type,
+            entity_id=audit_log.entity_id,
+            timestamp=to_iso_string(audit_log.timestamp),
+            event_metadata=audit_log.event_metadata,
+            ip_address=audit_log.ip_address,
+            user_agent=audit_log.user_agent,
+            created_at=to_iso_string(audit_log.created_at)
+        ))
+
+    # Get total events in system for metadata
+    total_events_in_system = db.query(AuditLog).count()
+
+    # Calculate processing time
+    processing_time_ms = int((time.time() - start_time) * 1000)
+
+    return AuditLogResponse(
+        data=audit_entries,
+        pagination=AuditLogPagination(
+            current_page=page,
+            total_pages=total_pages,
+            total_items=total_items,
+            items_per_page=len(audit_entries)
+        ),
+        filters=AuditLogFilters(
+            user_id=user_id,
+            event_type=event_type,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order
+        ),
+        meta=AuditLogMetadata(
+            request_timestamp=to_iso_string(utc_now()),
+            processing_time_ms=processing_time_ms,
+            total_events_in_system=total_events_in_system
+        )
+    )
+
+
+@router.get("/audit-logs/{audit_id}")
+async def get_audit_log_entry(
+    audit_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+) -> AuditLogEntry:
+    """
+    Get a specific audit log entry by ID.
+    Admin access required.
+    """
+    logger.info(f"Admin user {admin_user.email} requesting audit log entry {audit_id}")
+
+    from fastapi import HTTPException, status
+
+    audit_log = db.query(AuditLog).join(User, AuditLog.user_id == User.id).filter(AuditLog.id == audit_id).first()
+
+    if not audit_log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Audit log entry not found"
+        )
+
+    return AuditLogEntry(
+        id=audit_log.id,
+        event_type=audit_log.event_type.value,
+        event_description=audit_log.event_description,
+        user_id=str(audit_log.user_id),
+        user_email=audit_log.user.email,
+        entity_type=audit_log.entity_type,
+        entity_id=audit_log.entity_id,
+        timestamp=to_iso_string(audit_log.timestamp),
+        event_metadata=audit_log.event_metadata,
+        ip_address=audit_log.ip_address,
+        user_agent=audit_log.user_agent,
+        created_at=to_iso_string(audit_log.created_at)
+    )
+
+
+@router.get("/audit-logs/stats", response_model=AuditLogStatsResponse)
+async def get_audit_log_stats(
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+) -> AuditLogStatsResponse:
+    """
+    Get audit log statistics and breakdowns.
+    Admin access required.
+    """
+    from datetime import datetime, timedelta
+
+    logger.info(f"Admin user {admin_user.email} requesting audit log statistics")
+
+    now = utc_now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=7)
+    month_start = today_start - timedelta(days=30)
+
+    # Get basic counts
+    total_events = db.query(AuditLog).count()
+    events_today = db.query(AuditLog).filter(AuditLog.timestamp >= today_start).count()
+    events_this_week = db.query(AuditLog).filter(AuditLog.timestamp >= week_start).count()
+    events_this_month = db.query(AuditLog).filter(AuditLog.timestamp >= month_start).count()
+
+    # Get event types breakdown
+    event_types_result = db.query(
+        AuditLog.event_type,
+        func.count(AuditLog.id).label('count')
+    ).group_by(AuditLog.event_type).all()
+
+    event_types_breakdown = {
+        event_type.value: count for event_type, count in event_types_result
+    }
+
+    # Get user activity breakdown (top 10 most active users)
+    user_activity_result = db.query(
+        User.email,
+        func.count(AuditLog.id).label('count')
+    ).join(AuditLog, AuditLog.user_id == User.id).group_by(User.email).order_by(
+        func.count(AuditLog.id).desc()
+    ).limit(10).all()
+
+    user_activity_breakdown = {
+        email: count for email, count in user_activity_result
+    }
+
+    # Get entity types breakdown
+    entity_types_result = db.query(
+        AuditLog.entity_type,
+        func.count(AuditLog.id).label('count')
+    ).group_by(AuditLog.entity_type).all()
+
+    entity_types_breakdown = {
+        entity_type: count for entity_type, count in entity_types_result
+    }
+
+    return AuditLogStatsResponse(
+        stats=AuditLogStats(
+            total_events=total_events,
+            events_today=events_today,
+            events_this_week=events_this_week,
+            events_this_month=events_this_month,
+            event_types_breakdown=event_types_breakdown,
+            user_activity_breakdown=user_activity_breakdown,
+            entity_types_breakdown=entity_types_breakdown
+        ),
+        generated_at=to_iso_string(now)
     )
