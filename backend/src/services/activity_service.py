@@ -3,11 +3,45 @@ Service layer for managing provider activity logs.
 Handles logging, retrieval, and cleanup of market data provider activities.
 """
 from datetime import datetime, timedelta
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Any, Dict
+from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from src.models.market_data_provider import ProviderActivity, MarketDataProvider
+
+
+def serialize_metadata_for_json(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Serialize metadata to be JSON-compatible by converting problematic types.
+
+    Handles:
+    - Decimal objects -> float
+    - datetime objects -> ISO string
+    - Nested dictionaries recursively
+
+    Args:
+        metadata: Dictionary containing metadata that may have non-JSON types
+
+    Returns:
+        JSON-serializable dictionary
+    """
+    if not metadata:
+        return {}
+
+    def convert_value(value: Any) -> Any:
+        if isinstance(value, Decimal):
+            return float(value)
+        elif isinstance(value, datetime):
+            return value.isoformat()
+        elif isinstance(value, dict):
+            return {k: convert_value(v) for k, v in value.items()}
+        elif isinstance(value, (list, tuple)):
+            return [convert_value(item) for item in value]
+        else:
+            return value
+
+    return {key: convert_value(value) for key, value in metadata.items()}
 
 
 def log_provider_activity(
@@ -34,12 +68,15 @@ def log_provider_activity(
     Returns:
         The created ProviderActivity instance
     """
+    # Serialize metadata to ensure JSON compatibility
+    serialized_metadata = serialize_metadata_for_json(metadata or {})
+
     activity = ProviderActivity(
         provider_id=provider_id,
         activity_type=activity_type,
         description=description,
         status=status,
-        activity_metadata=metadata or {}
+        activity_metadata=serialized_metadata
     )
 
     # Set custom timestamp if provided
