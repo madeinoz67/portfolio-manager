@@ -778,7 +778,7 @@ export default function AdminMarketDataPage() {
                   {schedulerStatus.errorMessage && (
                     <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded text-xs text-red-700 dark:text-red-400">
                       <div className="font-medium">Error:</div>
-                      <div>{schedulerStatus.scheduler.error_message}</div>
+                      <div>{schedulerStatus.errorMessage}</div>
                     </div>
                   )}
                 </div>
@@ -835,7 +835,7 @@ export default function AdminMarketDataPage() {
                   <span className="text-gray-600 dark:text-gray-400">Last Run:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
                     {schedulerStatus.lastRun
-                      ? formatDisplayDateTime(schedulerStatus.scheduler.last_run_at)
+                      ? formatDisplayDateTime(schedulerStatus.lastRun)
                       : 'Never'
                     }
                   </span>
@@ -844,7 +844,7 @@ export default function AdminMarketDataPage() {
                   <span className="text-gray-600 dark:text-gray-400">Next Run:</span>
                   <span className="font-medium text-blue-600 dark:text-blue-400">
                     {schedulerStatus.nextRun
-                      ? formatDisplayDateTime(schedulerStatus.scheduler.next_run_at)
+                      ? formatDisplayDateTime(schedulerStatus.nextRun)
                       : 'Not scheduled'
                     }
                   </span>
@@ -853,8 +853,8 @@ export default function AdminMarketDataPage() {
                   <span className="text-gray-600 dark:text-gray-400">Uptime:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
                     {schedulerStatus.uptimeSeconds
-                      ? Math.floor(schedulerStatus.scheduler.uptime_seconds / 3600) + 'h ' +
-                        Math.floor((schedulerStatus.scheduler.uptime_seconds % 3600) / 60) + 'm'
+                      ? Math.floor(schedulerStatus.uptimeSeconds / 3600) + 'h ' +
+                        Math.floor((schedulerStatus.uptimeSeconds % 3600) / 60) + 'm'
                       : '0m'
                     }
                   </span>
