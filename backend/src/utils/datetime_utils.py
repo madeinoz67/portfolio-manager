@@ -69,8 +69,11 @@ def to_iso_string(dt: datetime) -> str:
         return None
 
     if dt.tzinfo is not None:
-        # Timezone-aware datetime - use isoformat() which includes timezone
-        return dt.isoformat()
+        # Timezone-aware datetime - convert to UTC and use Z suffix
+        if dt.tzinfo != timezone.utc:
+            dt = dt.astimezone(timezone.utc)  # Convert to UTC if not already
+        # Use Z suffix for UTC timezone (JavaScript-friendly format)
+        return dt.replace(tzinfo=None).isoformat() + "Z"
     else:
         # Naive datetime - assume UTC and add Z suffix
         return dt.isoformat() + "Z"

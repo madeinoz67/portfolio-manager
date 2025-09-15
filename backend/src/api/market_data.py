@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 from src.core.dependencies import get_current_user_flexible, get_current_admin_user
 from src.database import get_db
 from src.utils.datetime_utils import utc_now, to_iso_string
-from src.utils.datetime_utils import utc_now, to_iso_string
 from src.models.user import User
 from src.models.stock import Stock
 from src.models.portfolio import Portfolio
@@ -130,7 +129,7 @@ def build_price_response(
             "price": float(price_record.price),
             "volume": price_record.volume,
             "market_cap": float(price_record.market_cap) if price_record.market_cap else None,
-            "fetched_at": price_record.fetched_at.isoformat() + "Z",
+            "fetched_at": to_iso_string(price_record.fetched_at),
             "cached": cached,
 
             # Extended price information
@@ -157,7 +156,7 @@ def build_price_response(
             "price": float(price_data["price"]),
             "volume": price_data.get("volume"),
             "market_cap": float(price_data["market_cap"]) if price_data.get("market_cap") else None,
-            "fetched_at": price_data["source_timestamp"].isoformat() + "Z",
+            "fetched_at": to_iso_string(price_data["source_timestamp"]),
             "cached": cached,
 
             # Extended price information
