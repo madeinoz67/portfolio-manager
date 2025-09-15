@@ -26,7 +26,7 @@ export default function PortfolioDeletionModal({
   onDeleted,
   allowHardDelete = false,
 }: PortfolioDeletionModalProps) {
-  const { user } = useContext(AuthContext)
+  const { user, token } = useContext(AuthContext)
   const [confirmationName, setConfirmationName] = useState('')
   const [isHardDelete, setIsHardDelete] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -52,9 +52,9 @@ export default function PortfolioDeletionModal({
 
     try {
       if (isHardDelete) {
-        await hardDeletePortfolio(portfolio.id, { confirmationName })
+        await hardDeletePortfolio(portfolio.id, { confirmationName }, { token })
       } else {
-        await deletePortfolio(portfolio.id, { confirmationName })
+        await deletePortfolio(portfolio.id, { confirmationName }, { token })
       }
 
       onDeleted()

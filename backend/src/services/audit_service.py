@@ -130,7 +130,7 @@ class AuditService:
         self,
         portfolio_id: str,
         portfolio_name: str,
-        user_id: str,
+        user_id,  # UUID or str
         is_hard_delete: bool = False,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None

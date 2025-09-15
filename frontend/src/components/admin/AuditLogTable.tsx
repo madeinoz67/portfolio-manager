@@ -4,12 +4,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { AuditLogResponse, AuditLogEntry, AuditLogFilters, EVENT_TYPES, ENTITY_TYPES } from '@/types/audit'
 import { fetchAuditLogs } from '@/services/audit'
 import { formatDisplayDateTime } from '@/utils/timezone'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface AuditLogTableProps {
   className?: string
 }
 
 export function AuditLogTable({ className = '' }: AuditLogTableProps) {
+  const { user, loading: authLoading, token } = useAuth()
   const [data, setData] = useState<AuditLogResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -18,13 +20,45 @@ export function AuditLogTable({ className = '' }: AuditLogTableProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchTimeoutId, setSearchTimeoutId] = useState<NodeJS.Timeout | null>(null)
 
+  // Check admin access
+  const isAdmin = user?.role?.toLowerCase() === 'admin'
+  const hasAccess = !authLoading && user && isAdmin
+
+  // Show unauthorized message if not admin
+  if (!authLoading && (!user || !isAdmin)) {
+    return (
+      <div className={`p-4 ${className}`}>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h3 className="text-red-800 font-semibold">Unauthorized access to audit logs</h3>
+          <p className="text-red-600 mt-2">
+            You must be an administrator to view audit logs.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className={`p-4 ${className}`}>
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-gray-600">Checking permissions...</span>
+        </div>
+      </div>
+    )
+  }
+
   const loadAuditLogs = useCallback(async () => {
+    // Only load if user has access
+    if (!hasAccess) {
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
-
-      // Get token from localStorage (this should match your auth implementation)
-      const token = localStorage.getItem('token')
 
       const response = await fetchAuditLogs(filters, currentPage, 20, { token: token || undefined })
       setData(response)
@@ -34,7 +68,7 @@ export function AuditLogTable({ className = '' }: AuditLogTableProps) {
     } finally {
       setLoading(false)
     }
-  }, [filters, currentPage])
+  }, [filters, currentPage, hasAccess, token])
 
   useEffect(() => {
     loadAuditLogs()

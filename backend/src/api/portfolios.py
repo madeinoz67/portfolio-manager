@@ -65,7 +65,7 @@ async def create_portfolio(
         audit_service = AuditService(db)
         audit_service.log_portfolio_created(
             portfolio=portfolio,
-            user_id=str(current_user.id),
+            user_id=current_user.id,
             ip_address=getattr(request.client, 'host', None) if request.client else None,
             user_agent=request.headers.get('User-Agent')
         )
@@ -140,7 +140,7 @@ async def update_portfolio(
             audit_service = AuditService(db)
             audit_service.log_portfolio_updated(
                 portfolio=portfolio,
-                user_id=str(current_user.id),
+                user_id=current_user.id,
                 changes=changes,
                 ip_address=getattr(request.client, 'host', None) if request.client else None,
                 user_agent=request.headers.get('User-Agent')
@@ -220,7 +220,7 @@ async def delete_portfolio_with_confirmation(
         audit_service.log_portfolio_deleted(
             portfolio_id=str(portfolio_id),
             portfolio_name=portfolio_name,
-            user_id=str(current_user.id),
+            user_id=current_user.id,
             is_hard_delete=False,
             ip_address=getattr(request.client, 'host', None) if request.client else None,
             user_agent=request.headers.get('User-Agent')
@@ -272,7 +272,7 @@ async def hard_delete_portfolio_with_confirmation(
         audit_service.log_portfolio_deleted(
             portfolio_id=str(portfolio_id),
             portfolio_name=portfolio_name,
-            user_id=str(current_user.id),
+            user_id=current_user.id,
             is_hard_delete=True,
             ip_address=getattr(request.client, 'host', None) if request.client else None,
             user_agent=request.headers.get('User-Agent')
