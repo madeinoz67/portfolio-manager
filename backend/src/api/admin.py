@@ -404,18 +404,24 @@ async def get_api_usage(
     from sqlalchemy import func, and_
     from datetime import datetime, date, timedelta
 
-    today = date.today()  # Use local server date for consistency with market-data/status endpoint
+    # Fix timezone issue: Convert local "today" to UTC range for proper comparison with UTC timestamps
+    today = date.today()  # Local date
+    local_today_start = datetime.combine(today, datetime.min.time())
+    local_today_end = local_today_start + timedelta(days=1)
+
     current_month_start = datetime(today.year, today.month, 1)
 
-    # Get today's activities - EXCLUDE system activities as they are not external API calls
+    # Get today's activities using proper timezone-aware range comparison
+    # This handles UTC timestamps correctly by using a range instead of date comparison
     today_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) == today,
+        ProviderActivity.timestamp >= local_today_start,
+        ProviderActivity.timestamp < local_today_end,
         ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
-    # Get this month's activities - EXCLUDE system activities
+    # Get this month's activities using proper timezone-aware comparison
     month_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) >= current_month_start.date(),
+        ProviderActivity.timestamp >= current_month_start,
         ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
@@ -484,12 +490,16 @@ async def get_api_usage(
             "success_rate": round(success_rate, 1)
         })
 
-    # Calculate trends compared to yesterday
+    # Calculate trends compared to yesterday using timezone-aware comparison
     yesterday = today - timedelta(days=1)
+    local_yesterday_start = datetime.combine(yesterday, datetime.min.time())
+    local_yesterday_end = local_yesterday_start + timedelta(days=1)
     daily_change_percent = 0.0
 
     yesterday_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) == yesterday
+        ProviderActivity.timestamp >= local_yesterday_start,
+        ProviderActivity.timestamp < local_yesterday_end,
+        ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
     total_requests_yesterday = len(yesterday_activities)
