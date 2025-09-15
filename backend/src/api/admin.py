@@ -1785,9 +1785,9 @@ async def control_scheduler(
             status=SchedulerStatus(
                 schedulerName=scheduler_name,
                 state=status_info["state"],
-                lastRun=status_info["last_run"],
-                nextRun=status_info["next_run"],
-                pauseUntil=status_info["pause_until"],
+                lastRun=status_info["last_run"].isoformat() + 'Z' if status_info["last_run"] else None,
+                nextRun=status_info["next_run"].isoformat() + 'Z' if status_info["next_run"] else None,
+                pauseUntil=status_info["pause_until"].isoformat() + 'Z' if status_info["pause_until"] else None,
                 errorMessage=status_info["error_message"],
                 configuration=status_info["configuration"],
                 uptimeSeconds=status_info["uptime_seconds"],

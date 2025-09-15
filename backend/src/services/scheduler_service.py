@@ -338,7 +338,7 @@ class MarketDataSchedulerService:
     def _calculate_next_run(self):
         """Calculate the next scheduled run time."""
         if self._state == SchedulerState.RUNNING:
-            self._next_run = utc_now() + timedelta(minutes=self._config.interval_minutes)
+            self._next_run = utc_now().replace(tzinfo=None) + timedelta(minutes=self._config.interval_minutes)
         else:
             self._next_run = None
 
