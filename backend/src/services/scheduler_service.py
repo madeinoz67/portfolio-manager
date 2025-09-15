@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from src.core.logging import get_logger
 from src.utils.datetime_utils import utc_now
+from src.models.scheduler_execution import SchedulerExecution
 
 logger = get_logger(__name__)
 
@@ -88,6 +89,9 @@ class MarketDataSchedulerService:
         self._total_symbols_processed = 0
         self._last_execution_symbols = 0
 
+        # Load execution history from database on startup
+        self._load_execution_history()
+
         # Auto-start the scheduler for production use
         if auto_start:
             self._auto_start()
@@ -107,6 +111,58 @@ class MarketDataSchedulerService:
     def configuration(self) -> SchedulerConfiguration:
         """Get current scheduler configuration."""
         return self._config
+
+    def get_last_run(self) -> Optional[datetime]:
+        """Get the most recent successful execution time from database."""
+        try:
+            last_execution = (
+                self.db.query(SchedulerExecution)
+                .filter(SchedulerExecution.status == "success")
+                .order_by(SchedulerExecution.completed_at.desc())
+                .first()
+            )
+            return last_execution.completed_at if last_execution else None
+        except Exception as e:
+            logger.error(f"Failed to get last run from database: {e}")
+            return self._last_run
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get comprehensive scheduler status with database-calculated metrics."""
+        # Get metrics from database
+        all_executions = self.db.query(SchedulerExecution).all()
+        successful_runs = sum(1 for ex in all_executions if ex.status == "success")
+        failed_runs = sum(1 for ex in all_executions if ex.status == "failed")
+        total_symbols_processed = sum(ex.symbols_processed or 0 for ex in all_executions)
+
+        # Calculate success rate
+        total_runs = len(all_executions)
+        success_rate = (successful_runs / total_runs * 100) if total_runs > 0 else 0.0
+
+        # Get recent activity (last 24 hours)
+        recent_cutoff = utc_now() - timedelta(hours=24)
+        recent_executions = [ex for ex in all_executions if ex.started_at >= recent_cutoff]
+        recent_symbols = sum(ex.symbols_processed or 0 for ex in recent_executions)
+        recent_success_count = sum(1 for ex in recent_executions if ex.status == "success")
+        recent_success_rate = (recent_success_count / len(recent_executions) * 100) if recent_executions else 0.0
+
+        return {
+            "state": self.state.value,
+            "last_run": self.get_last_run(),
+            "next_run": self._next_run,
+            "pause_until": self._pause_until,
+            "error_message": self._error_message,
+            "configuration": self._config.to_dict(),
+            "uptime_seconds": self._calculate_uptime_seconds(),
+            "total_runs": total_runs,
+            "successful_runs": successful_runs,
+            "failed_runs": failed_runs,
+            "success_rate": success_rate,
+            "total_symbols_processed": total_symbols_processed,
+            "recent_activity": {
+                "total_symbols_processed": recent_symbols,
+                "success_rate": recent_success_rate
+            }
+        }
 
     @property
     def status_info(self) -> Dict[str, Any]:
@@ -288,6 +344,36 @@ class MarketDataSchedulerService:
         if self._state == SchedulerState.RUNNING and self._last_run:
             return int((utc_now() - self._last_run).total_seconds())
         return None
+
+    def _load_execution_history(self) -> None:
+        """Load execution history from database on startup."""
+        try:
+            # Get all executions to calculate metrics
+            all_executions = self.db.query(SchedulerExecution).all()
+
+            # Update in-memory metrics from database
+            self._total_executions = len(all_executions)
+            self._successful_executions = sum(1 for ex in all_executions if ex.status == "success")
+            self._failed_executions = sum(1 for ex in all_executions if ex.status == "failed")
+            self._total_symbols_processed = sum(ex.symbols_processed or 0 for ex in all_executions)
+
+            # Get most recent execution for last run
+            last_execution = (
+                self.db.query(SchedulerExecution)
+                .filter(SchedulerExecution.status == "success")
+                .order_by(SchedulerExecution.completed_at.desc())
+                .first()
+            )
+
+            if last_execution:
+                self._last_run = last_execution.completed_at
+                self._last_execution_symbols = last_execution.symbols_processed or 0
+
+            logger.info(f"Loaded execution history: {self._total_executions} total, {self._successful_executions} successful")
+
+        except Exception as e:
+            logger.error(f"Failed to load execution history: {e}")
+            # Keep default values if database load fails
 
     def record_execution_start(self) -> None:
         """Record that a scheduler execution has started."""
