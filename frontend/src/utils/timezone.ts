@@ -223,3 +223,131 @@ export const serverDateToInputFormat = (serverDateString: string): string => {
 
   return `${year}-${month}-${day}`;
 };
+
+/**
+ * Convert a local date string (YYYY-MM-DD) to UTC timestamp for server submission
+ * This replaces convertLocalDateToUTC for the new timestamp-based approach
+ *
+ * Creates a timestamp representing midnight in the user's local timezone,
+ * which when converted to UTC maintains the user's intended date relationship.
+ */
+export const convertLocalDateToTimestamp = (localDateString: string): string => {
+  if (!localDateString) return '';
+
+  try {
+    // Create date at midnight in user's timezone
+    const localMidnight = new Date(localDateString + 'T00:00:00');
+
+    if (isNaN(localMidnight.getTime())) {
+      return localDateString; // Fallback to original for invalid input
+    }
+
+    // Convert to UTC timestamp (ISO 8601 format)
+    return localMidnight.toISOString();
+  } catch {
+    return localDateString; // Fallback to original
+  }
+};
+
+/**
+ * Format a UTC timestamp for display in user's local timezone
+ * This replaces formatUTCDateForLocalDisplay for the new timestamp-based approach
+ *
+ * Uses standard JavaScript Date handling - much simpler than date-only conversion.
+ */
+export const formatTimestampForLocalDisplay = (utcTimestamp: string): string => {
+  if (!utcTimestamp) return 'Invalid Date';
+
+  try {
+    const date = new Date(utcTimestamp);
+
+    if (isNaN(date.getTime())) {
+      return 'Invalid Date';
+    }
+
+    // Use browser's built-in timezone handling - this is the clean approach
+    return date.toLocaleDateString(navigator.language || 'en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch {
+    return 'Invalid Date';
+  }
+};
+
+/**
+ * @deprecated Use formatTimestampForLocalDisplay for new timestamp-based approach
+ * Format a UTC date string (YYYY-MM-DD) for display in user's local timezone
+ * Used specifically for transaction dates that are stored as UTC dates
+ * This properly converts UTC date-only strings back to the original local date the user entered
+ *
+ * Uses Intl.DateTimeFormat to properly handle timezone conversion without hardcoded offsets.
+ */
+export const formatUTCDateForLocalDisplay = (utcDateString: string): string => {
+  if (!utcDateString) return 'Invalid Date';
+
+  try {
+    // Parse the UTC date string as a proper UTC date
+    // Adding 'T00:00:00Z' ensures it's treated as UTC midnight, not local midnight
+    const utcDate = new Date(utcDateString + 'T00:00:00Z');
+
+    if (isNaN(utcDate.getTime())) {
+      return 'Invalid Date';
+    }
+
+    // Use Intl.DateTimeFormat - this is the standard, correct approach
+    // It automatically handles timezone conversion from UTC to user's local timezone
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    };
+
+    return new Intl.DateTimeFormat(navigator.language || 'en-US', options).format(utcDate);
+  } catch {
+    // Fallback for very old browsers or broken test environments
+    try {
+      const utcDate = new Date(utcDateString + 'T00:00:00Z');
+      return utcDate.toLocaleDateString(navigator.language || 'en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
+  }
+};
+
+/**
+ * @deprecated Use formatUTCDateForLocalDisplay for transaction dates
+ * Format a UTC date string (YYYY-MM-DD) for display in user's local timezone
+ * Used specifically for transaction dates that are stored as UTC dates
+ * This converts the UTC date to the equivalent local date that the user originally intended
+ */
+export const formatUTCDateForDisplay = (utcDateString: string): string => {
+  if (!utcDateString) return 'Invalid Date';
+
+  try {
+    // Parse the UTC date as a simple date (no time component)
+    const utcDate = new Date(utcDateString);
+
+    // Get timezone offset in hours (negative for timezones ahead of UTC)
+    const offsetHours = new Date().getTimezoneOffset() / 60;
+
+    // If timezone is ahead of UTC (negative offset), add a day to display the local equivalent
+    if (offsetHours < 0) {
+      utcDate.setDate(utcDate.getDate() + 1);
+    }
+
+    return utcDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch {
+    return 'Invalid Date';
+  }
+};

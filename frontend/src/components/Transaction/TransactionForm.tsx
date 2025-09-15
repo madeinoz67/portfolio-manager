@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button'
 import StockSelector from './StockSelector'
 import { TransactionCreate, TransactionType } from '@/types/transaction'
 import { Stock } from '@/hooks/useStocks'
-import { getCurrentDateInUserTimezone } from '@/utils/timezone'
+import { getCurrentDateInUserTimezone, convertLocalDateToTimestamp, serverDateToInputFormat } from '@/utils/timezone'
 
 interface TransactionFormProps {
   portfolioId: string
@@ -28,7 +28,7 @@ export default function TransactionForm({
     quantity: initialData?.quantity || 0,
     price_per_share: initialData?.price_per_share || 0,
     fees: initialData?.fees || 0,
-    transaction_date: initialData?.transaction_date || getCurrentDateInUserTimezone(),
+    transaction_date: initialData?.transaction_date ? serverDateToInputFormat(initialData.transaction_date) : getCurrentDateInUserTimezone(),
     notes: initialData?.notes || ''
   })
   
@@ -118,8 +118,16 @@ export default function TransactionForm({
 
     if (!formData.transaction_date) {
       newErrors.transaction_date = 'Transaction date is required'
-    } else if (new Date(formData.transaction_date) > new Date()) {
-      newErrors.transaction_date = 'Transaction date cannot be in the future'
+    } else {
+      // Convert local date to timestamp for validation (same as backend logic)
+      const timestamp = convertLocalDateToTimestamp(formData.transaction_date)
+      const transactionDate = new Date(timestamp)
+      const today = new Date()
+      today.setUTCHours(0, 0, 0, 0) // Set to start of today in UTC
+
+      if (transactionDate > today) {
+        newErrors.transaction_date = 'Transaction date cannot be in the future'
+      }
     }
 
     if (formData.notes && formData.notes.length > 1000) {
@@ -144,7 +152,8 @@ export default function TransactionForm({
     try {
       const transactionData = {
         ...formData,
-        stock_symbol: formData.stock_symbol.toUpperCase()
+        stock_symbol: formData.stock_symbol.toUpperCase(),
+        transaction_date: convertLocalDateToTimestamp(formData.transaction_date)
       }
       
       console.log('Calling onSubmit with:', transactionData)

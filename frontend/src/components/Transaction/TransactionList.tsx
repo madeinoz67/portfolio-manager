@@ -9,6 +9,7 @@ import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
 import TransactionFilter from './TransactionFilter'
 import TransactionEditModal from './TransactionEditModal'
+import { formatTimestampForLocalDisplay } from '@/utils/timezone'
 
 interface TransactionListProps {
   portfolioId: string
@@ -105,9 +106,6 @@ export default function TransactionList({
     setDeletingTransaction(null)
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString()
-  }
 
   const formatCurrency = (amount: string) => {
     return `$${parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -236,7 +234,7 @@ export default function TransactionList({
                     className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {formatDate(transaction.transaction_date)}
+                      {formatTimestampForLocalDisplay(transaction.transaction_date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
@@ -354,7 +352,7 @@ export default function TransactionList({
                     {deletingTransaction.stock.symbol} - {getTransactionTypeDisplay(deletingTransaction.transaction_type).label}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatDate(deletingTransaction.transaction_date)} • {formatCurrency(deletingTransaction.total_amount)}
+                    {formatTimestampForLocalDisplay(deletingTransaction.transaction_date)} • {formatCurrency(deletingTransaction.total_amount)}
                   </p>
                 </div>
               </div>
