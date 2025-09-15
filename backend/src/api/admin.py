@@ -1866,3 +1866,195 @@ async def update_scheduler_configuration(
             status_code=500,
             detail=f"Failed to update scheduler configuration: {str(e)}"
         )
+
+
+# Portfolio Update Metrics Models
+class PortfolioUpdateStats24h(BaseModel):
+    totalUpdates: int
+    successfulUpdates: int
+    failedUpdates: int
+    successRate: float
+    avgUpdateDurationMs: int
+    uniquePortfolios: int
+    updateFrequencyPerHour: float
+    commonErrorTypes: dict
+
+class QueueHealthMetrics(BaseModel):
+    currentQueueSize: int
+    avgProcessingRate: float
+    maxQueueSize1h: int
+    rateLimitHits1h: int
+    memoryUsageTrend: str
+    queueHealthStatus: str
+
+class StormProtectionMetrics(BaseModel):
+    totalCoalescedUpdates: int
+    totalIndividualUpdates: int
+    coalescingEfficiency: float
+    avgSymbolsPerUpdate: float
+    stormEventsDetected: int
+    protectionEffectiveness: float
+
+class PortfolioPerformanceItem(BaseModel):
+    portfolioId: str
+    portfolioName: str
+    totalUpdates: int
+    successRate: float
+    avgDurationMs: int
+    lastUpdated: str
+
+class UpdateLagAnalysis(BaseModel):
+    avgLagMs: int
+    medianLagMs: int
+    p95LagMs: int
+    maxLagMs: int
+    samplesAnalyzed: int
+    lagDistribution: dict
+
+class PrometheusMetricsResponse(BaseModel):
+    metrics: dict
+
+
+@router.get("/portfolio-updates/stats/24h")
+async def get_portfolio_update_stats_24h(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+) -> PortfolioUpdateStats24h:
+    """Get portfolio update statistics for the last 24 hours."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    stats = service.get_portfolio_update_stats_24h()
+
+    return PortfolioUpdateStats24h(
+        totalUpdates=stats["total_updates"],
+        successfulUpdates=stats["successful_updates"],
+        failedUpdates=stats["failed_updates"],
+        successRate=stats["success_rate"],
+        avgUpdateDurationMs=stats["avg_update_duration_ms"],
+        uniquePortfolios=stats["unique_portfolios"],
+        updateFrequencyPerHour=stats["update_frequency_per_hour"],
+        commonErrorTypes=stats["common_error_types"]
+    )
+
+
+@router.get("/portfolio-updates/queue/health")
+async def get_portfolio_queue_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+) -> QueueHealthMetrics:
+    """Get current portfolio update queue health metrics."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    health = service.get_queue_health_metrics()
+
+    return QueueHealthMetrics(
+        currentQueueSize=health["current_queue_size"],
+        avgProcessingRate=health["avg_processing_rate"],
+        maxQueueSize1h=health["max_queue_size_1h"],
+        rateLimitHits1h=health["rate_limit_hits_1h"],
+        memoryUsageTrend=health["memory_usage_trend"],
+        queueHealthStatus=health["queue_health_status"]
+    )
+
+
+@router.get("/portfolio-updates/storm-protection")
+async def get_storm_protection_metrics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+) -> StormProtectionMetrics:
+    """Get update storm protection effectiveness metrics."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    metrics = service.get_storm_protection_metrics()
+
+    return StormProtectionMetrics(
+        totalCoalescedUpdates=metrics["total_coalesced_updates"],
+        totalIndividualUpdates=metrics["total_individual_updates"],
+        coalescingEfficiency=metrics["coalescing_efficiency"],
+        avgSymbolsPerUpdate=metrics["avg_symbols_per_update"],
+        stormEventsDetected=metrics["storm_events_detected"],
+        protectionEffectiveness=metrics["protection_effectiveness"]
+    )
+
+
+@router.get("/portfolio-updates/performance/breakdown")
+async def get_portfolio_performance_breakdown(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+) -> List[PortfolioPerformanceItem]:
+    """Get per-portfolio performance breakdown."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    breakdown = service.get_portfolio_performance_breakdown(limit=limit)
+
+    return [
+        PortfolioPerformanceItem(
+            portfolioId=item["portfolio_id"],
+            portfolioName=item["portfolio_name"],
+            totalUpdates=item["total_updates"],
+            successRate=item["success_rate"],
+            avgDurationMs=item["avg_duration_ms"],
+            lastUpdated=to_iso_string(item["last_updated"])
+        )
+        for item in breakdown
+    ]
+
+
+@router.get("/portfolio-updates/lag-analysis")
+async def get_update_lag_analysis(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+) -> UpdateLagAnalysis:
+    """Get analysis of update lag times (price change to portfolio update)."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    analysis = service.get_update_lag_analysis()
+
+    return UpdateLagAnalysis(
+        avgLagMs=analysis["avg_lag_ms"],
+        medianLagMs=analysis["median_lag_ms"],
+        p95LagMs=analysis["p95_lag_ms"],
+        maxLagMs=analysis["max_lag_ms"],
+        samplesAnalyzed=analysis["samples_analyzed"],
+        lagDistribution=analysis["lag_distribution"]
+    )
+
+
+@router.get("/portfolio-updates/metrics/prometheus")
+async def get_portfolio_metrics_prometheus(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+) -> PrometheusMetricsResponse:
+    """Export portfolio update metrics in Prometheus format for external monitoring."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    metrics = service.export_metrics_for_monitoring()
+
+    return PrometheusMetricsResponse(metrics=metrics)
+
+
+@router.get("/portfolio-updates/queue/live")
+async def get_live_queue_metrics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Get current live metrics from the portfolio update queue."""
+    from src.services.portfolio_update_metrics import PortfolioUpdateMetricsService
+
+    service = PortfolioUpdateMetricsService(db)
+    live_metrics = service.collect_live_queue_metrics()
+
+    return {
+        "pendingUpdates": live_metrics["pending_updates"],
+        "activePortfolios": live_metrics["active_portfolios"],
+        "rateLimitHits": live_metrics["rate_limit_hits"],
+        "isProcessing": live_metrics["is_processing"],
+        "totalSymbolsQueued": live_metrics["total_symbols_queued"]
+    }
