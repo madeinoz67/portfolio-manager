@@ -1638,23 +1638,23 @@ async def get_scheduler_status(
     from src.services.scheduler_service import get_scheduler_service
 
     scheduler_service = get_scheduler_service(db)
-    status_info = scheduler_service.status_info
+    status_info = scheduler_service.get_status()  # Use database-persisted method
 
     return SchedulerStatus(
         schedulerName="market_data_scheduler",
         state=status_info["state"],
-        lastRun=status_info["last_run"],
-        nextRun=status_info["next_run"],
-        pauseUntil=status_info["pause_until"],
+        lastRun=status_info["last_run"].isoformat() if status_info["last_run"] else None,
+        nextRun=status_info["next_run"].isoformat() if status_info["next_run"] else None,
+        pauseUntil=status_info["pause_until"].isoformat() if status_info["pause_until"] else None,
         errorMessage=status_info["error_message"],
         configuration=status_info["configuration"],
         uptimeSeconds=status_info["uptime_seconds"],
-        # Execution metrics from scheduler service
-        total_runs=status_info.get("total_executions", 0),
-        successful_runs=status_info.get("successful_executions", 0),
-        failed_runs=status_info.get("failed_executions", 0),
+        # Execution metrics from scheduler service (database-calculated)
+        total_runs=status_info.get("total_runs", 0),
+        successful_runs=status_info.get("successful_runs", 0),
+        failed_runs=status_info.get("failed_runs", 0),
         symbols_processed=status_info.get("total_symbols_processed", 0),
-        success_rate=status_info.get("success_rate_percent", 0.0)
+        success_rate=status_info.get("success_rate", 0.0)
     )
 
 
@@ -1794,9 +1794,9 @@ async def control_scheduler(
                 # Execution metrics from scheduler service
                 total_runs=status_info.get("total_executions", 0),
                 successful_runs=status_info.get("successful_executions", 0),
-                failed_runs=status_info.get("failed_executions", 0),
+                failed_runs=status_info.get("failed_runs", 0),
                 symbols_processed=status_info.get("total_symbols_processed", 0),
-                success_rate=status_info.get("success_rate_percent", 0.0)
+                success_rate=status_info.get("success_rate", 0.0)
             )
         )
 
