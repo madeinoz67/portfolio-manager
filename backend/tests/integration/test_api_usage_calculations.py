@@ -30,7 +30,7 @@ class TestApiUsageCalculations:
         When: Calculating total API calls for today
         Then: Total should be 8 (5 + 3), not 23 (5 + 3 + 10 + 5)
         """
-        today = datetime.utcnow()
+        today = datetime.now()  # Use local server time to match API endpoint logic
 
         # Create actual external API call activities
         external_provider_activities = [
@@ -124,7 +124,7 @@ class TestApiUsageCalculations:
         """
         Test total API calls calculation when there are only external provider calls.
         """
-        today = datetime.utcnow()
+        today = datetime.now()  # Use local server time to match API endpoint logic
 
         # Create only external API calls
         activities = [
@@ -183,3 +183,48 @@ class TestApiUsageCalculations:
 
         assert result["summary"]["total_requests_today"] == 0
         assert len(result["by_provider"]) == 0
+
+    def test_api_usage_uses_local_server_date_not_utc(self, db: Session):
+        """
+        Test that API usage endpoint uses local server date for consistency
+        with market-data/status endpoint, not UTC date.
+
+        This prevents timezone issues where UTC date differs from local server date.
+        """
+        from datetime import date
+        today_local = date.today()
+
+        # Create activities for today (local server date)
+        activities_today = [
+            ProviderActivity(
+                provider_id="yfinance",
+                activity_type="API_CALL",
+                description="Test API call for timezone consistency",
+                status="success",
+                timestamp=datetime.now(),  # Local server time
+                activity_metadata={"test": "timezone_consistency"}
+            )
+        ]
+
+        for activity in activities_today:
+            db.add(activity)
+        db.commit()
+
+        from src.models.user import User, UserRole
+        admin_user = User(
+            email="admin4@test.com",
+            password_hash="hashed",
+            role=UserRole.ADMIN,
+            first_name="Test",
+            last_name="Admin"
+        )
+
+        import asyncio
+        result = asyncio.run(get_api_usage(admin_user, db))
+
+        # Should count the activity added today (local server date)
+        assert result["summary"]["total_requests_today"] == 1, (
+            f"Expected 1 request today (local date: {today_local}), "
+            f"but got {result['summary']['total_requests_today']}. "
+            f"API usage endpoint should use local server date for consistency."
+        )

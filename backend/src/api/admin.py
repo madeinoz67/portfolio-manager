@@ -404,7 +404,7 @@ async def get_api_usage(
     from sqlalchemy import func, and_
     from datetime import datetime, date, timedelta
 
-    today = utc_now().date()
+    today = date.today()  # Use local server date for consistency with market-data/status endpoint
     current_month_start = datetime(today.year, today.month, 1)
 
     # Get today's activities - EXCLUDE system activities as they are not external API calls
