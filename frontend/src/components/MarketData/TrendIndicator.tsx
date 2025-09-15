@@ -49,19 +49,33 @@ export function TrendIndicator({
     switch (trend.trend) {
       case 'up':
         return (
-          <svg className={`${iconSize} fill-current`} viewBox="0 0 20 20">
-            <path d="M10 3l6 7H4l6-7z" />
+          <svg
+            className={`${iconSize} stroke-current`}
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-label="Upward trend"
+          >
+            <path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )
       case 'down':
         return (
-          <svg className={`${iconSize} fill-current`} viewBox="0 0 20 20">
-            <path d="M10 17L4 10h12l-6 7z" />
+          <svg
+            className={`${iconSize} stroke-current`}
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-label="Downward trend"
+          >
+            <path d="M3 3L13 13M13 13H7M13 13V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )
       case 'neutral':
         return (
-          <svg className={`${iconSize} fill-current`} viewBox="0 0 20 20">
+          <svg
+            className={`${iconSize} fill-current`}
+            viewBox="0 0 20 20"
+            aria-label="Neutral trend"
+          >
             <path d="M3 10h14v2H3z" />
           </svg>
         )
