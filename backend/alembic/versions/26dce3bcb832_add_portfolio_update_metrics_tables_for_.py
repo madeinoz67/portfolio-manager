@@ -8,6 +8,7 @@ Create Date: 2025-09-15 22:58:43.814393
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 
 # revision identifiers, used by Alembic.
@@ -20,7 +21,7 @@ depends_on = None
 def upgrade() -> None:
     # Create portfolio_update_metrics table
     op.create_table('portfolio_update_metrics',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True),
+        sa.Column('id', sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4())),
         sa.Column('portfolio_id', sa.String(36), nullable=False, index=True),
         sa.Column('symbols_updated', sa.JSON(), nullable=False),
         sa.Column('symbols_count', sa.Integer(), nullable=False, default=1),
@@ -50,7 +51,7 @@ def upgrade() -> None:
 
     # Create portfolio_queue_metrics table
     op.create_table('portfolio_queue_metrics',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True),
+        sa.Column('id', sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4())),
         sa.Column('pending_updates', sa.Integer(), nullable=False, default=0),
         sa.Column('processing_rate', sa.Numeric(8, 2), nullable=False, default=0.0),
         sa.Column('active_portfolios', sa.Integer(), nullable=False, default=0),
@@ -79,7 +80,7 @@ def upgrade() -> None:
 
     # Create portfolio_update_summaries table
     op.create_table('portfolio_update_summaries',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True),
+        sa.Column('id', sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4())),
         sa.Column('period_start', sa.DateTime(), nullable=False, index=True),
         sa.Column('period_end', sa.DateTime(), nullable=False, index=True),
         sa.Column('period_type', sa.String(10), nullable=False, index=True),
@@ -122,7 +123,7 @@ def upgrade() -> None:
 
     # Create portfolio_update_alerts table
     op.create_table('portfolio_update_alerts',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True),
+        sa.Column('id', sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4())),
         sa.Column('alert_type', sa.String(50), nullable=False, index=True),
         sa.Column('severity', sa.String(20), nullable=False, index=True),
         sa.Column('title', sa.String(200), nullable=False),
