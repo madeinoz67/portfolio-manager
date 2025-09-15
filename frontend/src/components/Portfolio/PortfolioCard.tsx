@@ -1,20 +1,39 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Portfolio } from '@/types/portfolio'
 import Button from '@/components/ui/Button'
+import PortfolioDeletionModal from './PortfolioDeletionModal'
 
 interface PortfolioCardProps {
   portfolio: Portfolio
+  onDeleted?: () => void
 }
 
-export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
+export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardProps) {
   const router = useRouter()
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const isPositiveChange = parseFloat(portfolio.daily_change) >= 0
   const totalValue = parseFloat(portfolio.total_value || '0')
   const dailyChange = parseFloat(portfolio.daily_change || '0')
 
   const handleAddTrade = () => {
     router.push(`/portfolios/${portfolio.id}/add-transaction`)
+  }
+
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteModalClose = () => {
+    setShowDeleteModal(false)
+  }
+
+  const handleDeleted = () => {
+    setShowDeleteModal(false)
+    if (onDeleted) {
+      onDeleted()
+    }
   }
 
   return (
@@ -101,7 +120,7 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex space-x-3">
+        <div className={`flex gap-2 ${onDeleted ? 'grid grid-cols-3' : 'flex space-x-3'}`}>
           <Button
             size="sm"
             variant="primary"
@@ -117,7 +136,7 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
               View Details
             </Link>
           </Button>
-          
+
           <Button
             size="sm"
             variant="outline"
@@ -131,8 +150,33 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
           >
             Add Trade
           </Button>
+
+          {onDeleted && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+              onClick={handleDeleteClick}
+              icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              }
+              title="Delete Portfolio"
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Delete Modal */}
+      <PortfolioDeletionModal
+        isOpen={showDeleteModal}
+        onClose={handleDeleteModalClose}
+        portfolio={portfolio}
+        onDeleted={handleDeleted}
+      />
     </div>
   )
 }

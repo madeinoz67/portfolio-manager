@@ -6,8 +6,7 @@
 'use client'
 
 import { useState, useEffect, useContext } from 'react'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/input'
+import Button from '@/components/ui/Button'
 import { AuthContext } from '@/contexts/AuthContext'
 import { deletePortfolio, hardDeletePortfolio } from '@/services/portfolio'
 import type { Portfolio } from '@/types/portfolio'
@@ -92,12 +91,12 @@ export default function PortfolioDeletionModal({
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
             To confirm deletion, please enter the portfolio name exactly as shown above:
           </p>
-          <Input
+          <input
             type="text"
             placeholder="Portfolio name"
             value={confirmationName}
             onChange={(e) => setConfirmationName(e.target.value)}
-            className="w-full"
+            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
