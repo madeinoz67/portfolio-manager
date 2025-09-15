@@ -31,6 +31,7 @@ from src.core.logging import setup_logging, set_request_id, get_logger
 from src.database import engine, Base, get_db
 from src.services.market_data_service import MarketDataService
 from src.services.activity_service import log_provider_activity
+from src.services.scheduler_service import get_scheduler_service
 
 # Setup logging
 setup_logging(level="INFO")
@@ -62,6 +63,10 @@ async def periodic_price_updates():
             db = next(get_db())
 
             try:
+                # Get scheduler service and record execution start
+                scheduler_service = get_scheduler_service(db)
+                scheduler_service.record_execution_start()
+
                 # Create market data service
                 service = MarketDataService(db)
 
@@ -116,9 +121,15 @@ async def periodic_price_updates():
                     successful_fetches = len([result for result in results.values() if result is not None])
                     logger.info(f"Fetch completed: {successful_fetches}/{len(symbols_to_fetch)} successful")
 
+                    # Record successful execution in scheduler service
+                    scheduler_service.record_execution_success(symbols_processed=successful_fetches)
+
                 except Exception as e:
                     logger.error(f"Error in fetch for periodic task: {e}")
                     successful_fetches = 0
+
+                    # Record failure in scheduler service
+                    scheduler_service.record_execution_failure(f"Fetch error: {str(e)}")
 
                 # Log bulk operation summary every few cycles
                 if cycle_count % 2 == 1:  # Every other cycle

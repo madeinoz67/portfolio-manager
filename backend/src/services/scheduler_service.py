@@ -270,6 +270,35 @@ class MarketDataSchedulerService:
             return int((utc_now() - self._last_run).total_seconds())
         return None
 
+    def record_execution_start(self) -> None:
+        """Record that a scheduler execution has started."""
+        if self._state == SchedulerState.RUNNING:
+            # We don't update _last_run until successful completion
+            logger.debug("Scheduler execution started")
+
+    def record_execution_success(self, symbols_processed: int = 0, response_time_ms: Optional[int] = None) -> None:
+        """
+        Record a successful scheduler execution.
+
+        Args:
+            symbols_processed: Number of symbols successfully processed
+            response_time_ms: Response time in milliseconds
+        """
+        if self._state == SchedulerState.RUNNING:
+            self._last_run = utc_now()
+            self._calculate_next_run()
+            logger.info(f"Scheduler execution completed successfully: {symbols_processed} symbols processed")
+
+    def record_execution_failure(self, error: str) -> None:
+        """
+        Record a failed scheduler execution.
+
+        Args:
+            error: Error message describing the failure
+        """
+        self._error_message = error
+        logger.error(f"Scheduler execution failed: {error}")
+
     def simulate_run(self) -> Dict[str, Any]:
         """
         Simulate a scheduler run for testing purposes.
