@@ -181,12 +181,13 @@ export function MarketDataTableView({
 
               if (price.trend.trend === 'up') {
                 return (
-                  <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center" aria-label="Up trend">
+                  <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center" aria-label="Upward trend">
                     <svg
-                      className="w-3 h-3 fill-current text-green-600 dark:text-green-400"
-                      viewBox="0 0 20 20"
+                      className="w-3 h-3 stroke-current text-green-600 dark:text-green-400"
+                      viewBox="0 0 16 16"
+                      fill="none"
                     >
-                      <path d="M10 3l6 7H4l6-7z" />
+                      <path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                 )
@@ -194,12 +195,13 @@ export function MarketDataTableView({
 
               if (price.trend.trend === 'down') {
                 return (
-                  <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center" aria-label="Down trend">
+                  <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center" aria-label="Downward trend">
                     <svg
-                      className="w-3 h-3 fill-current text-red-600 dark:text-red-400"
-                      viewBox="0 0 20 20"
+                      className="w-3 h-3 stroke-current text-red-600 dark:text-red-400"
+                      viewBox="0 0 16 16"
+                      fill="none"
                     >
-                      <path d="M10 17L4 10h12l-6 7z" />
+                      <path d="M3 3L13 13M13 13H7M13 13V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                 )

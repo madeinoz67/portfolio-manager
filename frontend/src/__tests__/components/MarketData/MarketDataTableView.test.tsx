@@ -173,8 +173,8 @@ describe('MarketDataTableView', () => {
       />
     );
 
-    // Should show up arrow for positive trend with rounded background
-    const upArrow = screen.getByLabelText('Up trend');
+    // Should show diagonal up-right arrow for positive trend with rounded background
+    const upArrow = screen.getByLabelText('Upward trend');
     expect(upArrow).toBeInTheDocument();
     expect(upArrow).toHaveClass('rounded-full');
     expect(upArrow).toHaveClass('bg-green-100');
@@ -204,8 +204,8 @@ describe('MarketDataTableView', () => {
       />
     );
 
-    // Should show down arrow for negative trend with rounded background
-    const downArrow = screen.getByLabelText('Down trend');
+    // Should show diagonal down-right arrow for negative trend with rounded background
+    const downArrow = screen.getByLabelText('Downward trend');
     expect(downArrow).toBeInTheDocument();
     expect(downArrow).toHaveClass('rounded-full');
     expect(downArrow).toHaveClass('bg-red-100');
