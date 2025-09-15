@@ -52,23 +52,23 @@ class TestAdminAPIMetricsFix:
         data = result.model_dump()
         print(f"Admin scheduler status response: {data}")
 
-        # Should now include execution metrics
-        assert "totalRuns" in data, "API response should include totalRuns"
-        assert "successful" in data, "API response should include successful"
-        assert "failed" in data, "API response should include failed"
-        assert "symbolsProcessed" in data, "API response should include symbolsProcessed"
-        assert "successRate" in data, "API response should include successRate"
+        # Should now include execution metrics (using frontend field names)
+        assert "total_runs" in data, "API response should include total_runs"
+        assert "successful_runs" in data, "API response should include successful_runs"
+        assert "failed_runs" in data, "API response should include failed_runs"
+        assert "symbols_processed" in data, "API response should include symbols_processed"
+        assert "success_rate" in data, "API response should include success_rate"
 
         # Values should match scheduler service
-        assert data["totalRuns"] == 3, f"Expected totalRuns=3, got {data['totalRuns']}"
-        assert data["successful"] == 2, f"Expected successful=2, got {data['successful']}"
-        assert data["failed"] == 1, f"Expected failed=1, got {data['failed']}"
-        assert data["symbolsProcessed"] == 20, f"Expected symbolsProcessed=20, got {data['symbolsProcessed']}"
+        assert data["total_runs"] == 3, f"Expected total_runs=3, got {data['total_runs']}"
+        assert data["successful_runs"] == 2, f"Expected successful_runs=2, got {data['successful_runs']}"
+        assert data["failed_runs"] == 1, f"Expected failed_runs=1, got {data['failed_runs']}"
+        assert data["symbols_processed"] == 20, f"Expected symbols_processed=20, got {data['symbols_processed']}"
 
         # Success rate should be calculated (2 successful out of 3 total = 66.67%)
         expected_rate = (2 / 3) * 100
-        assert abs(data["successRate"] - expected_rate) < 0.01, \
-            f"Expected successRate={expected_rate:.2f}%, got {data['successRate']}"
+        assert abs(data["success_rate"] - expected_rate) < 0.01, \
+            f"Expected success_rate={expected_rate:.2f}%, got {data['success_rate']}"
 
     @patch('src.core.dependencies.get_current_admin_user')
     def test_admin_scheduler_status_with_no_executions(self, mock_admin_user, db_session: Session):

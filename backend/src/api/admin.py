@@ -1427,12 +1427,12 @@ class SchedulerStatus(BaseModel):
     errorMessage: Optional[str] = None
     configuration: dict
     uptimeSeconds: Optional[int] = None
-    # Execution metrics for admin UI
-    totalRuns: int = 0
-    successful: int = 0
-    failed: int = 0
-    symbolsProcessed: int = 0
-    successRate: float = 0.0
+    # Execution metrics for admin UI (field names match frontend expectations)
+    total_runs: int = 0
+    successful_runs: int = 0
+    failed_runs: int = 0
+    symbols_processed: int = 0
+    success_rate: float = 0.0
 
 
 class SchedulerControlRequest(BaseModel):
@@ -1491,11 +1491,11 @@ async def get_scheduler_status(
         configuration=status_info["configuration"],
         uptimeSeconds=status_info["uptime_seconds"],
         # Execution metrics from scheduler service
-        totalRuns=status_info.get("total_executions", 0),
-        successful=status_info.get("successful_executions", 0),
-        failed=status_info.get("failed_executions", 0),
-        symbolsProcessed=status_info.get("total_symbols_processed", 0),
-        successRate=status_info.get("success_rate_percent", 0.0)
+        total_runs=status_info.get("total_executions", 0),
+        successful_runs=status_info.get("successful_executions", 0),
+        failed_runs=status_info.get("failed_executions", 0),
+        symbols_processed=status_info.get("total_symbols_processed", 0),
+        success_rate=status_info.get("success_rate_percent", 0.0)
     )
 
 
@@ -1633,11 +1633,11 @@ async def control_scheduler(
                 configuration=status_info["configuration"],
                 uptimeSeconds=status_info["uptime_seconds"],
                 # Execution metrics from scheduler service
-                totalRuns=status_info.get("total_executions", 0),
-                successful=status_info.get("successful_executions", 0),
-                failed=status_info.get("failed_executions", 0),
-                symbolsProcessed=status_info.get("total_symbols_processed", 0),
-                successRate=status_info.get("success_rate_percent", 0.0)
+                total_runs=status_info.get("total_executions", 0),
+                successful_runs=status_info.get("successful_executions", 0),
+                failed_runs=status_info.get("failed_executions", 0),
+                symbols_processed=status_info.get("total_symbols_processed", 0),
+                success_rate=status_info.get("success_rate_percent", 0.0)
             )
         )
 
