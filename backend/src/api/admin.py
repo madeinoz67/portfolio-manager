@@ -276,41 +276,44 @@ async def get_market_data_status(
     # Get all providers from database
     providers = db.query(MarketDataProvider).all()
 
-    # Get today's usage stats per provider
-    today_usage = db.query(
-        ApiUsageMetrics.provider_id,
-        func.sum(ApiUsageMetrics.requests_count).label('calls_today'),
-        func.avg(ApiUsageMetrics.avg_response_time_ms).label('avg_response_time')
-    ).filter(
-        func.date(ApiUsageMetrics.recorded_at) == today
-    ).group_by(ApiUsageMetrics.provider_id).all()
+    # Use ProviderActivity table for accurate live usage data (consistent with api-usage endpoint)
+    from src.models.market_data_provider import ProviderActivity
 
-    # Get monthly usage stats per provider
-    monthly_usage = db.query(
-        ApiUsageMetrics.provider_id,
-        func.sum(ApiUsageMetrics.requests_count).label('calls_this_month'),
-        func.sum(ApiUsageMetrics.cost_estimate).label('total_cost')
-    ).filter(
-        ApiUsageMetrics.recorded_at >= current_month_start
-    ).group_by(ApiUsageMetrics.provider_id).all()
+    # Get today's usage stats per provider from activity logs
+    today_activities = db.query(ProviderActivity).filter(
+        func.date(ProviderActivity.timestamp) == today
+    ).all()
 
-    # Create lookup dictionaries
-    today_lookup = {stat.provider_id: {
-        'calls': int(stat.calls_today or 0),
-        'avg_response_time': int(stat.avg_response_time or 0)
-    } for stat in today_usage}
-    monthly_lookup = {stat.provider_id: {
-        'calls': int(stat.calls_this_month or 0),
-        'cost': float(stat.total_cost or 0.0)
-    } for stat in monthly_usage}
+    # Get monthly usage stats per provider from activity logs
+    monthly_activities = db.query(ProviderActivity).filter(
+        func.date(ProviderActivity.timestamp) >= current_month_start.date()
+    ).all()
 
-    # Check for rate limit hits today
-    rate_limit_hits = db.query(ApiUsageMetrics.provider_id).filter(
-        func.date(ApiUsageMetrics.recorded_at) == today,
-        ApiUsageMetrics.rate_limit_hit == True
-    ).group_by(ApiUsageMetrics.provider_id).all()
+    # Group activities by provider for today
+    today_usage = {}
+    for activity in today_activities:
+        provider_id = activity.provider_id
+        if provider_id not in today_usage:
+            today_usage[provider_id] = {'calls': 0, 'avg_response_time': 0}
+        today_usage[provider_id]['calls'] += 1
 
-    rate_limited_providers = {hit.provider_id for hit in rate_limit_hits}
+    # Group activities by provider for this month
+    monthly_usage = {}
+    for activity in monthly_activities:
+        provider_id = activity.provider_id
+        if provider_id not in monthly_usage:
+            monthly_usage[provider_id] = {'calls': 0, 'cost': 0.0}  # Use 'cost' key to match expected format
+        monthly_usage[provider_id]['calls'] += 1
+
+    # Lookup dictionaries are already created as today_usage and monthly_usage
+    today_lookup = today_usage
+    monthly_lookup = monthly_usage
+
+    # Rate limit detection from ProviderActivity table (look for rate limit error statuses)
+    rate_limited_providers = set()
+    for activity in today_activities:
+        if activity.status == "error" and activity.description and "rate limit" in activity.description.lower():
+            rate_limited_providers.add(activity.provider_id)
 
     provider_list = []
     for provider in providers:
