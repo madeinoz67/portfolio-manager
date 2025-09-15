@@ -15,6 +15,7 @@ from src.database import get_db
 from src.models import Portfolio, Holding, User, Stock, NewsNotice
 from src.schemas.portfolio import (
     PortfolioCreate,
+    PortfolioDeleteConfirmation,
     PortfolioResponse,
     PortfolioUpdate,
 )
@@ -125,16 +126,84 @@ async def delete_portfolio(
         Portfolio.owner_id == current_user.id,
         Portfolio.is_active.is_(True)
     ).first()
-    
+
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portfolio not found"
         )
-    
+
     # Soft delete
     portfolio.is_active = False
     db.commit()
+
+
+@router.post("/{portfolio_id}/delete", status_code=status.HTTP_200_OK)
+async def delete_portfolio_with_confirmation(
+    portfolio_id: UUID,
+    confirmation: PortfolioDeleteConfirmation,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
+) -> dict:
+    """Delete portfolio (soft delete) with name confirmation."""
+    portfolio = db.query(Portfolio).filter(
+        Portfolio.id == portfolio_id,
+        Portfolio.owner_id == current_user.id,
+        Portfolio.is_active.is_(True)
+    ).first()
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+
+    # Verify confirmation name matches exactly
+    if confirmation.confirmation_name != portfolio.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmation name does not match portfolio name"
+        )
+
+    # Soft delete
+    portfolio.is_active = False
+    db.commit()
+
+    return {"message": "Portfolio deleted successfully"}
+
+
+@router.post("/{portfolio_id}/hard-delete", status_code=status.HTTP_200_OK)
+async def hard_delete_portfolio_with_confirmation(
+    portfolio_id: UUID,
+    confirmation: PortfolioDeleteConfirmation,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_flexible)]
+) -> dict:
+    """Permanently delete portfolio and all related data with name confirmation."""
+    portfolio = db.query(Portfolio).filter(
+        Portfolio.id == portfolio_id,
+        Portfolio.owner_id == current_user.id,
+        Portfolio.is_active.is_(True)
+    ).first()
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+
+    # Verify confirmation name matches exactly
+    if confirmation.confirmation_name != portfolio.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmation name does not match portfolio name"
+        )
+
+    # Hard delete - cascade will handle holdings and transactions
+    db.delete(portfolio)
+    db.commit()
+
+    return {"message": "Portfolio permanently deleted"}
 
 
 @router.get("/{portfolio_id}/holdings", response_model=list[HoldingResponse])

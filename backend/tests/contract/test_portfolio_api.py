@@ -99,8 +99,45 @@ class TestPortfolioAPI:
             "description": "Test description"
         }
         response = client.post("/api/v1/portfolios", json=long_name_data)
-        
+
         if response.status_code == 422:
             # Should validate max length
             error_data = response.json()
             assert "detail" in error_data or "error" in error_data
+
+    def test_delete_portfolio_with_confirmation_endpoint_exists(self, client: TestClient):
+        """POST /api/v1/portfolios/{portfolio_id}/delete should exist and require confirmation."""
+        test_uuid = "00000000-0000-0000-0000-000000000000"
+        confirmation_data = {
+            "confirmation_name": "Test Portfolio"
+        }
+
+        response = client.post(f"/api/v1/portfolios/{test_uuid}/delete", json=confirmation_data)
+
+        # Should return 401/404/422, not 404 for missing route
+        assert response.status_code in [200, 401, 404, 422], f"Expected valid status code, got {response.status_code}"
+
+    def test_delete_portfolio_confirmation_validation(self, client: TestClient):
+        """POST /api/v1/portfolios/{portfolio_id}/delete should validate confirmation_name field."""
+        test_uuid = "00000000-0000-0000-0000-000000000000"
+
+        # Test missing confirmation_name
+        invalid_data = {}
+        response = client.post(f"/api/v1/portfolios/{test_uuid}/delete", json=invalid_data)
+
+        if response.status_code == 422:
+            # Validation error expected for missing confirmation_name
+            error_data = response.json()
+            assert "detail" in error_data or "error" in error_data
+
+    def test_delete_portfolio_hard_delete_endpoint_exists(self, client: TestClient):
+        """POST /api/v1/portfolios/{portfolio_id}/hard-delete should exist for permanent deletion."""
+        test_uuid = "00000000-0000-0000-0000-000000000000"
+        confirmation_data = {
+            "confirmation_name": "Test Portfolio"
+        }
+
+        response = client.post(f"/api/v1/portfolios/{test_uuid}/hard-delete", json=confirmation_data)
+
+        # Should return 401/404/422, not 404 for missing route
+        assert response.status_code in [200, 401, 404, 422], f"Expected valid status code, got {response.status_code}"

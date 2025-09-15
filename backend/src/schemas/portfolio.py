@@ -22,6 +22,11 @@ class PortfolioUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
 
 
+class PortfolioDeleteConfirmation(BaseModel):
+    """Schema for portfolio deletion with confirmation."""
+    confirmation_name: str = Field(..., min_length=1, max_length=100)
+
+
 class PortfolioResponse(BaseModel):
     """Schema for portfolio API responses."""
     id: UUID
