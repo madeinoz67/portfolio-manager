@@ -1643,9 +1643,9 @@ async def get_scheduler_status(
     return SchedulerStatus(
         schedulerName="market_data_scheduler",
         state=status_info["state"],
-        lastRun=status_info["last_run"].isoformat() if status_info["last_run"] else None,
-        nextRun=status_info["next_run"].isoformat() if status_info["next_run"] else None,
-        pauseUntil=status_info["pause_until"].isoformat() if status_info["pause_until"] else None,
+        lastRun=status_info["last_run"].isoformat() + 'Z' if status_info["last_run"] else None,
+        nextRun=status_info["next_run"].isoformat() + 'Z' if status_info["next_run"] else None,
+        pauseUntil=status_info["pause_until"].isoformat() + 'Z' if status_info["pause_until"] else None,
         errorMessage=status_info["error_message"],
         configuration=status_info["configuration"],
         uptimeSeconds=status_info["uptime_seconds"],
