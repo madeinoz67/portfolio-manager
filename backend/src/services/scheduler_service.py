@@ -88,6 +88,7 @@ class MarketDataSchedulerService:
         self._failed_executions = 0
         self._total_symbols_processed = 0
         self._last_execution_symbols = 0
+        self._current_execution = None  # Track current execution in progress
 
         # Load execution history from database on startup
         self._load_execution_history()
@@ -140,7 +141,9 @@ class MarketDataSchedulerService:
 
         # Get recent activity (last 24 hours)
         recent_cutoff = utc_now() - timedelta(hours=24)
-        recent_executions = [ex for ex in all_executions if ex.started_at >= recent_cutoff]
+        # Convert to naive datetime for comparison with database datetime
+        recent_cutoff_naive = recent_cutoff.replace(tzinfo=None)
+        recent_executions = [ex for ex in all_executions if ex.started_at >= recent_cutoff_naive]
         recent_symbols = sum(ex.symbols_processed or 0 for ex in recent_executions)
         recent_success_count = sum(1 for ex in recent_executions if ex.status == "success")
         recent_success_rate = (recent_success_count / len(recent_executions) * 100) if recent_executions else 0.0
@@ -342,7 +345,9 @@ class MarketDataSchedulerService:
     def _calculate_uptime_seconds(self) -> Optional[int]:
         """Calculate scheduler uptime in seconds."""
         if self._state == SchedulerState.RUNNING and self._last_run:
-            return int((utc_now() - self._last_run).total_seconds())
+            # Convert timezone-aware utc_now to naive for comparison with database datetime
+            now_naive = utc_now().replace(tzinfo=None)
+            return int((now_naive - self._last_run).total_seconds())
         return None
 
     def _load_execution_history(self) -> None:
@@ -378,7 +383,17 @@ class MarketDataSchedulerService:
     def record_execution_start(self) -> None:
         """Record that a scheduler execution has started."""
         if self._state == SchedulerState.RUNNING:
-            # We don't update _last_run until successful completion
+            # Create database record for execution start (using naive datetime for database)
+            start_time = utc_now().replace(tzinfo=None)
+            self._current_execution = SchedulerExecution(
+                started_at=start_time,
+                status="running",
+                symbols_processed=0,
+                successful_fetches=0,
+                failed_fetches=0
+            )
+            self.db.add(self._current_execution)
+            self.db.commit()
             logger.debug("Scheduler execution started")
 
     def record_execution_success(self, symbols_processed: int = 0, response_time_ms: Optional[int] = None) -> None:
@@ -390,8 +405,22 @@ class MarketDataSchedulerService:
             response_time_ms: Response time in milliseconds
         """
         if self._state == SchedulerState.RUNNING:
-            self._last_run = utc_now()
+            completion_time = utc_now().replace(tzinfo=None)  # Store naive datetime
+            self._last_run = completion_time
             self._calculate_next_run()
+
+            # Update current execution record in database
+            if self._current_execution:
+                self._current_execution.completed_at = completion_time
+                self._current_execution.status = "success"
+                self._current_execution.symbols_processed = symbols_processed
+                self._current_execution.successful_fetches = symbols_processed  # Assume all successful for now
+                self._current_execution.failed_fetches = 0
+                if response_time_ms:
+                    self._current_execution.execution_time_ms = response_time_ms
+
+                self.db.commit()
+                self._current_execution = None
 
             # Update execution metrics
             self._total_executions += 1
@@ -409,6 +438,14 @@ class MarketDataSchedulerService:
         Args:
             error: Error message describing the failure
         """
+        # Update current execution record in database
+        if self._current_execution:
+            self._current_execution.completed_at = utc_now().replace(tzinfo=None)  # Store naive datetime
+            self._current_execution.status = "failed"
+            self._current_execution.error_message = error
+            self.db.commit()
+            self._current_execution = None
+
         # Update execution metrics
         self._total_executions += 1
         self._failed_executions += 1
