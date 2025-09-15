@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 from src.core.logging import get_logger
 from src.utils.datetime_utils import utc_now
 from src.models.scheduler_execution import SchedulerExecution
+from src.models.holding import Holding
+from src.models.stock import Stock
+from src.services.market_data_service import MarketDataService
 
 logger = get_logger(__name__)
 
@@ -473,6 +476,134 @@ class MarketDataSchedulerService:
             "providers_checked": len(self._config.enabled_providers),
             "symbols_updated": 0  # Would be actual count in real implementation
         }
+
+    async def execute_market_data_fetch(self) -> Dict[str, Any]:
+        """
+        Execute actual market data fetching for all portfolio holdings.
+
+        This method integrates with MarketDataService to fetch real data
+        and updates scheduler metrics accordingly.
+
+        Returns:
+            Dictionary with execution results including symbols processed
+        """
+        if self._state != SchedulerState.RUNNING:
+            return {"error": f"Scheduler not running (state: {self._state})"}
+
+        execution_start_time = utc_now().replace(tzinfo=None)
+        symbols_processed = 0
+        symbols_fetched = []
+        failed_symbols = []
+
+        try:
+            # Start database execution record
+            execution = SchedulerExecution(
+                started_at=execution_start_time,
+                status="running",
+                symbols_processed=0,
+                successful_fetches=0,
+                failed_fetches=0
+            )
+            self.db.add(execution)
+            self.db.commit()
+            self._current_execution = execution
+
+            # Get all unique stock symbols from portfolio holdings
+            unique_symbols = (
+                self.db.query(Stock.symbol)
+                .join(Holding, Stock.id == Holding.stock_id)
+                .distinct()
+                .all()
+            )
+
+            symbols_to_fetch = [symbol[0] for symbol in unique_symbols]
+            logger.info(f"Scheduler executing market data fetch for {len(symbols_to_fetch)} symbols: {symbols_to_fetch}")
+
+            if not symbols_to_fetch:
+                logger.warning("No portfolio holdings found - no symbols to fetch")
+                execution.completed_at = utc_now().replace(tzinfo=None)
+                execution.status = "completed"
+                execution.symbols_processed = 0
+                self.db.commit()
+                return {
+                    "status": "completed",
+                    "symbols_processed": 0,
+                    "symbols_fetched": [],
+                    "message": "No symbols to fetch"
+                }
+
+            # Initialize market data service
+            market_service = MarketDataService(self.db)
+
+            try:
+                # Use bulk fetch for optimal API calls - provider adapters handle bulk vs single
+                logger.info(f"Using bulk fetch for optimal provider API usage")
+                bulk_results = await market_service.fetch_multiple_prices(symbols_to_fetch)
+
+                # Process bulk results
+                for symbol in symbols_to_fetch:
+                    if symbol in bulk_results and bulk_results[symbol]:
+                        price_data = bulk_results[symbol]
+                        symbols_fetched.append(symbol)
+                        symbols_processed += 1
+                        logger.info(f"Successfully fetched data for {symbol}: ${price_data.get('price', 'N/A')}")
+                    else:
+                        failed_symbols.append(symbol)
+                        logger.warning(f"No data returned for symbol {symbol}")
+
+            finally:
+                # Always close the market data service session
+                await market_service.close_session()
+
+            # Update execution record
+            execution.completed_at = utc_now().replace(tzinfo=None)
+            execution.status = "success" if symbols_processed > 0 else "partial"
+            execution.symbols_processed = symbols_processed
+            execution.successful_fetches = len(symbols_fetched)
+            execution.failed_fetches = len(failed_symbols)
+            self.db.commit()
+
+            # Update in-memory metrics
+            self._last_run = execution.completed_at
+            self._total_executions += 1
+            self._successful_executions += 1
+            self._total_symbols_processed += symbols_processed
+            self._calculate_next_run()
+
+            logger.info(f"Market data fetch completed: {symbols_processed} symbols processed, {len(failed_symbols)} failed")
+
+            return {
+                "status": "completed",
+                "symbols_processed": symbols_processed,
+                "symbols_fetched": symbols_fetched,
+                "failed_symbols": failed_symbols,
+                "run_time": execution.completed_at.isoformat(),
+                "next_run": self._next_run.isoformat() if self._next_run else None
+            }
+
+        except Exception as e:
+            # Handle execution failure
+            logger.error(f"Market data fetch execution failed: {e}")
+
+            if execution:
+                execution.completed_at = utc_now().replace(tzinfo=None)
+                execution.status = "failed"
+                execution.symbols_processed = symbols_processed
+                execution.successful_fetches = len(symbols_fetched)
+                execution.failed_fetches = len(failed_symbols)
+                self.db.commit()
+
+            # Update failure metrics
+            self._total_executions += 1
+            self._failed_executions += 1
+            self._error_message = str(e)
+
+            return {
+                "status": "failed",
+                "error": str(e),
+                "symbols_processed": symbols_processed,
+                "symbols_fetched": symbols_fetched
+            }
 
 
 # Global scheduler service instance
