@@ -6,7 +6,7 @@ import json
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from src.core.auth import (
@@ -31,6 +31,7 @@ from src.schemas.auth import (
     UserUpdate
 )
 from src.utils.datetime_utils import to_iso_string
+from src.services.audit_service import AuditService
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     user_data: UserRegister,
+    request: Request,
     db: Session = Depends(get_db)
 ) -> UserResponse:
     """
@@ -86,7 +88,24 @@ async def register_user(
             logger.info(f"User registered with standard user role: {new_user.email}")
         
         logger.info(f"User registered successfully: {new_user.email} (ID: {new_user.id})")
-        
+
+        # Audit logging
+        try:
+            audit_service = AuditService(db)
+            audit_service.log_user_created(
+                user_id=new_user.id,
+                email=new_user.email,
+                first_name=new_user.first_name,
+                last_name=new_user.last_name,
+                role=new_user.role.value,
+                ip_address=getattr(request.client, 'host', None) if request.client else None,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.commit()  # Commit audit log
+        except Exception as e:
+            # Log error but don't fail the registration
+            logger.error(f"Failed to create audit log for user registration: {e}")
+
         return UserResponse(
             id=str(new_user.id),
             email=new_user.email,
@@ -109,6 +128,7 @@ async def register_user(
 @router.post("/login", response_model=TokenResponse)
 async def login_user(
     user_credentials: UserLogin,
+    request: Request,
     db: Session = Depends(get_db)
 ) -> TokenResponse:
     """
@@ -153,7 +173,20 @@ async def login_user(
         )
         
         logger.info(f"User login successful: {user.email} (ID: {user.id})")
-        
+
+        # Audit logging
+        try:
+            audit_service = AuditService(db)
+            audit_service.log_user_login(
+                user_id=user.id,
+                ip_address=getattr(request.client, 'host', None) if request.client else None,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.commit()  # Commit audit log
+        except Exception as e:
+            # Log error but don't fail the login
+            logger.error(f"Failed to create audit log for user login: {e}")
+
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",

@@ -231,7 +231,7 @@ class AuditService:
 
     def log_user_login(
         self,
-        user_id: str,
+        user_id,  # UUID or str
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None
     ) -> Optional[AuditLog]:
@@ -241,7 +241,7 @@ class AuditService:
             event_description="User logged in",
             user_id=user_id,
             entity_type="user",
-            entity_id=user_id,
+            entity_id=str(user_id),
             event_metadata={
                 "login_timestamp": now().isoformat()
             },
@@ -264,6 +264,34 @@ class AuditService:
             entity_id=user_id,
             event_metadata={
                 "logout_timestamp": now().isoformat()
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_user_created(
+        self,
+        user_id,  # UUID or str
+        email: str,
+        first_name: str,
+        last_name: str,
+        role: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log user creation event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.USER_CREATED,
+            event_description=f"User registered: {email}",
+            user_id=user_id,
+            entity_type="user",
+            entity_id=str(user_id),
+            event_metadata={
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "role": role,
+                "registration_timestamp": now().isoformat()
             },
             ip_address=ip_address,
             user_agent=user_agent

@@ -329,7 +329,7 @@ class TestComprehensiveAuditEvents:
         assert audit_log.entity_type == "user"
         assert audit_log.entity_id == str(user.id)
         assert audit_log.user_id == user.id
-        assert "login" in audit_log.event_description.lower()
+        assert "logged in" in audit_log.event_description
 
     def test_user_registration_audit_event(self, db_session: Session, client: TestClient):
         """Test that user registration creates audit log entries."""
@@ -349,7 +349,7 @@ class TestComprehensiveAuditEvents:
         # Verify registration was successful
         assert response.status_code == 201
         registration_response = response.json()
-        new_user_id = registration_response["user"]["id"]
+        new_user_id = registration_response["id"]
 
         # Verify audit log was created
         db_session.commit()
@@ -362,7 +362,7 @@ class TestComprehensiveAuditEvents:
         assert audit_log.event_type == AuditEventType.USER_CREATED
         assert audit_log.entity_type == "user"
         assert audit_log.entity_id == new_user_id
-        assert audit_log.user_id == new_user_id  # User creates themselves
+        assert str(audit_log.user_id) == new_user_id  # User creates themselves
         assert "registered" in audit_log.event_description.lower() or "created" in audit_log.event_description.lower()
 
     def test_audit_events_include_request_metadata(self, db_session: Session, client: TestClient):
