@@ -11,12 +11,35 @@ from sqlalchemy import desc
 from src.models.market_data_provider import ProviderActivity, MarketDataProvider
 
 
+def _convert_decimals_to_strings(data: Any) -> Any:
+    """
+    Recursively convert Decimal objects to strings in nested data structures.
+
+    This preserves precision better than converting to float, which is important
+    for financial data where precision matters.
+
+    Args:
+        data: Any data structure that may contain Decimal objects
+
+    Returns:
+        Data structure with Decimals converted to strings
+    """
+    if isinstance(data, Decimal):
+        return str(data)
+    elif isinstance(data, dict):
+        return {key: _convert_decimals_to_strings(value) for key, value in data.items()}
+    elif isinstance(data, (list, tuple)):
+        return [_convert_decimals_to_strings(item) for item in data]
+    else:
+        return data
+
+
 def serialize_metadata_for_json(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """
     Serialize metadata to be JSON-compatible by converting problematic types.
 
     Handles:
-    - Decimal objects -> float
+    - Decimal objects -> string (preserves precision)
     - datetime objects -> ISO string
     - Nested dictionaries recursively
 
@@ -31,7 +54,7 @@ def serialize_metadata_for_json(metadata: Dict[str, Any]) -> Dict[str, Any]:
 
     def convert_value(value: Any) -> Any:
         if isinstance(value, Decimal):
-            return float(value)
+            return str(value)  # Convert to string to preserve precision
         elif isinstance(value, datetime):
             return value.isoformat()
         elif isinstance(value, dict):
