@@ -15,7 +15,7 @@ from src.models.holding import Holding
 from src.models.stock import Stock
 from src.models.transaction import Transaction
 from src.models.api_key import ApiKey
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.models.news_notice import NewsNotice
 from src.models.poll_interval_config import PollIntervalConfig
@@ -133,8 +133,8 @@ class TestTimezoneHandling:
         assert api_key.created_at == mock_local_time
 
     def test_api_usage_metrics_timestamps_use_local_time(self, db_session: Session, mock_local_time):
-        """Test ApiUsageMetrics model uses local time for timestamps."""
-        metrics = ApiUsageMetrics(
+        """Test MarketDataUsageMetrics model uses local time for timestamps."""
+        metrics = MarketDataUsageMetrics(
             metric_id="test_metric",
             provider_id="alpha_vantage",
             request_type="stock_quote",
@@ -285,7 +285,7 @@ class TestTimezoneHandling:
 
         models_to_check = [
             User, Portfolio, Holding, Stock, Transaction, ApiKey,
-            ApiUsageMetrics, MarketDataProvider, NewsNotice, PollIntervalConfig,
+            MarketDataUsageMetrics, MarketDataProvider, NewsNotice, PollIntervalConfig,
             PortfolioValuation, PriceHistory, RealtimePriceHistory, SSEConnection
         ]
 

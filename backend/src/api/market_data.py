@@ -24,7 +24,7 @@ from src.models.stock import Stock
 from src.models.portfolio import Portfolio
 from src.models.holding import Holding
 from src.models.sse_connection import SSEConnection
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import ProviderActivity
 from src.services.market_data_service import MarketDataService
 from src.services.trend_calculation_service import TrendCalculationService

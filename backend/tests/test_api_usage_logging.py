@@ -8,7 +8,7 @@ and that datetime objects are properly stored in the database.
 import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.services.market_data_service import MarketDataService
 
@@ -47,8 +47,8 @@ def test_api_usage_logging_without_constraint_errors(db: Session):
     )
 
     # Verify the record was created without errors
-    usage_record = db.query(ApiUsageMetrics).filter(
-        ApiUsageMetrics.provider_id == "test_provider"
+    usage_record = db.query(MarketDataUsageMetrics).filter(
+        MarketDataUsageMetrics.provider_id == "test_provider"
     ).first()
 
     assert usage_record is not None
@@ -94,8 +94,8 @@ def test_api_usage_logging_error_case(db: Session):
     )
 
     # Verify the error record was created
-    usage_record = db.query(ApiUsageMetrics).filter(
-        ApiUsageMetrics.provider_id == "test_provider_error"
+    usage_record = db.query(MarketDataUsageMetrics).filter(
+        MarketDataUsageMetrics.provider_id == "test_provider_error"
     ).first()
 
     assert usage_record is not None
@@ -134,8 +134,8 @@ def test_multiple_api_usage_logs_same_hour(db: Session):
         )
 
     # Verify all records were created
-    usage_records = db.query(ApiUsageMetrics).filter(
-        ApiUsageMetrics.provider_id == "test_provider_multi"
+    usage_records = db.query(MarketDataUsageMetrics).filter(
+        MarketDataUsageMetrics.provider_id == "test_provider_multi"
     ).all()
 
     assert len(usage_records) == 3

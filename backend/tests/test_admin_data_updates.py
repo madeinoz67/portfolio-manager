@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from src.models.stock import Stock, StockStatus
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.models.user import User
 from src.models.user_role import UserRole
@@ -120,7 +120,7 @@ class TestAdminDataUpdates:
 
         metrics = [
             # Today's metrics
-            ApiUsageMetrics(
+            MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id="yfinance",
                 request_type="stock_quote",
@@ -132,7 +132,7 @@ class TestAdminDataUpdates:
                 time_bucket="daily",
                 recorded_at=current_time
             ),
-            ApiUsageMetrics(
+            MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id="alpha_vantage",
                 request_type="stock_quote",
@@ -145,7 +145,7 @@ class TestAdminDataUpdates:
                 recorded_at=current_time
             ),
             # Yesterday's metrics for trends
-            ApiUsageMetrics(
+            MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id="yfinance",
                 request_type="stock_quote",
@@ -157,7 +157,7 @@ class TestAdminDataUpdates:
                 time_bucket="daily",
                 recorded_at=yesterday
             ),
-            ApiUsageMetrics(
+            MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id="alpha_vantage",
                 request_type="stock_quote",
@@ -295,7 +295,7 @@ class TestAdminDataUpdates:
 
         # Add new API metrics
         current_time = now()
-        new_metric = ApiUsageMetrics(
+        new_metric = MarketDataUsageMetrics(
             metric_id=str(uuid.uuid4()),
             provider_id="yfinance",
             request_type="stock_quote",
@@ -316,9 +316,9 @@ class TestAdminDataUpdates:
         assert nvda_stock.company_name == "NVIDIA Corporation"
 
         # Verify API usage data is queryable
-        new_metrics = db_session.query(ApiUsageMetrics).filter(
-            ApiUsageMetrics.provider_id == "yfinance",
-            ApiUsageMetrics.requests_count == 50
+        new_metrics = db_session.query(MarketDataUsageMetrics).filter(
+            MarketDataUsageMetrics.provider_id == "yfinance",
+            MarketDataUsageMetrics.requests_count == 50
         ).first()
         assert new_metrics is not None
         assert new_metrics.avg_response_time_ms == 380
@@ -326,7 +326,7 @@ class TestAdminDataUpdates:
     def test_admin_endpoints_handle_no_data_gracefully(self, db_session: Session, admin_user: User):
         """Test that admin endpoints handle empty data gracefully."""
         # Clear all data
-        db_session.query(ApiUsageMetrics).delete()
+        db_session.query(MarketDataUsageMetrics).delete()
         db_session.query(Stock).delete()
         db_session.commit()
 

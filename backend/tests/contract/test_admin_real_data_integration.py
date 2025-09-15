@@ -8,7 +8,7 @@ from datetime import datetime, date
 from sqlalchemy.orm import Session
 from src.models.user import User
 from src.models.user_role import UserRole
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 
 
@@ -19,7 +19,7 @@ def sample_api_usage_data(db_session: Session):
     today = datetime.now()
 
     # yfinance usage - successful requests
-    usage1 = ApiUsageMetrics(
+    usage1 = MarketDataUsageMetrics(
         metric_id="yfinance_daily_aapl",
         provider_id="yfinance",
         request_type="quote",
@@ -33,7 +33,7 @@ def sample_api_usage_data(db_session: Session):
     )
 
     # alpha_vantage usage - with rate limit hit
-    usage2 = ApiUsageMetrics(
+    usage2 = MarketDataUsageMetrics(
         metric_id="alpha_vantage_daily_stocks",
         provider_id="alpha_vantage",
         request_type="time_series",
@@ -179,10 +179,10 @@ class TestRealDataDatabaseSchema:
     def test_api_usage_metrics_fields_exist(self, db_session: Session):
         """Test that required fields exist in api_usage_metrics table"""
         # This test should pass with correct schema
-        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 
         # Create a test record to verify all expected fields exist
-        usage = ApiUsageMetrics(
+        usage = MarketDataUsageMetrics(
             metric_id="test_metric",
             provider_id="test_provider",
             request_type="quote",
@@ -199,7 +199,7 @@ class TestRealDataDatabaseSchema:
         db_session.commit()
 
         # Query back to ensure all fields are accessible
-        queried_usage = db_session.query(ApiUsageMetrics).first()
+        queried_usage = db_session.query(MarketDataUsageMetrics).first()
         assert queried_usage.provider_id == "test_provider"
         assert queried_usage.request_type == "quote"
         assert queried_usage.rate_limit_hit == False
@@ -274,7 +274,7 @@ class TestRealMarketDataEnhancements:
         from src.api.admin import get_api_usage
         from src.models.user import User
         from src.models.user_role import UserRole
-        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_usage_metrics import MarketDataUsageMetrics
         from datetime import datetime, date, timedelta
 
         # Create admin user
@@ -289,7 +289,7 @@ class TestRealMarketDataEnhancements:
 
         # Add yesterday's data for comparison
         yesterday = datetime.now() - timedelta(days=1)
-        usage_yesterday = ApiUsageMetrics(
+        usage_yesterday = MarketDataUsageMetrics(
             metric_id="yfinance_daily_aapl_yesterday",
             provider_id="yfinance",
             request_type="quote",
@@ -322,7 +322,7 @@ class TestRealMarketDataEnhancements:
         from src.api.admin import get_market_data_status
         from src.models.user import User
         from src.models.user_role import UserRole
-        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 
         # Create admin user
         admin_user = User(
@@ -335,8 +335,8 @@ class TestRealMarketDataEnhancements:
         db_session.commit()
 
         # Add response time data to existing metrics
-        today_usage = db_session.query(ApiUsageMetrics).filter(
-            ApiUsageMetrics.provider_id == "yfinance"
+        today_usage = db_session.query(MarketDataUsageMetrics).filter(
+            MarketDataUsageMetrics.provider_id == "yfinance"
         ).first()
 
         if today_usage:
@@ -362,12 +362,12 @@ class TestRealMarketDataEnhancements:
         # For now, this is a placeholder test to verify the data structure
         # would be available for implementing real recent activity
 
-        from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+        from src.models.market_data_usage_metrics import MarketDataUsageMetrics
         from datetime import datetime, timedelta
 
         # Add recent activity events that could be used for activity tracking
         recent_events = [
-            ApiUsageMetrics(
+            MarketDataUsageMetrics(
                 metric_id="recent_success_1",
                 provider_id="yfinance",
                 request_type="batch_update",
@@ -379,7 +379,7 @@ class TestRealMarketDataEnhancements:
                 rate_limit_hit=False,
                 error_count=0
             ),
-            ApiUsageMetrics(
+            MarketDataUsageMetrics(
                 metric_id="rate_limit_event",
                 provider_id="alpha_vantage",
                 request_type="quote",
@@ -397,8 +397,8 @@ class TestRealMarketDataEnhancements:
         db_session.commit()
 
         # Verify the data exists in database for future real activity implementation
-        recent_activity_data = db_session.query(ApiUsageMetrics).filter(
-            ApiUsageMetrics.recorded_at >= datetime.now() - timedelta(hours=24)
+        recent_activity_data = db_session.query(MarketDataUsageMetrics).filter(
+            MarketDataUsageMetrics.recorded_at >= datetime.now() - timedelta(hours=24)
         ).all()
 
         assert len(recent_activity_data) >= 2

@@ -15,10 +15,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from src.database import Base
 
 
-class ApiUsageMetrics(Base):
-    """Model for tracking market data API usage metrics."""
+class MarketDataUsageMetrics(Base):
+    """Model for tracking market data provider API usage metrics."""
 
-    __tablename__ = "market_data_api_usage_metrics"
+    __tablename__ = "market_data_usage_metrics"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     metric_id = Column(String(100), nullable=False)

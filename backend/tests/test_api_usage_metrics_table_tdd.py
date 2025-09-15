@@ -11,10 +11,10 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from src.database import engine
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 
 
-class TestApiUsageMetricsTableTDD:
+class TestMarketDataUsageMetricsTableTDD:
     """TDD tests for api_usage_metrics table existence and functionality."""
 
     def test_api_usage_metrics_table_exists(self):
@@ -58,7 +58,7 @@ class TestApiUsageMetricsTableTDD:
         with Session(engine) as db:
             try:
                 # This should not raise sqlite3.OperationalError: no such table
-                result = db.query(ApiUsageMetrics).count()
+                result = db.query(MarketDataUsageMetrics).count()
                 assert result >= 0, "Should be able to count records in api_usage_metrics table"
             except Exception as e:
                 pytest.fail(f"Failed to query api_usage_metrics table: {e}")

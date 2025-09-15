@@ -14,7 +14,7 @@ from src.core.logging import get_logger
 from src.models.user import User
 from src.models.user_role import UserRole
 from src.models.portfolio import Portfolio
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import ProviderActivity
 from src.schemas.auth import UserResponse
 from src.schemas.audit_log import (
@@ -266,7 +266,7 @@ async def get_market_data_status(
     logger.info(f"Admin user {current_admin.email} requesting market data provider status")
 
     from src.models.market_data_provider import MarketDataProvider
-    from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+    from src.models.market_data_usage_metrics import MarketDataUsageMetrics
     from sqlalchemy import func
     from datetime import datetime, date
 

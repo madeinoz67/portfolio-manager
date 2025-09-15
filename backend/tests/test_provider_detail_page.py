@@ -12,7 +12,7 @@ from src.main import app
 from src.models.user import User
 from src.models.user_role import UserRole
 from src.models.market_data_provider import MarketDataProvider
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.core.auth import create_access_token, get_password_hash
 
 
@@ -83,7 +83,7 @@ def sample_usage_data(db_session: Session, sample_provider: MarketDataProvider):
     # Create usage metrics for different time periods
     metrics = [
         # Today's data
-        ApiUsageMetrics(
+        MarketDataUsageMetrics(
             metric_id="test_today_1",
             provider_id=sample_provider.name,
             request_type="price_fetch",
@@ -96,7 +96,7 @@ def sample_usage_data(db_session: Session, sample_provider: MarketDataProvider):
             error_count=2,
             avg_response_time_ms=150
         ),
-        ApiUsageMetrics(
+        MarketDataUsageMetrics(
             metric_id="test_today_2",
             provider_id=sample_provider.name,
             request_type="bulk_fetch",
@@ -110,7 +110,7 @@ def sample_usage_data(db_session: Session, sample_provider: MarketDataProvider):
             avg_response_time_ms=300
         ),
         # Yesterday's data
-        ApiUsageMetrics(
+        MarketDataUsageMetrics(
             metric_id="test_yesterday",
             provider_id=sample_provider.name,
             request_type="price_fetch",
@@ -124,7 +124,7 @@ def sample_usage_data(db_session: Session, sample_provider: MarketDataProvider):
             avg_response_time_ms=120
         ),
         # Week ago data
-        ApiUsageMetrics(
+        MarketDataUsageMetrics(
             metric_id="test_week_ago",
             provider_id=sample_provider.name,
             request_type="price_fetch",

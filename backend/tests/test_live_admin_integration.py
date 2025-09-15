@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from fastapi.testclient import TestClient
 
 from src.models.stock import Stock, StockStatus
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import MarketDataProvider
 from src.models.user import User
 from src.models.user_role import UserRole
@@ -61,7 +61,7 @@ class TestLiveAdminIntegration:
         """Test fetching real TLS stock data and verifying it appears in admin endpoints."""
 
         # Step 0: Clear previous data to ensure clean test
-        db_session.query(ApiUsageMetrics).delete()
+        db_session.query(MarketDataUsageMetrics).delete()
         db_session.query(Stock).filter(Stock.symbol == "TLS").delete()
         db_session.commit()
 
@@ -101,7 +101,7 @@ class TestLiveAdminIntegration:
                     db_session.refresh(tls_stock)
 
                     # Step 3: Record this as an API usage metric
-                    api_metric = ApiUsageMetrics(
+                    api_metric = MarketDataUsageMetrics(
                         metric_id=str(uuid.uuid4()),
                         provider_id="yfinance",
                         request_type="stock_quote",
@@ -169,7 +169,7 @@ class TestLiveAdminIntegration:
         """Test that real API calls are tracked and show up in admin usage stats."""
 
         # Step 0: Clear previous data to ensure clean test
-        db_session.query(ApiUsageMetrics).delete()
+        db_session.query(MarketDataUsageMetrics).delete()
         db_session.commit()
 
         # Step 1: Ensure we have providers set up
@@ -200,7 +200,7 @@ class TestLiveAdminIntegration:
 
         for i, symbol in enumerate(stocks_to_fetch):
             # Create metric for yfinance
-            metric = ApiUsageMetrics(
+            metric = MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id="yfinance",
                 request_type="stock_quote",
@@ -280,7 +280,7 @@ class TestLiveAdminIntegration:
         ]
 
         for activity in activity_metrics:
-            metric = ApiUsageMetrics(
+            metric = MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id=activity["provider_id"],
                 request_type="stock_quote",
@@ -327,7 +327,7 @@ class TestLiveAdminIntegration:
         """Test complete workflow: fetch data -> store -> verify admin dashboard updates."""
 
         # Step 1: Clear previous data to ensure clean test
-        db_session.query(ApiUsageMetrics).delete()
+        db_session.query(MarketDataUsageMetrics).delete()
         initial_stock_count = db_session.query(Stock).count()
 
         # Step 2: Simulate adding new stock data (like user adding TLS)
@@ -351,7 +351,7 @@ class TestLiveAdminIntegration:
             db_session.add(stock)
 
             # Record the "API call" that would have fetched this data
-            metric = ApiUsageMetrics(
+            metric = MarketDataUsageMetrics(
                 metric_id=str(uuid.uuid4()),
                 provider_id="yfinance",
                 request_type="stock_quote",
@@ -425,7 +425,7 @@ class TestLiveAdminIntegration:
         """Test that admin dashboard shows updates immediately after data changes."""
 
         # Step 0: Clear previous data to ensure clean test
-        db_session.query(ApiUsageMetrics).delete()
+        db_session.query(MarketDataUsageMetrics).delete()
         db_session.commit()
 
         # Step 1: Get baseline metrics
@@ -439,7 +439,7 @@ class TestLiveAdminIntegration:
 
         # Step 2: Add new activity
         current_time = now()
-        new_metric = ApiUsageMetrics(
+        new_metric = MarketDataUsageMetrics(
             metric_id=str(uuid.uuid4()),
             provider_id="alpha_vantage",
             request_type="stock_quote",

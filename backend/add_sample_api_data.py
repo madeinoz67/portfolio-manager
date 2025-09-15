@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.database import get_db
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from datetime import datetime, timedelta
 import random
 
@@ -38,7 +38,7 @@ def main():
             # Create individual records (1 record = 1 API request)
             for _ in range(request_count):
                 is_success = random.random() > error_rate
-                record = ApiUsageMetrics(
+                record = MarketDataUsageMetrics(
                     provider_name=provider,
                     symbol=random.choice(symbols),
                     endpoint='/quote',
@@ -64,12 +64,12 @@ def main():
     print('Sample data created successfully!')
 
     # Verify data
-    total = db.query(ApiUsageMetrics).count()
+    total = db.query(MarketDataUsageMetrics).count()
     print(f'Total API usage records: {total}')
 
     # Show some statistics
-    today_count = db.query(ApiUsageMetrics).filter(
-        ApiUsageMetrics.request_timestamp >= datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_count = db.query(MarketDataUsageMetrics).filter(
+        MarketDataUsageMetrics.request_timestamp >= datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     ).count()
     print(f'Today\'s records: {today_count}')
 

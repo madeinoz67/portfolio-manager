@@ -17,7 +17,7 @@ from sqlalchemy import desc, and_
 
 from src.models.market_data_provider import MarketDataProvider
 from src.models.realtime_price_history import RealtimePriceHistory
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.utils.datetime_utils import to_iso_string
 from src.models.holding import Holding
 from src.models.stock import Stock
@@ -946,7 +946,7 @@ class MarketDataService:
 
             # Create the usage record with explicit recorded_at to ensure consistency
             # Both recorded_at and time_bucket must be in same timezone format
-            usage_record = ApiUsageMetrics(
+            usage_record = MarketDataUsageMetrics(
                 metric_id=f"{provider.name}_{symbol}_{now_local.strftime('%Y%m%d_%H%M%S_%f')[:23]}",  # Include microseconds for uniqueness
                 provider_id=provider.name,
                 request_type="price_fetch",

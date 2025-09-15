@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from src.models.user import User
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.utils.datetime_utils import now, utc_now
 
 
@@ -57,10 +57,10 @@ class TestTimezoneFunctional:
         assert user.updated_at.tzinfo is None
 
     def test_api_usage_metrics_uses_local_time(self, db_session: Session):
-        """Test that ApiUsageMetrics model creates timestamps in local time."""
+        """Test that MarketDataUsageMetrics model creates timestamps in local time."""
         before_time = now()
 
-        metrics = ApiUsageMetrics(
+        metrics = MarketDataUsageMetrics(
             metric_id="test_metric",
             provider_id="alpha_vantage",
             request_type="stock_quote",
@@ -94,7 +94,7 @@ class TestTimezoneFunctional:
             assert "datetime.utcnow" not in source, f"Module {model_module.__name__} still uses datetime.utcnow"
 
             # Should import from datetime_utils if it has datetime columns
-            if hasattr(model_module, 'User') or hasattr(model_module, 'ApiUsageMetrics') or hasattr(model_module, 'Portfolio') or hasattr(model_module, 'Holding'):
+            if hasattr(model_module, 'User') or hasattr(model_module, 'MarketDataUsageMetrics') or hasattr(model_module, 'Portfolio') or hasattr(model_module, 'Holding'):
                 assert "from src.utils.datetime_utils import now" in source, f"Module {model_module.__name__} should import 'now' from datetime_utils"
 
     def test_timezone_difference_validation(self):

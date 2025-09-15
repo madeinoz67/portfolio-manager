@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from src.main import app
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from tests.conftest import get_admin_jwt_token, get_user_jwt_token
 
 client = TestClient(app)
@@ -47,7 +47,7 @@ class TestAdminRealDataContract:
 
         # Create real API usage data
         today = datetime.now()
-        api_record = ApiUsageMetrics(
+        api_record = MarketDataUsageMetrics(
             provider_name="yfinance",
             symbol="AAPL",
             endpoint="/quote",
@@ -77,7 +77,7 @@ class TestAdminRealDataContract:
         # Create successful and failed requests
         today = datetime.now()
 
-        success_record = ApiUsageMetrics(
+        success_record = MarketDataUsageMetrics(
             provider_name="yfinance",
             symbol="GOOGL",
             endpoint="/quote",
@@ -86,7 +86,7 @@ class TestAdminRealDataContract:
             success=True
         )
 
-        error_record = ApiUsageMetrics(
+        error_record = MarketDataUsageMetrics(
             provider_name="alpha_vantage",
             symbol="MSFT",
             endpoint="/quote",
@@ -119,7 +119,7 @@ class TestAdminRealDataContract:
 
         # Create multiple records for different providers
         for i in range(3):
-            yfinance_record = ApiUsageMetrics(
+            yfinance_record = MarketDataUsageMetrics(
                 provider_name="yfinance",
                 symbol=f"STOCK{i}",
                 endpoint="/quote",
@@ -130,7 +130,7 @@ class TestAdminRealDataContract:
             db_session.add(yfinance_record)
 
         for i in range(2):
-            av_record = ApiUsageMetrics(
+            av_record = MarketDataUsageMetrics(
                 provider_name="alpha_vantage",
                 symbol=f"STOCK{i}",
                 endpoint="/quote",
@@ -169,7 +169,7 @@ class TestAdminRealDataContract:
         yesterday = today - timedelta(days=1)
 
         # Create records for today and yesterday
-        today_record = ApiUsageMetrics(
+        today_record = MarketDataUsageMetrics(
             provider_name="yfinance",
             symbol="TODAY",
             endpoint="/quote",
@@ -178,7 +178,7 @@ class TestAdminRealDataContract:
             success=True
         )
 
-        yesterday_record = ApiUsageMetrics(
+        yesterday_record = MarketDataUsageMetrics(
             provider_name="yfinance",
             symbol="YESTERDAY",
             endpoint="/quote",
@@ -229,7 +229,7 @@ class TestAdminRealDataContract:
         # Create some API usage for providers
         today = datetime.now()
 
-        provider_record = ApiUsageMetrics(
+        provider_record = MarketDataUsageMetrics(
             provider_name="yfinance",
             symbol="TEST",
             endpoint="/quote",
@@ -265,7 +265,7 @@ class TestAdminRealDataContract:
         # Create 10 days of data
         for days_ago in range(10):
             date = today - timedelta(days=days_ago)
-            record = ApiUsageMetrics(
+            record = MarketDataUsageMetrics(
                 provider_name="yfinance",
                 symbol=f"DAY{days_ago}",
                 endpoint="/quote",

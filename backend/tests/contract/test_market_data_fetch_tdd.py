@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from src.main import app
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from tests.conftest import get_admin_jwt_token
 
 client = TestClient(app)
@@ -46,7 +46,7 @@ class TestMarketDataFetchTDD:
         today = datetime.now()
 
         # Create yfinance usage record
-        yfinance_record = ApiUsageMetrics(
+        yfinance_record = MarketDataUsageMetrics(
             provider_name="yfinance",
             symbol="AAPL",
             endpoint="/quote",
@@ -57,7 +57,7 @@ class TestMarketDataFetchTDD:
         db_session.add(yfinance_record)
 
         # Create alpha_vantage usage record
-        alpha_vantage_record = ApiUsageMetrics(
+        alpha_vantage_record = MarketDataUsageMetrics(
             provider_name="alpha_vantage",
             symbol="GOOGL",
             endpoint="/quote",
@@ -88,7 +88,7 @@ class TestMarketDataFetchTDD:
     def test_market_data_status_handles_empty_database(self, admin_jwt_token: str, db_session: Session):
         """TEST 3: Market data status should handle empty database gracefully."""
         # Arrange - Ensure database is clean (no API usage records)
-        db_session.query(ApiUsageMetrics).delete()
+        db_session.query(MarketDataUsageMetrics).delete()
         db_session.commit()
 
         # Act - Call the endpoint with empty database

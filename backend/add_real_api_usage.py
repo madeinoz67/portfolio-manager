@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from src.database import SessionLocal
-from src.models.market_data_api_usage_metrics import ApiUsageMetrics
+from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.utils.datetime_utils import now
 
 def add_realistic_api_usage():
@@ -19,7 +19,7 @@ def add_realistic_api_usage():
         current_time = now()
 
         # Add realistic yfinance usage - you're actually using this for stock data
-        yfinance_metric = ApiUsageMetrics(
+        yfinance_metric = MarketDataUsageMetrics(
             metric_id=str(uuid.uuid4()),
             provider_id="yfinance",
             request_type="stock_quote",
