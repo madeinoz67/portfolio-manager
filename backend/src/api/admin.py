@@ -405,17 +405,19 @@ async def get_api_usage(
     today = utc_now().date()
     current_month_start = datetime(today.year, today.month, 1)
 
-    # Get today's activities
+    # Get today's activities - EXCLUDE system activities as they are not external API calls
     today_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) == today
+        func.date(ProviderActivity.timestamp) == today,
+        ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
-    # Get this month's activities
+    # Get this month's activities - EXCLUDE system activities
     month_activities = db.query(ProviderActivity).filter(
-        func.date(ProviderActivity.timestamp) >= current_month_start.date()
+        func.date(ProviderActivity.timestamp) >= current_month_start.date(),
+        ProviderActivity.provider_id != "system"  # Only count actual external API provider calls
     ).all()
 
-    # Calculate summary statistics from provider activities
+    # Calculate summary statistics from external provider activities only
     total_requests_today = len(today_activities)
     total_errors_today = len([a for a in today_activities if a.status == "error"])
     total_requests_this_month = len(month_activities)
