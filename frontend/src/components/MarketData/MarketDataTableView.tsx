@@ -66,6 +66,9 @@ export function MarketDataTableView({
             <th className="text-right py-3 px-2 sm:px-4 font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">
               Price
             </th>
+            <th className="text-center py-3 px-2 sm:px-4 font-semibold text-gray-900 dark:text-gray-100 min-w-[70px]">
+              Trend
+            </th>
             <th className="text-right py-3 px-2 sm:px-4 font-semibold text-gray-900 dark:text-gray-100 min-w-[90px]">
               Change
             </th>
@@ -102,6 +105,7 @@ export function MarketDataTableView({
                     </div>
                   </td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">Loading...</td>
+                  <td className="py-4 px-2 sm:px-4 text-center text-gray-500">-</td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">-</td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">-</td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">-</td>
@@ -132,6 +136,7 @@ export function MarketDataTableView({
                     </div>
                   </td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">No data</td>
+                  <td className="py-4 px-2 sm:px-4 text-center text-gray-500">-</td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">-</td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">-</td>
                   <td className="py-4 px-2 sm:px-4 text-right text-gray-500">-</td>
@@ -152,7 +157,43 @@ export function MarketDataTableView({
             }
 
             const isPositive = price.trend ? price.trend.direction === 'up' : false
+            const isNegative = price.trend ? price.trend.direction === 'down' : false
             const changeColor = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+
+            // Determine trend indicator colors and icons
+            const getTrendIndicator = () => {
+              if (!price.trend) {
+                return {
+                  color: 'text-gray-600 dark:text-gray-400',
+                  icon: '•',
+                  label: 'No trend data'
+                }
+              }
+
+              if (price.trend.direction === 'up') {
+                return {
+                  color: 'text-green-600 dark:text-green-400',
+                  icon: '↑',
+                  label: 'Up trend'
+                }
+              }
+
+              if (price.trend.direction === 'down') {
+                return {
+                  color: 'text-red-600 dark:text-red-400',
+                  icon: '↓',
+                  label: 'Down trend'
+                }
+              }
+
+              return {
+                color: 'text-gray-600 dark:text-gray-400',
+                icon: '•',
+                label: 'No trend data'
+              }
+            }
+
+            const trendIndicator = getTrendIndicator()
 
             return (
               <tr key={symbol} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -176,6 +217,14 @@ export function MarketDataTableView({
                 <td className="py-4 px-2 sm:px-4 text-right">
                   <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base">
                     {formatPrice(price.price)}
+                  </span>
+                </td>
+                <td className={`py-4 px-2 sm:px-4 text-center ${trendIndicator.color}`}>
+                  <span
+                    className="text-lg font-bold"
+                    aria-label={trendIndicator.label}
+                  >
+                    {trendIndicator.icon}
                   </span>
                 </td>
                 <td className={`py-4 px-2 sm:px-4 text-right ${changeColor}`}>

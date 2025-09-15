@@ -119,7 +119,7 @@ describe('MarketDataTableView', () => {
     expect(mockOnRemoveSymbol).toHaveBeenCalledWith('CBA');
   });
 
-  it('displays all required columns', () => {
+  it('displays all required columns including trend', () => {
     render(
       <MarketDataTableView
         symbols={['CBA']}
@@ -130,6 +130,7 @@ describe('MarketDataTableView', () => {
 
     expect(screen.getByText('Symbol')).toBeInTheDocument();
     expect(screen.getByText('Price')).toBeInTheDocument();
+    expect(screen.getByText('Trend')).toBeInTheDocument();
     expect(screen.getByText('Change')).toBeInTheDocument();
     expect(screen.getByText('Change %')).toBeInTheDocument();
     expect(screen.getByText('Volume')).toBeInTheDocument();
@@ -163,5 +164,78 @@ describe('MarketDataTableView', () => {
     );
 
     expect(screen.getByText('C')).toBeInTheDocument();
+  });
+
+  it('displays up trend indicator for positive trends', () => {
+    render(
+      <MarketDataTableView
+        symbols={['CBA']}
+        priceData={mockPriceData}
+        onRemoveSymbol={mockOnRemoveSymbol}
+      />
+    );
+
+    // Should show up arrow for positive trend
+    const upArrow = screen.getByLabelText('Up trend');
+    expect(upArrow).toBeInTheDocument();
+    expect(upArrow.closest('td')).toHaveClass('text-green-600');
+  });
+
+  it('displays down trend indicator for negative trends', () => {
+    const negativeData = {
+      AAPL: {
+        symbol: 'AAPL',
+        price: 150.00,
+        currency: 'USD',
+        fetched_at: '2025-01-15T14:30:00Z',
+        provider: 'yahoo',
+        cached: false,
+        trend: {
+          change: -2.50,
+          change_percent: -1.64,
+          direction: 'down' as const
+        }
+      }
+    };
+
+    render(
+      <MarketDataTableView
+        symbols={['AAPL']}
+        priceData={negativeData}
+        onRemoveSymbol={mockOnRemoveSymbol}
+      />
+    );
+
+    // Should show down arrow for negative trend
+    const downArrow = screen.getByLabelText('Down trend');
+    expect(downArrow).toBeInTheDocument();
+    expect(downArrow.closest('td')).toHaveClass('text-red-600');
+  });
+
+  it('displays neutral trend indicator when no trend data', () => {
+    const neutralData = {
+      MSFT: {
+        symbol: 'MSFT',
+        price: 300.00,
+        currency: 'USD',
+        fetched_at: '2025-01-15T14:30:00Z',
+        provider: 'yahoo',
+        cached: false
+        // No trend data
+      }
+    };
+
+    render(
+      <MarketDataTableView
+        symbols={['MSFT']}
+        priceData={neutralData}
+        onRemoveSymbol={mockOnRemoveSymbol}
+      />
+    );
+
+    // Should show neutral indicator
+    const neutralIndicator = screen.getByLabelText('No trend data');
+    expect(neutralIndicator).toBeInTheDocument();
+    expect(neutralIndicator.closest('td')).toHaveClass('text-gray-600');
   });
 });
