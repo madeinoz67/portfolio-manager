@@ -5,6 +5,8 @@ import Navigation from '@/components/layout/Navigation'
 import Button from '@/components/ui/Button'
 import { formatDisplayDateTime } from '@/utils/timezone'
 import { StreamingPriceDisplay } from '@/components/MarketData/StreamingPriceDisplay'
+import { MarketDataViewToggle, ViewMode } from '@/components/MarketData/MarketDataViewToggle'
+import { MarketDataTableView } from '@/components/MarketData/MarketDataTableView'
 import { PriceResponse } from '@/types/marketData'
 
 // Use the comprehensive PriceResponse type instead of basic PriceData
@@ -16,6 +18,7 @@ export default function MarketDataPage() {
   const [priceData, setPriceData] = useState<Record<string, PriceData>>({})
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('tiles')
 
   // Helper function to validate cached price data
   const validateCachedPriceData = (priceData: Record<string, PriceData>): boolean => {
@@ -41,6 +44,11 @@ export default function MarketDataPage() {
     const savedSymbols = localStorage.getItem('market_data_symbols')
     const savedPriceData = localStorage.getItem('market_data_prices')
     const savedLastUpdated = localStorage.getItem('market_data_last_updated')
+    const savedViewMode = localStorage.getItem('market_data_view_mode')
+
+    if (savedViewMode && (savedViewMode === 'tiles' || savedViewMode === 'table')) {
+      setViewMode(savedViewMode as ViewMode)
+    }
 
     if (savedSymbols) {
       const parsedSymbols = JSON.parse(savedSymbols)
@@ -152,6 +160,11 @@ export default function MarketDataPage() {
     fetchPrices(symbols)
   }
 
+  const handleViewModeChange = (newViewMode: ViewMode) => {
+    setViewMode(newViewMode)
+    localStorage.setItem('market_data_view_mode', newViewMode)
+  }
+
   // Fetch prices when symbols are loaded
   useEffect(() => {
     if (symbols.length > 0) {
@@ -190,14 +203,20 @@ export default function MarketDataPage() {
                 </p>
               )}
             </div>
-            <Button
-              onClick={handleRefresh}
-              disabled={loading}
-              variant="outline"
-              size="sm"
-            >
-              {loading ? 'Refreshing...' : 'Refresh Prices'}
-            </Button>
+            <div className="flex items-center gap-4">
+              <MarketDataViewToggle
+                currentView={viewMode}
+                onViewChange={handleViewModeChange}
+              />
+              <Button
+                onClick={handleRefresh}
+                disabled={loading}
+                variant="outline"
+                size="sm"
+              >
+                {loading ? 'Refreshing...' : 'Refresh Prices'}
+              </Button>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 mb-6">
@@ -233,45 +252,56 @@ export default function MarketDataPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {symbols.map(symbol => {
-              const priceInfo = priceData[symbol]
-              const isLoading = loading && !priceInfo
+          {viewMode === 'tiles' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {symbols.map(symbol => {
+                const priceInfo = priceData[symbol]
+                const isLoading = loading && !priceInfo
 
-              return (
-                <div
-                  key={symbol}
-                  className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border dark:border-gray-700"
-                >
-                  {isLoading ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xl font-bold text-gray-900 dark:text-white">{symbol}</div>
-                        <div className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded-full">
-                          Loading...
+                return (
+                  <div
+                    key={symbol}
+                    className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border dark:border-gray-700"
+                  >
+                    {isLoading ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xl font-bold text-gray-900 dark:text-white">{symbol}</div>
+                          <div className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded-full">
+                            Loading...
+                          </div>
                         </div>
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-9 w-24 rounded"></div>
+                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
                       </div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-9 w-24 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
-                    </div>
-                  ) : priceInfo ? (
-                    <StreamingPriceDisplay
-                      price={priceInfo}
-                      showVolume={true}
-                      showMarketCap={true}
-                      showUpdateTime={true}
-                      compact={false}
-                    />
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="text-xl font-bold text-gray-900 dark:text-white mb-2">{symbol}</div>
-                      <span className="text-gray-500">No price data available</span>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                    ) : priceInfo ? (
+                      <StreamingPriceDisplay
+                        price={priceInfo}
+                        showVolume={true}
+                        showMarketCap={true}
+                        showUpdateTime={true}
+                        compact={false}
+                      />
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="text-xl font-bold text-gray-900 dark:text-white mb-2">{symbol}</div>
+                        <span className="text-gray-500">No price data available</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border dark:border-gray-700">
+              <MarketDataTableView
+                symbols={symbols}
+                priceData={priceData}
+                onRemoveSymbol={handleRemoveSymbol}
+                loading={loading}
+              />
+            </div>
+          )}
         </div>
       </main>
     </div>
