@@ -156,20 +156,21 @@ class AuditService:
     def log_transaction_created(
         self,
         transaction: Transaction,
-        user_id: str,
+        user_id,  # UUID or str
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None
     ) -> Optional[AuditLog]:
         """Log transaction creation event."""
+        symbol = transaction.stock.symbol if transaction.stock else "Unknown"
         return self.create_audit_entry(
             event_type=AuditEventType.TRANSACTION_CREATED,
-            event_description=f"Transaction created: {transaction.transaction_type.value} {transaction.symbol}",
+            event_description=f"Transaction created: {transaction.transaction_type.value} {symbol}",
             user_id=user_id,
             entity_type="transaction",
             entity_id=str(transaction.id),
             event_metadata={
                 "transaction_type": transaction.transaction_type.value,
-                "symbol": transaction.symbol,
+                "symbol": symbol,
                 "quantity": float(transaction.quantity),
                 "price_per_share": float(transaction.price_per_share),
                 "portfolio_id": str(transaction.portfolio_id)
@@ -181,21 +182,22 @@ class AuditService:
     def log_transaction_updated(
         self,
         transaction: Transaction,
-        user_id: str,
+        user_id,  # UUID or str
         changes: Dict[str, Any],
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None
     ) -> Optional[AuditLog]:
         """Log transaction update event."""
+        symbol = transaction.stock.symbol if transaction.stock else "Unknown"
         return self.create_audit_entry(
             event_type=AuditEventType.TRANSACTION_UPDATED,
-            event_description=f"Transaction updated: {transaction.transaction_type.value} {transaction.symbol}",
+            event_description=f"Transaction updated: {transaction.transaction_type.value} {symbol}",
             user_id=user_id,
             entity_type="transaction",
             entity_id=str(transaction.id),
             event_metadata={
                 "transaction_type": transaction.transaction_type.value,
-                "symbol": transaction.symbol,
+                "symbol": symbol,
                 "changes": changes,
                 "portfolio_id": str(transaction.portfolio_id)
             },
@@ -208,7 +210,7 @@ class AuditService:
         transaction_id: str,
         transaction_type: str,
         symbol: str,
-        user_id: str,
+        user_id,  # UUID or str
         portfolio_id: str,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None

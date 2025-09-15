@@ -168,15 +168,14 @@ class TestComprehensiveAuditEvents:
 
         # Create transaction via API
         transaction_data = {
-            "portfolio_id": str(portfolio.id),
             "stock_symbol": stock.symbol,
-            "transaction_type": "buy",
+            "transaction_type": "BUY",
             "quantity": 10,
-            "price": 250.00,
-            "transaction_date": "2023-12-01T10:00:00Z"
+            "price_per_share": 250.00,
+            "transaction_date": "2023-12-01"
         }
         response = client.post(
-            "/api/v1/transactions",
+            f"/api/v1/portfolios/{portfolio.id}/transactions",
             json=transaction_data,
             headers=auth_headers
         )
@@ -210,14 +209,13 @@ class TestComprehensiveAuditEvents:
 
         # Create transaction first
         transaction_data = {
-            "portfolio_id": str(portfolio.id),
             "stock_symbol": stock.symbol,
-            "transaction_type": "buy",
+            "transaction_type": "BUY",
             "quantity": 5,
-            "price": 2800.00,
-            "transaction_date": "2023-12-01T10:00:00Z"
+            "price_per_share": 2800.00,
+            "transaction_date": "2023-12-01"
         }
-        create_response = client.post("/api/v1/transactions", json=transaction_data, headers=auth_headers)
+        create_response = client.post(f"/api/v1/portfolios/{portfolio.id}/transactions", json=transaction_data, headers=auth_headers)
         assert create_response.status_code == 201
         transaction_id = create_response.json()["id"]
 
@@ -228,10 +226,10 @@ class TestComprehensiveAuditEvents:
         # Update transaction
         update_data = {
             "quantity": 8,
-            "price": 2750.00
+            "price_per_share": 2750.00
         }
         response = client.put(
-            f"/api/v1/transactions/{transaction_id}",
+            f"/api/v1/portfolios/{portfolio.id}/transactions/{transaction_id}",
             json=update_data,
             headers=auth_headers
         )
@@ -262,14 +260,13 @@ class TestComprehensiveAuditEvents:
 
         # Create transaction first
         transaction_data = {
-            "portfolio_id": str(portfolio.id),
             "stock_symbol": stock.symbol,
-            "transaction_type": "buy",
+            "transaction_type": "BUY",
             "quantity": 15,
-            "price": 350.00,
-            "transaction_date": "2023-12-01T10:00:00Z"
+            "price_per_share": 350.00,
+            "transaction_date": "2023-12-01"
         }
-        create_response = client.post("/api/v1/transactions", json=transaction_data, headers=auth_headers)
+        create_response = client.post(f"/api/v1/portfolios/{portfolio.id}/transactions", json=transaction_data, headers=auth_headers)
         assert create_response.status_code == 201
         transaction_id = create_response.json()["id"]
 
@@ -278,7 +275,7 @@ class TestComprehensiveAuditEvents:
         db_session.commit()
 
         # Delete transaction
-        response = client.delete(f"/api/v1/transactions/{transaction_id}", headers=auth_headers)
+        response = client.delete(f"/api/v1/portfolios/{portfolio.id}/transactions/{transaction_id}", headers=auth_headers)
 
         # Verify deletion was successful
         assert response.status_code == 204

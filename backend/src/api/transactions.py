@@ -132,7 +132,7 @@ async def create_transaction(
         if transaction:
             audit_service.log_transaction_created(
                 transaction=transaction,
-                user_id=str(current_user.id),
+                user_id=current_user.id,
                 ip_address=getattr(request.client, 'host', None) if request.client else None,
                 user_agent=request.headers.get('User-Agent')
             )
@@ -231,7 +231,10 @@ async def update_transaction(
     for field, new_value in update_data.items():
         old_value = getattr(transaction, field, None)
         if old_value != new_value:
-            changes[field] = {"old": old_value, "new": new_value}
+            # Convert Decimal objects to float for JSON serialization
+            old_value_serializable = float(old_value) if hasattr(old_value, '__float__') else old_value
+            new_value_serializable = float(new_value) if hasattr(new_value, '__float__') else new_value
+            changes[field] = {"old": old_value_serializable, "new": new_value_serializable}
 
     # Use the transaction service for atomic processing
     from src.services.transaction_service import update_transaction as update_transaction_service
@@ -247,7 +250,7 @@ async def update_transaction(
             if updated_transaction:
                 audit_service.log_transaction_updated(
                     transaction=updated_transaction,
-                    user_id=str(current_user.id),
+                    user_id=current_user.id,
                     changes=changes,
                     ip_address=getattr(request.client, 'host', None) if request.client else None,
                     user_agent=request.headers.get('User-Agent')
@@ -312,7 +315,7 @@ async def delete_transaction(
             transaction_id=str(transaction_id),
             transaction_type=transaction_type,
             symbol=symbol,
-            user_id=str(current_user.id),
+            user_id=current_user.id,
             portfolio_id=str(portfolio_id),
             ip_address=getattr(request.client, 'host', None) if request.client else None,
             user_agent=request.headers.get('User-Agent')
