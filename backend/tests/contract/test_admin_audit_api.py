@@ -143,7 +143,7 @@ class TestAdminAuditApiRequirements:
         }
 
         # This documents our requirements
-        assert len(audit_entry_format) == 11
+        assert len(audit_entry_format) == 12
 
     def test_audit_api_security_requirements(self):
         """Specification for audit API security requirements."""
