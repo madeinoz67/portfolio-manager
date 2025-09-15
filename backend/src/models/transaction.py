@@ -50,7 +50,7 @@ class Transaction(Base):
     price_per_share = Column(Numeric(10, 4), nullable=False)
     total_amount = Column(Numeric(15, 2), nullable=False)
     fees = Column(Numeric(10, 2), default=Decimal("0.00"))
-    transaction_date = Column(Date, nullable=False)
+    transaction_date = Column(DateTime, nullable=False)
     processed_date = Column(DateTime, default=now)
     source_type = Column(SQLEnum(SourceType), nullable=False)
     source_reference = Column(String(255))

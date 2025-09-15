@@ -86,12 +86,12 @@ def process_transaction(
             db.add(stock)
             db.flush()  # Get ID without committing
         
-        # Get existing holding if any  
+        # Get existing holding if any
         holding = db.query(Holding).filter(
             Holding.portfolio_id == portfolio_id,
             Holding.stock_id == stock.id
         ).first()
-        
+
         # Validate sell transactions
         if transaction_data.transaction_type == TransactionType.SELL:
             if not holding or holding.quantity < transaction_data.quantity:
@@ -181,8 +181,11 @@ def process_transaction(
 
         return TransactionResponse.model_validate(transaction_with_stock)
         
-    except (InsufficientSharesError, TransactionError):
-        # Re-raise business logic errors without wrapping
+    except InsufficientSharesError:
+        # Validation errors - no rollback needed since no changes were made
+        raise
+    except TransactionError:
+        # Business logic errors - rollback any partial changes
         db.rollback()
         raise
     except SQLAlchemyError as e:
@@ -452,7 +455,10 @@ def delete_transaction(
         
         # Delete the transaction
         db.delete(transaction)
-        
+
+        # Flush the deletion to ensure it's reflected in subsequent queries
+        db.flush()
+
         # Recalculate holdings for the affected stock
         _recalculate_holdings_for_stock(db, portfolio_id, stock_id)
 
