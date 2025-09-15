@@ -387,3 +387,35 @@ async def delete_api_key(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="API key deletion failed"
         )
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout_user(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout current user and create audit log entry.
+    In a JWT system, logout is primarily client-side, but we log the event for audit purposes.
+    """
+    try:
+        # Audit logging
+        audit_service = AuditService(db)
+        audit_service.log_user_logout(
+            user_id=current_user.id,
+            ip_address=getattr(request.client, 'host', None) if request.client else None,
+            user_agent=request.headers.get('User-Agent')
+        )
+        db.commit()  # Commit audit log
+
+        logger.info(f"User logout successful: {current_user.email} (ID: {current_user.id})")
+
+        return {"message": "Logout successful"}
+
+    except Exception as e:
+        logger.error(f"Logout failed for user {current_user.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logout failed"
+        )

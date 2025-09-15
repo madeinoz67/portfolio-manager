@@ -362,6 +362,36 @@ class TestComprehensiveAuditEvents:
         assert str(audit_log.user_id) == new_user_id  # User creates themselves
         assert "registered" in audit_log.event_description.lower() or "created" in audit_log.event_description.lower()
 
+    def test_user_logout_audit_event(self, db_session: Session, client: TestClient):
+        """Test that user logout creates audit log entries."""
+        # Create test user
+        user = create_test_user(db_session, email="logout_test@example.com")
+        auth_headers = create_auth_headers(user)
+
+        # Clear initial audit logs
+        db_session.query(AuditLog).delete()
+        db_session.commit()
+
+        # Logout via API
+        response = client.post("/api/v1/auth/logout", headers=auth_headers)
+
+        # Verify logout was successful
+        assert response.status_code == 200
+
+        # Verify audit log was created
+        db_session.commit()
+        audit_logs = db_session.query(AuditLog).filter(
+            AuditLog.event_type == AuditEventType.USER_LOGOUT
+        ).all()
+        assert len(audit_logs) == 1
+
+        audit_log = audit_logs[0]
+        assert audit_log.event_type == AuditEventType.USER_LOGOUT
+        assert audit_log.entity_type == "user"
+        assert audit_log.entity_id == str(user.id)
+        assert str(audit_log.user_id) == str(user.id)  # User logs themselves out
+        assert "logged out" in audit_log.event_description
+
     def test_audit_events_include_request_metadata(self, db_session: Session, client: TestClient):
         """Test that all audit events include proper request metadata."""
         # Create test user

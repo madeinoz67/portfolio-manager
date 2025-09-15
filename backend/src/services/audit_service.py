@@ -253,7 +253,7 @@ class AuditService:
 
     def log_user_logout(
         self,
-        user_id: str,
+        user_id,  # UUID or str
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None
     ) -> Optional[AuditLog]:
@@ -263,7 +263,7 @@ class AuditService:
             event_description="User logged out",
             user_id=user_id,
             entity_type="user",
-            entity_id=user_id,
+            entity_id=str(user_id),
             event_metadata={
                 "logout_timestamp": now().isoformat()
             },
