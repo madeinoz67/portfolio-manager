@@ -329,4 +329,44 @@ describe('MarketDataTableView', () => {
     expect(neutralChangeCell).toHaveClass('text-gray-600');
     expect(neutralPercentCell).toHaveClass('text-gray-600');
   });
+
+  it('displays horizontal line for explicitly neutral trends with rounded background', () => {
+    const neutralData = {
+      NEUTRAL_STOCK: {
+        symbol: 'NEUTRAL_STOCK',
+        price: 50.00,
+        currency: 'USD',
+        fetched_at: '2025-01-15T14:30:00Z',
+        cached: false,
+        trend: {
+          trend: 'neutral' as const,
+          change: 0.00,
+          change_percent: 0.00
+        }
+      }
+    };
+
+    render(
+      <MarketDataTableView
+        symbols={['NEUTRAL_STOCK']}
+        priceData={neutralData}
+        onRemoveSymbol={mockOnRemoveSymbol}
+      />
+    );
+
+    // Should show horizontal line for neutral trend with rounded background
+    const neutralIndicator = screen.getByLabelText('Neutral trend');
+    expect(neutralIndicator).toBeInTheDocument();
+    expect(neutralIndicator).toHaveClass('rounded-full');
+    expect(neutralIndicator).toHaveClass('bg-gray-100');
+
+    // Should contain horizontal line SVG matching tile view style
+    const svg = neutralIndicator.querySelector('svg');
+    expect(svg).toBeInTheDocument();
+    expect(svg).toHaveAttribute('viewBox', '0 0 20 20');
+
+    // Check for horizontal line path (same as tile view)
+    const path = svg?.querySelector('path');
+    expect(path).toHaveAttribute('d', 'M3 10h14v2H3z');
+  });
 });

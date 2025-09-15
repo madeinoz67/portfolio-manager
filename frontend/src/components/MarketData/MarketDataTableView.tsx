@@ -207,6 +207,19 @@ export function MarketDataTableView({
                 )
               }
 
+              if (price.trend.trend === 'neutral') {
+                return (
+                  <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="Neutral trend">
+                    <svg
+                      className="w-3 h-3 fill-current text-gray-600 dark:text-gray-400"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M3 10h14v2H3z" />
+                    </svg>
+                  </div>
+                )
+              }
+
               return (
                 <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
                   <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
