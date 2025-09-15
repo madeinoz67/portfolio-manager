@@ -38,6 +38,83 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/market-data", tags=["market-data"])
 
 
+# Pydantic models
+class TrendData(BaseModel):
+    """Price trend information."""
+    trend: str  # 'up', 'down', 'neutral'
+    change: float
+    change_percent: float
+    opening_price: Optional[float] = None
+
+
+class PriceResponse(BaseModel):
+    symbol: str
+    price: float
+    volume: Optional[int] = None
+    market_cap: Optional[float] = None
+    fetched_at: str
+    cached: bool = False
+
+    # Extended price information
+    opening_price: Optional[float] = None
+    high_price: Optional[float] = None
+    low_price: Optional[float] = None
+    previous_close: Optional[float] = None
+
+    # Trend information
+    trend: Optional[TrendData] = None
+
+    # Market metrics
+    fifty_two_week_high: Optional[float] = None
+    fifty_two_week_low: Optional[float] = None
+    dividend_yield: Optional[float] = None
+    pe_ratio: Optional[float] = None
+    beta: Optional[float] = None
+
+    # Metadata
+    currency: Optional[str] = "USD"
+    company_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BulkPriceResponse(BaseModel):
+    prices: Dict[str, PriceResponse]
+    fetched_at: str
+    cached_count: int
+    fresh_count: int
+
+
+class ServiceStatusResponse(BaseModel):
+    status: str  # 'healthy', 'degraded', 'unavailable'
+    providers_status: Dict[str, dict]
+    next_update_in_seconds: Optional[int] = None
+    last_update_at: Optional[str] = None
+    cache_stats: dict
+
+
+class RefreshRequest(BaseModel):
+    symbols: Optional[List[str]] = Field(None, description="Specific symbols to refresh")
+    force: bool = Field(False, description="Force refresh even if cache is fresh")
+
+
+class SchedulerStatusResponse(BaseModel):
+    scheduler: dict
+    recent_activity: dict
+    provider_stats: dict
+
+
+class SchedulerControlRequest(BaseModel):
+    action: str  # 'pause' or 'restart'
+
+
+class SchedulerControlResponse(BaseModel):
+    success: bool
+    message: str
+    new_status: str
+
+
 def build_price_response(
     symbol: str,
     price_record,
@@ -119,83 +196,6 @@ def build_price_response(
         base_data["trend"] = None
 
     return PriceResponse(**base_data)
-
-
-# Pydantic models
-class TrendData(BaseModel):
-    """Price trend information."""
-    trend: str  # 'up', 'down', 'neutral'
-    change: float
-    change_percent: float
-    opening_price: Optional[float] = None
-
-
-class PriceResponse(BaseModel):
-    symbol: str
-    price: float
-    volume: Optional[int] = None
-    market_cap: Optional[float] = None
-    fetched_at: str
-    cached: bool = False
-
-    # Extended price information
-    opening_price: Optional[float] = None
-    high_price: Optional[float] = None
-    low_price: Optional[float] = None
-    previous_close: Optional[float] = None
-
-    # Trend information
-    trend: Optional[TrendData] = None
-
-    # Market metrics
-    fifty_two_week_high: Optional[float] = None
-    fifty_two_week_low: Optional[float] = None
-    dividend_yield: Optional[float] = None
-    pe_ratio: Optional[float] = None
-    beta: Optional[float] = None
-
-    # Metadata
-    currency: Optional[str] = "USD"
-    company_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class BulkPriceResponse(BaseModel):
-    prices: Dict[str, PriceResponse]
-    fetched_at: str
-    cached_count: int
-    fresh_count: int
-
-
-class ServiceStatusResponse(BaseModel):
-    status: str  # 'healthy', 'degraded', 'unavailable'
-    providers_status: Dict[str, dict]
-    next_update_in_seconds: Optional[int] = None
-    last_update_at: Optional[str] = None
-    cache_stats: dict
-
-
-class RefreshRequest(BaseModel):
-    symbols: Optional[List[str]] = Field(None, description="Specific symbols to refresh")
-    force: bool = Field(False, description="Force refresh even if cache is fresh")
-
-
-class SchedulerStatusResponse(BaseModel):
-    scheduler: dict
-    recent_activity: dict
-    provider_stats: dict
-
-
-class SchedulerControlRequest(BaseModel):
-    action: str  # 'pause' or 'restart'
-
-
-class SchedulerControlResponse(BaseModel):
-    success: bool
-    message: str
-    new_status: str
 
 
 @router.get("/prices/{symbol}", response_model=PriceResponse)
