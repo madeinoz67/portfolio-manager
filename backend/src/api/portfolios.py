@@ -38,8 +38,20 @@ async def list_portfolios(
         Portfolio.is_active.is_(True)
     ).all()
 
-    # Temporarily disable dynamic values to fix immediate issue
-    return [PortfolioResponse.model_validate(p) for p in portfolios]
+    # Use dynamic portfolio service to calculate current values
+    dynamic_service = DynamicPortfolioService(db)
+
+    portfolio_responses = []
+    for portfolio in portfolios:
+        # Get dynamic portfolio with calculated values
+        dynamic_portfolio = dynamic_service.get_dynamic_portfolio(portfolio.id)
+        if dynamic_portfolio:
+            portfolio_responses.append(dynamic_portfolio)
+        else:
+            # Fallback to static values if dynamic calculation fails
+            portfolio_responses.append(PortfolioResponse.model_validate(portfolio))
+
+    return portfolio_responses
 
 
 @router.post("", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)
@@ -98,8 +110,15 @@ async def get_portfolio(
             detail="Portfolio not found"
         )
 
-    # Temporarily use static values to fix immediate issue
-    return PortfolioResponse.model_validate(portfolio)
+    # Use dynamic portfolio service to calculate current values
+    dynamic_service = DynamicPortfolioService(db)
+    dynamic_portfolio = dynamic_service.get_dynamic_portfolio(portfolio.id)
+
+    if dynamic_portfolio:
+        return dynamic_portfolio
+    else:
+        # Fallback to static values if dynamic calculation fails
+        return PortfolioResponse.model_validate(portfolio)
 
 
 @router.put("/{portfolio_id}", response_model=PortfolioResponse)

@@ -70,22 +70,22 @@ def test_holdings(db: Session, test_portfolio: Portfolio, test_stocks: list):
             portfolio_id=test_portfolio.id,
             stock_id=test_stocks[0].id,  # CBA
             quantity=Decimal("100"),
-            average_cost=Decimal("50.00"),
-            current_value=Decimal("5000.00")  # Should be overridden by dynamic calculation
+            average_cost=Decimal("50.00")
+            # current_value is calculated dynamically via hybrid_property
         ),
         Holding(
             portfolio_id=test_portfolio.id,
             stock_id=test_stocks[1].id,  # BHP
             quantity=Decimal("200"),
-            average_cost=Decimal("30.00"),
-            current_value=Decimal("6000.00")  # Should be overridden by dynamic calculation
+            average_cost=Decimal("30.00")
+            # current_value is calculated dynamically via hybrid_property
         ),
         Holding(
             portfolio_id=test_portfolio.id,
             stock_id=test_stocks[2].id,  # WBC
             quantity=Decimal("150"),
-            average_cost=Decimal("20.00"),
-            current_value=Decimal("3000.00")  # Should be overridden by dynamic calculation
+            average_cost=Decimal("20.00")
+            # current_value is calculated dynamically via hybrid_property
         )
     ]
 
