@@ -81,6 +81,13 @@ class MarketDataSchedulerService:
         self._pause_until = None
         self._error_message = None
 
+        # Execution tracking metrics
+        self._total_executions = 0
+        self._successful_executions = 0
+        self._failed_executions = 0
+        self._total_symbols_processed = 0
+        self._last_execution_symbols = 0
+
         # Auto-start the scheduler for production use
         if auto_start:
             self._auto_start()
@@ -104,6 +111,11 @@ class MarketDataSchedulerService:
     @property
     def status_info(self) -> Dict[str, Any]:
         """Get comprehensive scheduler status information."""
+        # Calculate success rate
+        success_rate = 0.0
+        if self._total_executions > 0:
+            success_rate = (self._successful_executions / self._total_executions) * 100
+
         return {
             "state": self.state.value,
             "last_run": self._last_run.isoformat() if self._last_run else None,
@@ -111,7 +123,14 @@ class MarketDataSchedulerService:
             "pause_until": self._pause_until.isoformat() if self._pause_until else None,
             "error_message": self._error_message,
             "configuration": self._config.to_dict(),
-            "uptime_seconds": self._calculate_uptime_seconds()
+            "uptime_seconds": self._calculate_uptime_seconds(),
+            # Execution metrics for admin UI
+            "total_executions": self._total_executions,
+            "successful_executions": self._successful_executions,
+            "failed_executions": self._failed_executions,
+            "success_rate_percent": success_rate,
+            "total_symbols_processed": self._total_symbols_processed,
+            "last_execution_symbols": self._last_execution_symbols
         }
 
     def _auto_start(self) -> None:
@@ -287,6 +306,14 @@ class MarketDataSchedulerService:
         if self._state == SchedulerState.RUNNING:
             self._last_run = utc_now()
             self._calculate_next_run()
+
+            # Update execution metrics
+            self._total_executions += 1
+            self._successful_executions += 1
+            self._total_symbols_processed += symbols_processed
+            self._last_execution_symbols = symbols_processed
+            self._error_message = None  # Clear any previous error
+
             logger.info(f"Scheduler execution completed successfully: {symbols_processed} symbols processed")
 
     def record_execution_failure(self, error: str) -> None:
@@ -296,7 +323,11 @@ class MarketDataSchedulerService:
         Args:
             error: Error message describing the failure
         """
+        # Update execution metrics
+        self._total_executions += 1
+        self._failed_executions += 1
         self._error_message = error
+
         logger.error(f"Scheduler execution failed: {error}")
 
     def simulate_run(self) -> Dict[str, Any]:
