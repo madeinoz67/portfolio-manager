@@ -17,6 +17,7 @@ from .user import User
 from .realtime_price_history import RealtimePriceHistory
 from .portfolio_valuation import PortfolioValuation
 from .market_data_provider import MarketDataProvider
+from .market_data_usage_metrics import MarketDataUsageMetrics
 from .audit_log import AuditLog
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "RealtimePriceHistory",
     "PortfolioValuation",
     "MarketDataProvider",
+    "MarketDataUsageMetrics",
     "AuditLog",
 ]
