@@ -7,6 +7,7 @@ Welcome to the Portfolio Manager documentation. This directory contains comprehe
 ### 🏗️ System Architecture
 - **[Admin Dashboard](./admin-dashboard.md)** - Complete admin dashboard features and functionality
 - **[Portfolio Monitoring](./portfolio-monitoring.md)** - Real-time portfolio update monitoring system
+- **[Metric Monitoring System](./metric-monitoring-system.md)** - System-specific metrics tracking and API usage monitoring
 - **[API Reference](./api-reference.md)** - Comprehensive API endpoint documentation
 
 ### 🚀 Quick Start
@@ -48,10 +49,11 @@ Welcome to the Portfolio Manager documentation. This directory contains comprehe
 
 ```
 docs/
-├── README.md                 # This file - documentation index
-├── admin-dashboard.md        # Admin dashboard comprehensive guide
-├── portfolio-monitoring.md   # Portfolio monitoring system details
-└── api-reference.md         # Complete API endpoint reference
+├── README.md                    # This file - documentation index
+├── admin-dashboard.md           # Admin dashboard comprehensive guide
+├── portfolio-monitoring.md      # Portfolio monitoring system details
+├── metric-monitoring-system.md  # System-specific metrics tracking and API usage
+└── api-reference.md            # Complete API endpoint reference
 ```
 
 ### 🔧 Key Features Documented
@@ -67,6 +69,12 @@ docs/
 - **Performance Analytics**: Success rates, response times, queue health
 - **Storm Protection**: Update coalescing and bulk operation tracking
 - **Monitoring Dashboard**: Live metrics with 10-second auto-refresh
+
+#### Metric Monitoring System ([Full Guide](./metric-monitoring-system.md))
+- **System-Specific Tables**: Dedicated metrics tables per system (market_data_api_usage_metrics)
+- **API Usage Tracking**: Comprehensive logging of all market data provider calls
+- **Performance Monitoring**: Response times, rate limits, and error tracking
+- **Admin Analytics**: Real-time metrics visibility and cost estimation
 
 #### API Reference ([Full Guide](./api-reference.md))
 - **Authentication**: JWT-based auth with role-based access
