@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
+from uuid import UUID
 from src.models.audit_log import AuditLog, AuditEventType
 from src.models.user import User
 from src.models.portfolio import Portfolio
@@ -58,6 +59,10 @@ class AuditService:
             AuditLog entry if successful, None if failed
         """
         try:
+            # Convert string user_id to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+
             audit_entry = AuditLog(
                 event_type=event_type,
                 event_description=event_description,
@@ -317,6 +322,258 @@ class AuditService:
             entity_type=entity_type,
             entity_id=entity_id,
             event_metadata=action_metadata,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    # Provider control audit methods
+    def log_provider_enabled(
+        self,
+        provider_id: str,
+        provider_name: str,
+        admin_user_id: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log provider enabled event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.PROVIDER_ENABLED,
+            event_description=f"Market data provider '{provider_name}' enabled",
+            user_id=admin_user_id,
+            entity_type="market_data_provider",
+            entity_id=provider_id,
+            event_metadata={
+                "provider_id": provider_id,
+                "provider_name": provider_name,
+                "action": "enabled",
+                "previous_state": "disabled"
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_provider_disabled(
+        self,
+        provider_id: str,
+        provider_name: str,
+        admin_user_id: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log provider disabled event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.PROVIDER_DISABLED,
+            event_description=f"Market data provider '{provider_name}' disabled",
+            user_id=admin_user_id,
+            entity_type="market_data_provider",
+            entity_id=provider_id,
+            event_metadata={
+                "provider_id": provider_id,
+                "provider_name": provider_name,
+                "action": "disabled",
+                "previous_state": "enabled"
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_provider_configured(
+        self,
+        provider_id: str,
+        provider_name: str,
+        admin_user_id: str,
+        configuration_changes: Dict[str, Any],
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log provider configuration changes."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.PROVIDER_CONFIGURED,
+            event_description=f"Market data provider '{provider_name}' configuration updated",
+            user_id=admin_user_id,
+            entity_type="market_data_provider",
+            entity_id=provider_id,
+            event_metadata={
+                "provider_id": provider_id,
+                "provider_name": provider_name,
+                "action": "configured",
+                "changes": configuration_changes
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    # Scheduler control audit methods
+    def log_scheduler_started(
+        self,
+        scheduler_name: str,
+        admin_user_id: str,
+        scheduler_config: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log scheduler started event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SCHEDULER_STARTED,
+            event_description=f"Market data scheduler '{scheduler_name}' started",
+            user_id=admin_user_id,
+            entity_type="scheduler",
+            entity_id=scheduler_name,
+            event_metadata={
+                "scheduler_name": scheduler_name,
+                "action": "started",
+                "previous_state": "stopped",
+                "configuration": scheduler_config or {}
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_scheduler_stopped(
+        self,
+        scheduler_name: str,
+        admin_user_id: str,
+        reason: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log scheduler stopped event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SCHEDULER_STOPPED,
+            event_description=f"Market data scheduler '{scheduler_name}' stopped",
+            user_id=admin_user_id,
+            entity_type="scheduler",
+            entity_id=scheduler_name,
+            event_metadata={
+                "scheduler_name": scheduler_name,
+                "action": "stopped",
+                "previous_state": "running",
+                "reason": reason or "manual_stop"
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_scheduler_paused(
+        self,
+        scheduler_name: str,
+        admin_user_id: str,
+        duration_minutes: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log scheduler paused event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SCHEDULER_PAUSED,
+            event_description=f"Market data scheduler '{scheduler_name}' paused",
+            user_id=admin_user_id,
+            entity_type="scheduler",
+            entity_id=scheduler_name,
+            event_metadata={
+                "scheduler_name": scheduler_name,
+                "action": "paused",
+                "previous_state": "running",
+                "duration_minutes": duration_minutes,
+                "pause_type": "manual"
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_scheduler_resumed(
+        self,
+        scheduler_name: str,
+        admin_user_id: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log scheduler resumed event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SCHEDULER_RESUMED,
+            event_description=f"Market data scheduler '{scheduler_name}' resumed",
+            user_id=admin_user_id,
+            entity_type="scheduler",
+            entity_id=scheduler_name,
+            event_metadata={
+                "scheduler_name": scheduler_name,
+                "action": "resumed",
+                "previous_state": "paused"
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_scheduler_configured(
+        self,
+        scheduler_name: str,
+        admin_user_id: str,
+        configuration_changes: Dict[str, Any],
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log scheduler configuration changes."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SCHEDULER_CONFIGURED,
+            event_description=f"Market data scheduler '{scheduler_name}' configuration updated",
+            user_id=admin_user_id,
+            entity_type="scheduler",
+            entity_id=scheduler_name,
+            event_metadata={
+                "scheduler_name": scheduler_name,
+                "action": "configured",
+                "changes": configuration_changes
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    # System maintenance audit methods
+    def log_system_maintenance_start(
+        self,
+        admin_user_id: str,
+        maintenance_type: str,
+        expected_duration_minutes: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log system maintenance start event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SYSTEM_MAINTENANCE_START,
+            event_description=f"System maintenance started: {maintenance_type}",
+            user_id=admin_user_id,
+            entity_type="system",
+            entity_id="maintenance",
+            event_metadata={
+                "maintenance_type": maintenance_type,
+                "action": "start",
+                "expected_duration_minutes": expected_duration_minutes,
+                "maintenance_start_time": now().isoformat()
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+    def log_system_maintenance_end(
+        self,
+        admin_user_id: str,
+        maintenance_type: str,
+        actual_duration_minutes: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Optional[AuditLog]:
+        """Log system maintenance end event."""
+        return self.create_audit_entry(
+            event_type=AuditEventType.SYSTEM_MAINTENANCE_END,
+            event_description=f"System maintenance completed: {maintenance_type}",
+            user_id=admin_user_id,
+            entity_type="system",
+            entity_id="maintenance",
+            event_metadata={
+                "maintenance_type": maintenance_type,
+                "action": "end",
+                "actual_duration_minutes": actual_duration_minutes,
+                "maintenance_end_time": now().isoformat()
+            },
             ip_address=ip_address,
             user_agent=user_agent
         )

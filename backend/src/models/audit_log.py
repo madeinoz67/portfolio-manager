@@ -40,6 +40,24 @@ class AuditEventType(enum.Enum):
     # Admin events
     ADMIN_ACTION_PERFORMED = "admin_action_performed"
 
+    # Market data provider admin events
+    PROVIDER_ENABLED = "provider_enabled"
+    PROVIDER_DISABLED = "provider_disabled"
+    PROVIDER_PAUSED = "provider_paused"
+    PROVIDER_RESUMED = "provider_resumed"
+    PROVIDER_CONFIGURED = "provider_configured"
+
+    # Scheduler admin events
+    SCHEDULER_STARTED = "scheduler_started"
+    SCHEDULER_STOPPED = "scheduler_stopped"
+    SCHEDULER_PAUSED = "scheduler_paused"
+    SCHEDULER_RESUMED = "scheduler_resumed"
+    SCHEDULER_CONFIGURED = "scheduler_configured"
+
+    # System admin events
+    SYSTEM_MAINTENANCE_START = "system_maintenance_start"
+    SYSTEM_MAINTENANCE_END = "system_maintenance_end"
+
 
 class AuditLog(Base):
     """

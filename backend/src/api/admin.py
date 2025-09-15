@@ -4,7 +4,7 @@ Admin API endpoints for user management and system administration.
 
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from pydantic import BaseModel
@@ -602,6 +602,7 @@ class ActivitiesResponse(BaseModel):
 @router.patch("/market-data/providers/{provider_id}/toggle", response_model=ProviderToggleResponse)
 async def toggle_market_data_provider(
     provider_id: str,
+    request: Request,
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
@@ -610,7 +611,8 @@ async def toggle_market_data_provider(
 
     from src.models.market_data_provider import MarketDataProvider
     from src.utils.datetime_utils import now
-    from fastapi import HTTPException
+    from src.services.audit_service import AuditService
+    from fastapi import HTTPException, Request
 
     # Find the provider
     provider = db.query(MarketDataProvider).filter(MarketDataProvider.name == provider_id).first()
@@ -633,6 +635,32 @@ async def toggle_market_data_provider(
 
         action = "enabled" if provider.is_enabled else "disabled"
         message = f"Provider '{provider.display_name}' has been {action}"
+
+        # Create audit log entry
+        try:
+            audit_service = AuditService(db)
+
+            if provider.is_enabled:
+                audit_service.log_provider_enabled(
+                    provider_id=provider.name,
+                    provider_name=provider.display_name,
+                    admin_user_id=str(current_admin.id),
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+            else:
+                audit_service.log_provider_disabled(
+                    provider_id=provider.name,
+                    provider_name=provider.display_name,
+                    admin_user_id=str(current_admin.id),
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+
+            db.commit()  # Commit audit log
+        except Exception as audit_error:
+            logger.error(f"Failed to create audit log for provider toggle: {audit_error}")
+            # Don't fail the operation if audit logging fails
 
         logger.info(f"Provider {provider_id} {action} successfully")
 
@@ -1387,3 +1415,257 @@ async def get_audit_log_stats(
         ),
         generated_at=to_iso_string(now)
     )
+
+
+# Scheduler Control Models
+class SchedulerStatus(BaseModel):
+    schedulerName: str
+    state: str  # stopped, running, paused, error
+    lastRun: Optional[str] = None
+    nextRun: Optional[str] = None
+    pauseUntil: Optional[str] = None
+    errorMessage: Optional[str] = None
+    configuration: dict
+    uptimeSeconds: Optional[int] = None
+
+
+class SchedulerControlRequest(BaseModel):
+    action: str  # start, stop, pause, resume
+    durationMinutes: Optional[int] = None  # for pause action
+    reason: Optional[str] = None  # for stop action
+    configuration: Optional[dict] = None  # for start action
+
+
+class SchedulerControlResponse(BaseModel):
+    schedulerName: str
+    action: str
+    success: bool
+    message: str
+    newState: str
+    status: SchedulerStatus
+
+
+class SchedulerConfigurationRequest(BaseModel):
+    intervalMinutes: Optional[int] = None
+    maxConcurrentJobs: Optional[int] = None
+    retryAttempts: Optional[int] = None
+    enabledProviders: Optional[List[str]] = None
+    bulkMode: Optional[bool] = None
+    timeoutSeconds: Optional[int] = None
+
+
+class SchedulerConfigurationResponse(BaseModel):
+    schedulerName: str
+    success: bool
+    message: str
+    changes: dict
+    configuration: dict
+
+
+@router.get("/scheduler/status", response_model=SchedulerStatus)
+async def get_scheduler_status(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get current scheduler status."""
+    logger.info(f"Admin user {current_admin.email} requesting scheduler status")
+
+    from src.services.scheduler_service import get_scheduler_service
+
+    scheduler_service = get_scheduler_service(db)
+    status_info = scheduler_service.status_info
+
+    return SchedulerStatus(
+        schedulerName="market_data_scheduler",
+        state=status_info["state"],
+        lastRun=status_info["last_run"],
+        nextRun=status_info["next_run"],
+        pauseUntil=status_info["pause_until"],
+        errorMessage=status_info["error_message"],
+        configuration=status_info["configuration"],
+        uptimeSeconds=status_info["uptime_seconds"]
+    )
+
+
+@router.post("/scheduler/control", response_model=SchedulerControlResponse)
+async def control_scheduler(
+    control_request: SchedulerControlRequest,
+    request: Request,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Control scheduler operations (start, stop, pause, resume)."""
+    logger.info(f"Admin user {current_admin.email} requesting scheduler control: {control_request.action}")
+
+    from src.services.scheduler_service import get_scheduler_service
+    from src.services.audit_service import AuditService
+    from fastapi import HTTPException
+
+    scheduler_service = get_scheduler_service(db)
+    audit_service = AuditService(db)
+    scheduler_name = "market_data_scheduler"
+
+    success = False
+    message = ""
+
+    try:
+        if control_request.action == "start":
+            success = scheduler_service.start(control_request.configuration)
+            message = "Scheduler started successfully" if success else "Failed to start scheduler"
+
+            if success:
+                # Create audit log
+                audit_service.log_scheduler_started(
+                    scheduler_name=scheduler_name,
+                    admin_user_id=str(current_admin.id),
+                    scheduler_config=control_request.configuration,
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+
+        elif control_request.action == "stop":
+            success = scheduler_service.stop(control_request.reason)
+            message = "Scheduler stopped successfully" if success else "Failed to stop scheduler"
+
+            if success:
+                # Create audit log
+                audit_service.log_scheduler_stopped(
+                    scheduler_name=scheduler_name,
+                    admin_user_id=str(current_admin.id),
+                    reason=control_request.reason,
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+
+        elif control_request.action == "pause":
+            success = scheduler_service.pause(control_request.durationMinutes)
+            duration_text = f" for {control_request.durationMinutes} minutes" if control_request.durationMinutes else " indefinitely"
+            message = f"Scheduler paused successfully{duration_text}" if success else "Failed to pause scheduler"
+
+            if success:
+                # Create audit log
+                audit_service.log_scheduler_paused(
+                    scheduler_name=scheduler_name,
+                    admin_user_id=str(current_admin.id),
+                    duration_minutes=control_request.durationMinutes,
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+
+        elif control_request.action == "resume":
+            success = scheduler_service.resume()
+            message = "Scheduler resumed successfully" if success else "Failed to resume scheduler"
+
+            if success:
+                # Create audit log
+                audit_service.log_scheduler_resumed(
+                    scheduler_name=scheduler_name,
+                    admin_user_id=str(current_admin.id),
+                    ip_address=getattr(request.client, 'host', None) if request.client else None,
+                    user_agent=request.headers.get('User-Agent')
+                )
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown action: {control_request.action}"
+            )
+
+        # Commit audit logs
+        if success:
+            db.commit()
+
+        # Get updated status
+        status_info = scheduler_service.status_info
+
+        return SchedulerControlResponse(
+            schedulerName=scheduler_name,
+            action=control_request.action,
+            success=success,
+            message=message,
+            newState=status_info["state"],
+            status=SchedulerStatus(
+                schedulerName=scheduler_name,
+                state=status_info["state"],
+                lastRun=status_info["last_run"],
+                nextRun=status_info["next_run"],
+                pauseUntil=status_info["pause_until"],
+                errorMessage=status_info["error_message"],
+                configuration=status_info["configuration"],
+                uptimeSeconds=status_info["uptime_seconds"]
+            )
+        )
+
+    except Exception as e:
+        logger.error(f"Scheduler control failed for action {control_request.action}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to {control_request.action} scheduler: {str(e)}"
+        )
+
+
+@router.patch("/scheduler/configuration", response_model=SchedulerConfigurationResponse)
+async def update_scheduler_configuration(
+    config_request: SchedulerConfigurationRequest,
+    request: Request,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Update scheduler configuration."""
+    logger.info(f"Admin user {current_admin.email} updating scheduler configuration")
+
+    from src.services.scheduler_service import get_scheduler_service
+    from src.services.audit_service import AuditService
+    from fastapi import HTTPException
+
+    scheduler_service = get_scheduler_service(db)
+    audit_service = AuditService(db)
+    scheduler_name = "market_data_scheduler"
+
+    try:
+        # Convert request to dictionary, excluding None values
+        config_updates = {
+            k: v for k, v in config_request.model_dump().items()
+            if v is not None
+        }
+
+        if not config_updates:
+            raise HTTPException(
+                status_code=400,
+                detail="No configuration updates provided"
+            )
+
+        # Update configuration
+        changes = scheduler_service.update_configuration(config_updates)
+
+        success = bool(changes)
+        message = f"Configuration updated: {list(changes.keys())}" if success else "No changes made"
+
+        if success:
+            # Create audit log
+            audit_service.log_scheduler_configured(
+                scheduler_name=scheduler_name,
+                admin_user_id=str(current_admin.id),
+                configuration_changes=changes,
+                ip_address=getattr(request.client, 'host', None) if request.client else None,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.commit()
+
+        # Get updated configuration
+        current_config = scheduler_service.configuration.to_dict()
+
+        return SchedulerConfigurationResponse(
+            schedulerName=scheduler_name,
+            success=success,
+            message=message,
+            changes=changes,
+            configuration=current_config
+        )
+
+    except Exception as e:
+        logger.error(f"Scheduler configuration update failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update scheduler configuration: {str(e)}"
+        )
