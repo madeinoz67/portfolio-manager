@@ -869,25 +869,25 @@ export default function AdminMarketDataPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Symbols Processed:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {schedulerStatus.recent_activity?.total_symbols_processed || 0}
+                    {schedulerStatus.symbols_processed || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Success Rate:</span>
                   <span className={`font-medium ${
-                    (schedulerStatus.recent_activity?.success_rate || 0) > 95
+                    (schedulerStatus.success_rate || 0) > 95
                       ? 'text-green-600 dark:text-green-400'
-                      : (schedulerStatus.recent_activity?.success_rate || 0) > 80
+                      : (schedulerStatus.success_rate || 0) > 80
                         ? 'text-yellow-600 dark:text-yellow-400'
                         : 'text-red-600 dark:text-red-400'
                   }`}>
-                    {(schedulerStatus.recent_activity?.success_rate || 0).toFixed(2)}%
+                    {(schedulerStatus.success_rate || 0).toFixed(2)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">Avg Response:</span>
+                  <span className="text-gray-600 dark:text-gray-400">Total Runs:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {schedulerStatus.recent_activity?.avg_response_time_ms || 0}ms
+                    {schedulerStatus.total_runs || 0}
                   </span>
                 </div>
               </div>
