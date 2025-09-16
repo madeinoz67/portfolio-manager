@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useHoldings, type Holding } from '@/hooks/useHoldings'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
@@ -20,6 +21,51 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
     calculatePortfolioSummary,
     clearError
   } = useHoldings(portfolioId, true)
+
+  // Function to refresh market data for stocks in this portfolio
+  const refreshMarketData = async () => {
+    if (holdings.length === 0) return
+
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+
+      const symbols = holdings.map(holding => holding.stock.symbol)
+      const params = new URLSearchParams()
+      symbols.forEach(symbol => params.append('symbols', symbol))
+
+      const response = await fetch(`http://localhost:8001/api/v1/market-data/prices?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        // After market data is updated, refresh holdings to get updated timestamps
+        await fetchHoldings()
+      }
+    } catch (error) {
+      console.error('Error refreshing market data:', error)
+    }
+  }
+
+  // Auto-refresh market data every 15 minutes (same as market-data page)
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout
+
+    if (holdings.length > 0) {
+      // Initial market data fetch when holdings are loaded
+      refreshMarketData()
+
+      // Set up auto-refresh every 15 minutes
+      interval = setInterval(refreshMarketData, 15 * 60 * 1000)
+    }
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [holdings.length])
 
   const summary = calculatePortfolioSummary()
 
@@ -179,7 +225,10 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
             <Button
               variant="secondary"
               size="sm"
-              onClick={fetchHoldings}
+              onClick={async () => {
+                await refreshMarketData()
+                await fetchHoldings()
+              }}
               loading={loading}
             >
               Refresh

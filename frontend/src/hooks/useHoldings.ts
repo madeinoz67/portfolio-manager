@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
@@ -29,11 +29,13 @@ export interface Holding {
   recent_news_count?: number
 }
 
-export function useHoldings(portfolioId: string) {
+export function useHoldings(portfolioId: string, autoRefresh: boolean = true) {
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { token } = useAuth()
+  const refreshInterval = useRef<NodeJS.Timeout | null>(null)
 
   const getAuthHeaders = () => {
     return {
@@ -68,6 +70,7 @@ export function useHoldings(portfolioId: string) {
 
       const data: Holding[] = await response.json()
       setHoldings(data)
+      setLastUpdated(new Date())
       return data
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch holdings'
@@ -111,6 +114,33 @@ export function useHoldings(portfolioId: string) {
     }
   }, [holdings])
 
+  // Auto-refresh effect
+  useEffect(() => {
+    if (autoRefresh && portfolioId && token) {
+      // Clear any existing interval
+      if (refreshInterval.current) {
+        clearInterval(refreshInterval.current)
+      }
+
+      // Set up auto-refresh every 30 seconds (configurable)
+      refreshInterval.current = setInterval(() => {
+        fetchHoldings().catch(err => {
+          console.error('Auto-refresh failed:', err)
+          // Don't show error to user for background refreshes
+        })
+      }, 30000) // 30 seconds
+
+      // Cleanup on unmount or dependency change
+      return () => {
+        if (refreshInterval.current) {
+          clearInterval(refreshInterval.current)
+          refreshInterval.current = null
+        }
+      }
+    }
+  }, [autoRefresh, portfolioId, token, fetchHoldings])
+
+  // Initial load effect
   useEffect(() => {
     if (portfolioId && token) {
       fetchHoldings()
@@ -125,6 +155,7 @@ export function useHoldings(portfolioId: string) {
     holdings,
     loading,
     error,
+    lastUpdated,
     fetchHoldings,
     calculatePortfolioSummary,
     clearError
