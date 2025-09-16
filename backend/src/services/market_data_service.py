@@ -516,6 +516,7 @@ class MarketDataService:
 
                 # Get current price info
                 info = ticker.info
+                hist = None
 
                 if not info or 'currentPrice' not in info:
                     # Fallback to history for current price
@@ -529,15 +530,45 @@ class MarketDataService:
                     current_price = info.get('currentPrice', 0)
                     volume = info.get('volume', 0)
 
+                # Get opening price with fallback strategy
+                opening_price = None
+                if info and info.get('open'):
+                    opening_price = info.get('open')
+                elif info and info.get('regularMarketOpen'):
+                    opening_price = info.get('regularMarketOpen')
+                elif hist is not None and not hist.empty and 'Open' in hist.columns:
+                    opening_price = float(hist['Open'].iloc[-1])
+                elif hist is None:  # Need to fetch history if not already done
+                    hist = ticker.history(period="1d")
+                    if not hist.empty and 'Open' in hist.columns:
+                        opening_price = float(hist['Open'].iloc[-1])
+
+                # Get other price fields with similar fallback strategy
+                high_price = None
+                if info and info.get('dayHigh'):
+                    high_price = info.get('dayHigh')
+                elif hist is not None and not hist.empty and 'High' in hist.columns:
+                    high_price = float(hist['High'].iloc[-1])
+
+                low_price = None
+                if info and info.get('dayLow'):
+                    low_price = info.get('dayLow')
+                elif hist is not None and not hist.empty and 'Low' in hist.columns:
+                    low_price = float(hist['Low'].iloc[-1])
+
+                previous_close = None
+                if info and info.get('previousClose'):
+                    previous_close = info.get('previousClose')
+
                 return {
                     "symbol": symbol,  # Keep original symbol format
                     "price": Decimal(str(round(current_price, 4))),
 
                     # Extended price information for trend calculations
-                    "open_price": Decimal(str(round(info.get('open', current_price), 4))) if info and info.get('open') else None,
-                    "high_price": Decimal(str(round(info.get('dayHigh', current_price), 4))) if info and info.get('dayHigh') else None,
-                    "low_price": Decimal(str(round(info.get('dayLow', current_price), 4))) if info and info.get('dayLow') else None,
-                    "previous_close": Decimal(str(round(info.get('previousClose', current_price), 4))) if info and info.get('previousClose') else None,
+                    "open_price": Decimal(str(round(opening_price, 4))) if opening_price is not None else None,
+                    "high_price": Decimal(str(round(high_price, 4))) if high_price is not None else None,
+                    "low_price": Decimal(str(round(low_price, 4))) if low_price is not None else None,
+                    "previous_close": Decimal(str(round(previous_close, 4))) if previous_close is not None else None,
 
                     # Volume and market data
                     "volume": volume,
@@ -574,10 +605,33 @@ class MarketDataService:
 
     def _is_asx_symbol(self, symbol: str) -> bool:
         """Check if symbol appears to be an ASX stock (basic heuristic)."""
-        # ASX symbols are typically 3-4 letter codes
-        # More sophisticated logic could check against known ASX symbol list
-        return (len(symbol) >= 3 and len(symbol) <= 4 and
-                symbol.isalpha() and symbol.isupper())
+        # Common ASX symbols that we know about
+        known_asx_symbols = {
+            'CBA', 'ANZ', 'WBC', 'NAB',  # Big 4 banks
+            'BHP', 'RIO', 'FMG',         # Mining
+            'CSL', 'COH', 'PME',         # Healthcare
+            'WOW', 'COL', 'JBH',         # Retail
+            'TCL', 'TLS', 'SGP',         # Telco/Property
+            'MQG', 'SUN', 'QBE',         # Finance/Insurance
+            'REA', 'CAR', 'SEK',         # Tech/Services
+            'GMG', 'WES', 'ALL',         # Industrials
+            'APT', 'XRO', 'WTC',         # Fintech
+            'A2M', 'BAP', 'IFL'          # Other
+        }
+
+        # Check if it's a known ASX symbol
+        if symbol in known_asx_symbols:
+            return True
+
+        # Fallback heuristic: 3-4 letter codes, but exclude common US patterns
+        us_patterns = {'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC'}
+        if symbol in us_patterns:
+            return False
+
+        # For unknown symbols, use basic heuristic but be more conservative
+        # ASX symbols are typically 3-4 letters, but so are many US symbols
+        # This is a fallback that may need refinement
+        return (len(symbol) == 3 and symbol.isalpha() and symbol.isupper())
 
     async def _bulk_fetch_from_yfinance(self, symbols: List[str]) -> Dict[str, Optional[Dict]]:
         """Fetch prices for multiple symbols from yfinance in a single operation."""
