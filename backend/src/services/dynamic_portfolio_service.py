@@ -218,14 +218,16 @@ class DynamicPortfolioService(LoggerMixin):
             if not holdings:
                 return []
 
-            # Get cached prices for all symbols
+            # Get cached prices AND fresh timestamps for all symbols
             symbols = [holding.stock.symbol for holding in holdings]
-            current_prices = self._get_cached_prices(symbols)
+            price_data = self._get_prices_and_timestamps(symbols)
 
             updated_holdings = []
             for holding in holdings:
                 symbol = holding.stock.symbol
-                current_price = current_prices.get(symbol, holding.average_cost)
+                symbol_data = price_data.get(symbol, {})
+                current_price = symbol_data.get("price", holding.average_cost)
+                fresh_timestamp = symbol_data.get("last_updated")
 
                 if current_price is None:
                     current_price = holding.average_cost
@@ -240,7 +242,7 @@ class DynamicPortfolioService(LoggerMixin):
                 if cost_basis > 0:
                     unrealized_gain_loss_percent = (unrealized_gain_loss / cost_basis) * 100
 
-                # Create holding dict with updated values
+                # Create holding dict with updated values including FRESH timestamp
                 holding_dict = {
                     "id": holding.id,
                     "portfolio_id": holding.portfolio_id,
@@ -251,6 +253,8 @@ class DynamicPortfolioService(LoggerMixin):
                         "company_name": holding.stock.company_name,
                         "exchange": holding.stock.exchange,
                         "status": holding.stock.status,
+                        "current_price": current_price,
+                        "last_price_update": fresh_timestamp,  # FRESH timestamp from master table
                         "created_at": holding.stock.created_at,
                         "updated_at": holding.stock.updated_at
                     },
@@ -376,6 +380,46 @@ class DynamicPortfolioService(LoggerMixin):
 
         except Exception as e:
             self.log_error("Error retrieving prices from master table", error=str(e))
+            return {}
+
+    def _get_prices_and_timestamps(self, symbols: List[str]) -> Dict[str, Dict]:
+        """
+        Get current prices AND timestamps from master table (single source of truth).
+
+        This ensures portfolio holdings display fresh timestamps from RealtimeSymbol,
+        not stale timestamps from Stock table.
+
+        Args:
+            symbols: List of stock symbols to get prices for
+
+        Returns:
+            Dictionary mapping symbols to their price data with fresh timestamps
+        """
+        if not symbols:
+            return {}
+
+        try:
+            # Get current prices and timestamps from master table (realtime_symbols)
+            price_data = {}
+
+            for symbol in symbols:
+                # Get current price and fresh timestamp from master table
+                master_record = self.db.query(RealtimeSymbol).filter(
+                    RealtimeSymbol.symbol == symbol
+                ).first()
+
+                if master_record:
+                    price_data[symbol] = {
+                        "price": Decimal(str(master_record.current_price)),
+                        "last_updated": master_record.last_updated  # FRESH timestamp
+                    }
+                    self.log_debug(f"Master table data for {symbol}: ${master_record.current_price} at {master_record.last_updated}")
+
+            self.log_info("Retrieved prices and timestamps from master table", symbols=symbols, found_count=len(price_data))
+            return price_data
+
+        except Exception as e:
+            self.log_error("Error retrieving prices and timestamps from master table", error=str(e))
             return {}
 
     def _get_cached_portfolio_value(self, portfolio_id: UUID) -> Optional[PortfolioValue]:
