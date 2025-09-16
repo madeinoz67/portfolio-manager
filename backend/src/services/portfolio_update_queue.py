@@ -58,6 +58,11 @@ class PortfolioUpdateQueue(LoggerMixin):
         self._processing_task: Optional[asyncio.Task] = None
         self._shutdown = False
 
+        # Queue metrics tracking
+        self._last_metrics_time: float = 0
+        self._metrics_interval: float = 30.0  # Record metrics every 30 seconds
+        self._processing_times: deque = deque(maxlen=100)  # Track recent processing times
+
         self.log_info("Portfolio Update Queue initialized", extra={
             "debounce_seconds": debounce_seconds,
             "max_updates_per_minute": max_updates_per_minute
@@ -153,6 +158,83 @@ class PortfolioUpdateQueue(LoggerMixin):
         current_time = time.time()
         self._rate_limit_windows[portfolio_id].append(current_time)
 
+    def _record_queue_metrics(self, db_session=None):
+        """Record current queue metrics to database for admin dashboard."""
+        try:
+            from src.database import SessionLocal
+            from src.models.portfolio_update_metrics import PortfolioQueueMetric
+            from src.utils.datetime_utils import utc_now
+
+            current_time = time.time()
+
+            # Only record metrics if enough time has passed
+            if current_time - self._last_metrics_time < self._metrics_interval:
+                return
+
+            # Calculate queue statistics
+            with self._update_lock:
+                pending_updates = len(self._pending_updates)
+                active_portfolios = len([p for p in self._pending_updates.keys() if self._pending_updates[p].symbols])
+
+            # Calculate processing rate (updates per minute)
+            recent_updates = []
+            minute_ago = current_time - 60
+            for timestamps in self._rate_limit_windows.values():
+                recent_updates.extend([t for t in timestamps if t > minute_ago])
+            processing_rate = len(recent_updates)
+
+            # Calculate average processing time
+            avg_processing_time = None
+            if self._processing_times:
+                avg_processing_time = int(sum(self._processing_times) / len(self._processing_times) * 1000)  # Convert to ms
+
+            # Estimate memory usage based on queue size (simple approximation)
+            memory_usage = 50.0 + (pending_updates * 0.5)  # Base + 0.5MB per pending update
+
+            # Rate limit hits in last hour
+            rate_limit_hits = 0
+            hour_ago = current_time - 3600
+            for timestamps in self._rate_limit_windows.values():
+                # Count how many times each portfolio hit rate limits
+                if len(timestamps) >= self.max_updates_per_minute:
+                    rate_limit_hits += 1
+
+            # Use provided session or create a new one
+            db = db_session or SessionLocal()
+            close_db = db_session is None
+
+            try:
+                queue_metric = PortfolioQueueMetric(
+                    pending_updates=pending_updates,
+                    processing_rate=processing_rate,
+                    active_portfolios=active_portfolios,
+                    avg_processing_time_ms=avg_processing_time,
+                    rate_limit_hits=rate_limit_hits,
+                    memory_usage_mb=memory_usage,
+                    is_processing=not (self._processing_task is None or self._processing_task.done()),
+                    debounce_seconds=self.debounce_seconds,
+                    max_updates_per_minute=self.max_updates_per_minute,
+                    created_at=utc_now().replace(tzinfo=None)
+                )
+                db.add(queue_metric)
+                if close_db:
+                    db.commit()
+
+                self._last_metrics_time = current_time
+
+                self.log_debug("Queue metrics recorded", extra={
+                    "pending_updates": pending_updates,
+                    "processing_rate": processing_rate,
+                    "memory_usage_mb": memory_usage
+                })
+
+            finally:
+                if close_db:
+                    db.close()
+
+        except Exception as e:
+            self.log_error("Error recording queue metrics", error=str(e))
+
     async def _process_queue(self):
         """Background task that processes the update queue."""
         self.log_info("Portfolio update queue processor started")
@@ -160,6 +242,10 @@ class PortfolioUpdateQueue(LoggerMixin):
         try:
             while not self._shutdown:
                 await self._process_batch()
+
+                # Record queue metrics periodically
+                self._record_queue_metrics()
+
                 await asyncio.sleep(0.5)  # Check queue every 500ms
 
         except asyncio.CancelledError:
@@ -199,7 +285,14 @@ class PortfolioUpdateQueue(LoggerMixin):
         # Process each update
         for request in ready_updates:
             try:
+                start_time = time.time()
                 await self._execute_portfolio_update(request)
+                end_time = time.time()
+
+                # Record processing time for metrics
+                processing_time = end_time - start_time
+                self._processing_times.append(processing_time)
+
                 self._record_update(request.portfolio_id)
 
             except Exception as e:
