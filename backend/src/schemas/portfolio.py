@@ -8,6 +8,7 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from src.utils.datetime_utils import to_iso_string
 
 
 class PortfolioCreate(BaseModel):
@@ -41,3 +42,6 @@ class PortfolioResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: to_iso_string
+        }
