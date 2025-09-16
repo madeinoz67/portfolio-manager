@@ -21,15 +21,8 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
 
   // Helper function to format portfolio timestamp properly
   const formatPortfolioTimestamp = (timestamp: string): string => {
-    // Use formatDisplayDateTime for proper timezone handling as per frontend-date-handling.md
-    // For datetime timestamps, this is the recommended approach
-    return formatDisplayDateTime(timestamp, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
+    // Use getRelativeTime for "X minutes ago" format with proper timezone handling
+    return getRelativeTime(timestamp)
   }
 
   const handleAddTrade = () => {
