@@ -51,18 +51,27 @@ class TrendCalculationService:
         """Calculate trend for a single symbol."""
         latest_record = self._get_latest_price_record(symbol)
 
-        if not latest_record or latest_record.opening_price is None:
-            logger.debug(f"No opening price available for {symbol}")
+        if not latest_record:
+            logger.debug(f"No price record available for {symbol}")
             return None
 
         current_price = latest_record.price
-        opening_price = latest_record.opening_price
+
+        # Use opening_price as primary, fallback to previous_close
+        reference_price = latest_record.opening_price
+        if reference_price is None:
+            reference_price = latest_record.previous_close
+            logger.debug(f"Using previous_close as fallback for {symbol} trend calculation")
+
+        if reference_price is None:
+            logger.debug(f"No opening price or previous_close available for {symbol}")
+            return None
 
         # Calculate price change
-        change = current_price - opening_price
+        change = current_price - reference_price
 
         # Calculate percentage change
-        change_percent = self._calculate_percentage_change(opening_price, current_price)
+        change_percent = self._calculate_percentage_change(reference_price, current_price)
 
         # Determine trend
         if change > 0:
@@ -75,7 +84,7 @@ class TrendCalculationService:
         return TrendData(
             symbol=symbol,
             current_price=current_price,
-            opening_price=opening_price,
+            opening_price=reference_price,  # Store the reference price used for calculation
             trend=trend,
             change=change,
             change_percent=change_percent,
