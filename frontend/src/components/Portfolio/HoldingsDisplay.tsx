@@ -1,9 +1,11 @@
 'use client'
 
+import React from 'react'
 import { useHoldings, type Holding } from '@/hooks/useHoldings'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
+import { getRelativeTime, isWithinTimeRange } from '@/utils/timezone'
 
 interface HoldingsDisplayProps {
   portfolioId: string
@@ -14,10 +16,20 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
     holdings,
     loading,
     error,
+    lastUpdated,
     fetchHoldings,
     calculatePortfolioSummary,
     clearError
-  } = useHoldings(portfolioId)
+  } = useHoldings(portfolioId, true)
+
+  // Auto-refresh holdings data every 30 seconds to get latest timestamps
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      fetchHoldings()
+    }, 30 * 1000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [fetchHoldings])
 
   const summary = calculatePortfolioSummary()
 
@@ -28,6 +40,121 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
   const formatPercent = (percent: number) => {
     const sign = percent >= 0 ? '+' : ''
     return `${sign}${percent.toFixed(2)}%`
+  }
+
+  // Trend calculation functions (similar to market-data table)
+  const calculateTrendData = (stock: any, holding?: any) => {
+    // First try to use stock daily_change data (preferred)
+    if (stock.daily_change && stock.daily_change_percent) {
+      const change = parseFloat(stock.daily_change)
+      const changePercent = parseFloat(stock.daily_change_percent)
+      const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'neutral'
+
+      return {
+        trend,
+        change,
+        change_percent: changePercent
+      }
+    }
+
+    // Fallback: use holding's unrealized gain/loss data
+    if (holding) {
+      const gainLoss = parseFloat(holding.unrealized_gain_loss)
+      const gainLossPercent = parseFloat(holding.unrealized_gain_loss_percent)
+
+      if (!isNaN(gainLoss) && !isNaN(gainLossPercent)) {
+        const trend = gainLoss > 0 ? 'up' : gainLoss < 0 ? 'down' : 'neutral'
+
+        return {
+          trend,
+          change: gainLoss,
+          change_percent: gainLossPercent
+        }
+      }
+    }
+
+    return null
+  }
+
+  const formatTrendChange = (change: number) => {
+    if (change === 0) return '$0.00'
+    return change >= 0 ? `+$${change.toFixed(2)}` : `-$${Math.abs(change).toFixed(2)}`
+  }
+
+  const formatTrendPercent = (changePercent: number) => {
+    if (changePercent === 0) return '(0.00%)'
+    return changePercent >= 0 ? `(+${changePercent.toFixed(2)}%)` : `(${changePercent.toFixed(2)}%)`
+  }
+
+  const getTrendColor = (trend: string | null) => {
+    if (!trend) return 'text-gray-600 dark:text-gray-400'
+    switch (trend) {
+      case 'up':
+        return 'text-green-600 dark:text-green-400'
+      case 'down':
+        return 'text-red-600 dark:text-red-400'
+      case 'neutral':
+        return 'text-gray-600 dark:text-gray-400'
+      default:
+        return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  const getTrendIcon = (trend: string | null) => {
+    if (!trend) {
+      return (
+        <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
+          <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
+        </div>
+      )
+    }
+
+    if (trend === 'up') {
+      return (
+        <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center" aria-label="Upward trend">
+          <svg
+            className="w-3 h-3 stroke-current text-green-600 dark:text-green-400"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )
+    }
+
+    if (trend === 'down') {
+      return (
+        <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center" aria-label="Downward trend">
+          <svg
+            className="w-3 h-3 stroke-current text-red-600 dark:text-red-400"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <path d="M3 3L13 13M13 13H7M13 13V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )
+    }
+
+    if (trend === 'neutral') {
+      return (
+        <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="Neutral trend">
+          <svg
+            className="w-3 h-3 fill-current text-gray-600 dark:text-gray-400"
+            viewBox="0 0 20 20"
+          >
+            <path d="M3 10h14v2H3z" />
+          </svg>
+        </div>
+      )
+    }
+
+    return (
+      <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
+        <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
+      </div>
+    )
   }
 
   if (loading) {
@@ -62,7 +189,7 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
             <Button
               variant="secondary"
               size="sm"
-              onClick={fetchHoldings}
+              onClick={() => fetchHoldings()}
               loading={loading}
             >
               Refresh
@@ -110,21 +237,37 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Return %
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Trend
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Last Updated
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {holdings.map((holding) => (
-                  <tr key={holding.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {holding.stock.symbol}
+                {holdings.map((holding) => {
+                  const isStale = holding.stock.last_price_update ? !isWithinTimeRange(holding.stock.last_price_update, 30) : false
+
+                  return (
+                    <tr key={holding.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-1 sm:space-x-2">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {holding.stock.symbol}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {holding.stock.company_name}
+                            </div>
+                          </div>
+                          {isStale && (
+                            <span className="px-1 sm:px-1.5 py-0.5 text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 rounded">
+                              S
+                            </span>
+                          )}
                         </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {holding.stock.company_name}
-                        </div>
-                      </div>
-                    </td>
+                      </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
                       {parseFloat(holding.quantity).toLocaleString()}
                     </td>
@@ -148,14 +291,30 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                       {formatCurrency(parseFloat(holding.unrealized_gain_loss))}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
-                      parseFloat(holding.unrealized_gain_loss_percent) >= 0 
-                        ? 'text-green-600 dark:text-green-400' 
+                      parseFloat(holding.unrealized_gain_loss_percent) >= 0
+                        ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                     }`}>
                       {formatPercent(parseFloat(holding.unrealized_gain_loss_percent))}
                     </td>
-                  </tr>
-                ))}
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {(() => {
+                        const trendData = calculateTrendData(holding.stock, holding)
+                        const trendColor = getTrendColor(trendData?.trend || null)
+
+                        return (
+                          <div className="flex justify-center items-center">
+                            {getTrendIcon(trendData?.trend || null)}
+                          </div>
+                        )
+                      })()}
+                    </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right">
+                        {holding.stock.last_price_update ? getRelativeTime(holding.stock.last_price_update) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Boolean, Column, DateTime, String, Text, Uuid, Enum
 from sqlalchemy.orm import relationship
 
@@ -25,8 +27,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     first_name = Column(String(100))
     last_name = Column(String(100))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
+    updated_at = Column(DateTime, default=now, onupdate=now)
     is_active = Column(Boolean, default=True)
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     email_config = Column(Text)  # JSON string for OAuth tokens, broker settings
@@ -37,6 +39,9 @@ class User(Base):
     )
     api_keys = relationship(
         "ApiKey", back_populates="user", cascade="all, delete-orphan"
+    )
+    audit_logs = relationship(
+        "AuditLog", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

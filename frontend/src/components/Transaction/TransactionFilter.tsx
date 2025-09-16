@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
+import { getCurrentDateInUserTimezone } from '@/utils/timezone'
 
 interface TransactionFilterProps {
   onFilter: (filters: {
@@ -120,7 +121,7 @@ export default function TransactionFilter({ onFilter, onClear, loading }: Transa
               variant="secondary"
               size="sm"
               onClick={() => {
-                const today = new Date().toISOString().split('T')[0]
+                const today = getCurrentDateInUserTimezone()
                 setStartDate(today)
                 setEndDate(today)
               }}
@@ -135,8 +136,13 @@ export default function TransactionFilter({ onFilter, onClear, loading }: Transa
               onClick={() => {
                 const today = new Date()
                 const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-                setStartDate(lastWeek.toISOString().split('T')[0])
-                setEndDate(today.toISOString().split('T')[0])
+                const todayStr = getCurrentDateInUserTimezone()
+                const year = lastWeek.getFullYear()
+                const month = String(lastWeek.getMonth() + 1).padStart(2, '0')
+                const day = String(lastWeek.getDate()).padStart(2, '0')
+                const lastWeekStr = `${year}-${month}-${day}`
+                setStartDate(lastWeekStr)
+                setEndDate(todayStr)
               }}
               disabled={loading}
             >
@@ -149,8 +155,13 @@ export default function TransactionFilter({ onFilter, onClear, loading }: Transa
               onClick={() => {
                 const today = new Date()
                 const lastMonth = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
-                setStartDate(lastMonth.toISOString().split('T')[0])
-                setEndDate(today.toISOString().split('T')[0])
+                const todayStr = getCurrentDateInUserTimezone()
+                const year = lastMonth.getFullYear()
+                const month = String(lastMonth.getMonth() + 1).padStart(2, '0')
+                const day = String(lastMonth.getDate()).padStart(2, '0')
+                const lastMonthStr = `${year}-${month}-${day}`
+                setStartDate(lastMonthStr)
+                setEndDate(todayStr)
               }}
               disabled={loading}
             >
@@ -163,8 +174,13 @@ export default function TransactionFilter({ onFilter, onClear, loading }: Transa
               onClick={() => {
                 const today = new Date()
                 const thisYear = new Date(today.getFullYear(), 0, 1)
-                setStartDate(thisYear.toISOString().split('T')[0])
-                setEndDate(today.toISOString().split('T')[0])
+                const todayStr = getCurrentDateInUserTimezone()
+                const year = thisYear.getFullYear()
+                const month = String(thisYear.getMonth() + 1).padStart(2, '0')
+                const day = String(thisYear.getDate()).padStart(2, '0')
+                const thisYearStr = `${year}-${month}-${day}`
+                setStartDate(thisYearStr)
+                setEndDate(todayStr)
               }}
               disabled={loading}
             >

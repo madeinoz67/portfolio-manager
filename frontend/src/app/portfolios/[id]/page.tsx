@@ -8,8 +8,8 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import TransactionForm from '@/components/Transaction/TransactionForm'
 import TransactionList from '@/components/Transaction/TransactionList'
-import HoldingsDisplay from '@/components/portfolio/HoldingsDisplay'
-import PortfolioEditForm from '@/components/portfolio/PortfolioEditForm'
+import HoldingsDisplay from '@/components/Portfolio/HoldingsDisplay'
+import PortfolioEditForm from '@/components/Portfolio/PortfolioEditForm'
 import PerformanceMetrics from '@/components/Portfolio/PerformanceMetrics'
 import { useToast } from '@/components/ui/Toast'
 import { useTransactions } from '@/hooks/useTransactions'
@@ -25,6 +25,8 @@ interface Portfolio {
   total_value: string
   daily_change: string
   daily_change_percent: string
+  unrealized_gain_loss: string
+  unrealized_gain_loss_percent: string
   created_at: string
   updated_at: string
 }
@@ -309,33 +311,68 @@ export default function PortfolioDetail() {
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-6 text-white">
-              <h3 className="text-sm font-medium text-blue-100">Total Value</h3>
-              <p className="text-3xl font-bold">
-                ${calculatePortfolioSummary().totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-            </div>
-            
-            <div className="bg-gradient-to-r from-green-500 to-blue-500 rounded-lg p-6 text-white">
-              <h3 className="text-sm font-medium text-green-100">Total Cost</h3>
-              <p className="text-3xl font-bold">
-                ${calculatePortfolioSummary().totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-            </div>
-            
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white">
-              <h3 className="text-sm font-medium text-purple-100">Total Gain/Loss</h3>
-              <p className={`text-3xl font-bold ${
-                calculatePortfolioSummary().totalGainLoss >= 0 ? 'text-green-100' : 'text-red-100'
-              }`}>
-                {calculatePortfolioSummary().totalGainLoss >= 0 ? '+' : ''}${calculatePortfolioSummary().totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+            {/* Total Portfolio Value */}
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
+              <h3 className="text-xs font-medium text-blue-100">Portfolio Value</h3>
+              <p className="text-2xl font-bold">
+                ${parseFloat(portfolio.total_value || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
 
-            <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg p-6 text-white">
-              <h3 className="text-sm font-medium text-orange-100">Return %</h3>
-              <p className={`text-3xl font-bold ${
+            {/* Daily P&L */}
+            <div className={`rounded-lg p-4 text-white ${
+              parseFloat(portfolio.daily_change) >= 0
+                ? 'bg-gradient-to-r from-green-500 to-green-600'
+                : 'bg-gradient-to-r from-red-500 to-red-600'
+            }`}>
+              <h3 className="text-xs font-medium opacity-90">Daily Price Movement</h3>
+              <p className="text-xs opacity-75 mb-1">Today's change from previous close</p>
+              <p className="text-2xl font-bold">
+                {parseFloat(portfolio.daily_change) >= 0 ? '+' : ''}${Math.abs(parseFloat(portfolio.daily_change || '0')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-sm font-medium">
+                ({parseFloat(portfolio.daily_change_percent || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
+              </p>
+            </div>
+
+            {/* Unrealized P&L */}
+            <div className={`rounded-lg p-4 text-white ${
+              parseFloat(portfolio.unrealized_gain_loss) >= 0
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600'
+                : 'bg-gradient-to-r from-orange-500 to-orange-600'
+            }`}>
+              <h3 className="text-xs font-medium opacity-90">Unrealized P&L</h3>
+              <p className="text-xs opacity-75 mb-1">Total gain/loss from purchase cost</p>
+              <p className="text-2xl font-bold">
+                {parseFloat(portfolio.unrealized_gain_loss) >= 0 ? '+' : ''}${Math.abs(parseFloat(portfolio.unrealized_gain_loss || '0')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-sm font-medium">
+                ({parseFloat(portfolio.unrealized_gain_loss) >= 0 ? '+' : ''}{parseFloat(portfolio.unrealized_gain_loss_percent || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
+              </p>
+            </div>
+
+            {/* Total Cost (from holdings calculation) */}
+            <div className="bg-gradient-to-r from-gray-500 to-gray-600 rounded-lg p-4 text-white">
+              <h3 className="text-xs font-medium text-gray-100">Total Cost</h3>
+              <p className="text-2xl font-bold">
+                ${calculatePortfolioSummary().totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+
+            {/* Holdings Summary */}
+            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-lg p-4 text-white">
+              <h3 className="text-xs font-medium text-indigo-100">Holdings Count</h3>
+              <p className="text-2xl font-bold">
+                {holdings.length}
+              </p>
+              <p className="text-xs opacity-75">Active positions</p>
+            </div>
+
+            {/* Performance Overview */}
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-4 text-white">
+              <h3 className="text-xs font-medium text-purple-100">Return %</h3>
+              <p className={`text-2xl font-bold ${
                 calculatePortfolioSummary().totalGainLossPercent >= 0 ? 'text-green-100' : 'text-red-100'
               }`}>
                 {calculatePortfolioSummary().totalGainLossPercent >= 0 ? '+' : ''}{calculatePortfolioSummary().totalGainLossPercent.toFixed(2)}%

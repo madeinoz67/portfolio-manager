@@ -1,20 +1,50 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Portfolio } from '@/types/portfolio'
 import Button from '@/components/ui/Button'
+import PortfolioDeletionModal from './PortfolioDeletionModal'
+import { getRelativeTime, formatDisplayDateTime } from '@/utils/timezone'
 
 interface PortfolioCardProps {
   portfolio: Portfolio
+  onDeleted?: () => void
 }
 
-export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
+export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardProps) {
   const router = useRouter()
-  const isPositiveChange = parseFloat(portfolio.daily_change) >= 0
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const isDailyPositive = parseFloat(portfolio.daily_change) >= 0
+  const isUnrealizedPositive = parseFloat(portfolio.unrealized_gain_loss) >= 0
   const totalValue = parseFloat(portfolio.total_value || '0')
   const dailyChange = parseFloat(portfolio.daily_change || '0')
+  const dailyChangePercent = parseFloat(portfolio.daily_change_percent || '0')
+  const unrealizedGainLoss = parseFloat(portfolio.unrealized_gain_loss || '0')
+  const unrealizedGainLossPercent = parseFloat(portfolio.unrealized_gain_loss_percent || '0')
+
+  // Helper function to format portfolio timestamp properly
+  const formatPortfolioTimestamp = (timestamp: string): string => {
+    // Use getRelativeTime for "X minutes ago" format with proper timezone handling
+    return getRelativeTime(timestamp)
+  }
 
   const handleAddTrade = () => {
     router.push(`/portfolios/${portfolio.id}/add-transaction`)
+  }
+
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteModalClose = () => {
+    setShowDeleteModal(false)
+  }
+
+  const handleDeleted = () => {
+    setShowDeleteModal(false)
+    if (onDeleted) {
+      onDeleted()
+    }
   }
 
   return (
@@ -64,23 +94,49 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
             </div>
           </div>
 
-          {/* Daily Performance */}
+          {/* Daily P&L Performance */}
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <div className={`p-2 rounded-lg ${isPositiveChange ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                  <svg className={`w-4 h-4 ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isPositiveChange ? "M7 17l9.2-9.2M17 17V7H7" : "M17 7l-9.2 9.2M7 7v10h10"} />
+                <div className={`p-2 rounded-lg ${isDailyPositive ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                  <svg className={`w-4 h-4 ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isDailyPositive ? "M7 17l9.2-9.2M17 17V7H7" : "M17 7l-9.2 9.2M7 7v10h10"} />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Today's Change</p>
-                  <div className="flex items-center space-x-2">
-                    <span className={`font-bold ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Daily Price Movement</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">Today's change from previous close</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className={`font-bold ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       ${Math.abs(dailyChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    <span className={`text-sm font-medium ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                      ({portfolio.daily_change_percent}%)
+                    <span className={`text-sm font-medium ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      ({dailyChangePercent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Unrealized P&L Performance */}
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className={`p-2 rounded-lg ${isUnrealizedPositive ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-orange-100 dark:bg-orange-900/30'}`}>
+                  <svg className={`w-4 h-4 ${isUnrealizedPositive ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Unrealized P&L</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">Total gain/loss from purchase cost</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className={`font-bold ${isUnrealizedPositive ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                      {isUnrealizedPositive ? '+' : '-'}${Math.abs(unrealizedGainLoss).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className={`text-sm font-medium ${isUnrealizedPositive ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                      ({isUnrealizedPositive ? '+' : ''}{unrealizedGainLossPercent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
                     </span>
                   </div>
                 </div>
@@ -96,12 +152,12 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>Last updated: Today</span>
+            <span>Last updated: {portfolio.price_last_updated ? formatPortfolioTimestamp(portfolio.price_last_updated) : formatPortfolioTimestamp(portfolio.updated_at)}</span>
           </span>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex space-x-3">
+        <div className={`flex gap-2 ${onDeleted ? 'grid grid-cols-3' : 'flex space-x-3'}`}>
           <Button
             size="sm"
             variant="primary"
@@ -117,7 +173,7 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
               View Details
             </Link>
           </Button>
-          
+
           <Button
             size="sm"
             variant="outline"
@@ -131,8 +187,33 @@ export default function PortfolioCard({ portfolio }: PortfolioCardProps) {
           >
             Add Trade
           </Button>
+
+          {onDeleted && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+              onClick={handleDeleteClick}
+              icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              }
+              title="Delete Portfolio"
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Delete Modal */}
+      <PortfolioDeletionModal
+        isOpen={showDeleteModal}
+        onClose={handleDeleteModalClose}
+        portfolio={portfolio}
+        onDeleted={handleDeleted}
+      />
     </div>
   )
 }

@@ -15,6 +15,7 @@ from src.database import get_db
 from src.models.api_key import ApiKey
 from src.models.user import User
 from src.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyCreateResponse
+from src.utils.datetime_utils import to_iso_string
 
 logger = get_logger(__name__)
 
@@ -71,8 +72,8 @@ async def create_api_key(
             name=api_key.name,
             key=plain_key,
             permissions=api_key.permissions,
-            expires_at=api_key.expires_at.isoformat() if api_key.expires_at else None,
-            created_at=api_key.created_at.isoformat()
+            expires_at=to_iso_string(api_key.expires_at) if api_key.expires_at else None,
+            created_at=to_iso_string(api_key.created_at)
         )
         
     except Exception as e:

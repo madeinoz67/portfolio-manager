@@ -13,6 +13,7 @@ from sqlalchemy import text, desc
 
 from src.core.logging import LoggerMixin
 from src.models import Portfolio, Holding, Stock, RealtimePriceHistory, PortfolioValuation
+from src.models.realtime_symbol import RealtimeSymbol
 from src.schemas.portfolio import PortfolioResponse
 from src.schemas.holding import HoldingResponse
 
@@ -168,15 +169,21 @@ class DynamicPortfolioService(LoggerMixin):
             # Get holdings with current market prices
             updated_holdings = self._get_dynamic_holdings(portfolio_id)
 
-            # Create response with updated values
+            # Calculate daily change separately from unrealized gain
+            daily_change_value = self.calculate_daily_change(portfolio_id)
+            daily_change_percent = self.calculate_daily_change_percent(portfolio_id, daily_change_value)
+
+            # Create response with updated values including unrealized P&L
             portfolio_dict = {
                 "id": portfolio.id,
                 "name": portfolio.name,
                 "description": portfolio.description,
                 "owner_id": portfolio.owner_id,
                 "total_value": portfolio_value.total_value,
-                "daily_change": portfolio_value.total_unrealized_gain,
-                "daily_change_percent": portfolio_value.total_gain_percent,
+                "daily_change": daily_change_value,
+                "daily_change_percent": daily_change_percent,
+                "unrealized_gain_loss": portfolio_value.total_unrealized_gain,
+                "unrealized_gain_loss_percent": portfolio_value.total_gain_percent,
                 "created_at": portfolio.created_at,
                 "updated_at": portfolio.updated_at,
                 "is_active": portfolio.is_active,
@@ -211,14 +218,19 @@ class DynamicPortfolioService(LoggerMixin):
             if not holdings:
                 return []
 
-            # Get cached prices for all symbols
+            # Get cached prices AND fresh timestamps for all symbols
             symbols = [holding.stock.symbol for holding in holdings]
-            current_prices = self._get_cached_prices(symbols)
+            price_data = self._get_prices_and_timestamps(symbols)
 
             updated_holdings = []
             for holding in holdings:
                 symbol = holding.stock.symbol
-                current_price = current_prices.get(symbol, holding.average_cost)
+                symbol_data = price_data.get(symbol, {})
+                current_price = symbol_data.get("price", holding.average_cost)
+                fresh_timestamp = symbol_data.get("last_updated")
+
+                # Debug logging for timestamp tracing
+                self.log_info(f"TIMESTAMP DEBUG - Building holding for {symbol}: fresh_timestamp={fresh_timestamp}, price={current_price}")
 
                 if current_price is None:
                     current_price = holding.average_cost
@@ -233,7 +245,7 @@ class DynamicPortfolioService(LoggerMixin):
                 if cost_basis > 0:
                     unrealized_gain_loss_percent = (unrealized_gain_loss / cost_basis) * 100
 
-                # Create holding dict with updated values
+                # Create holding dict with updated values including FRESH timestamp
                 holding_dict = {
                     "id": holding.id,
                     "portfolio_id": holding.portfolio_id,
@@ -244,6 +256,8 @@ class DynamicPortfolioService(LoggerMixin):
                         "company_name": holding.stock.company_name,
                         "exchange": holding.stock.exchange,
                         "status": holding.stock.status,
+                        "current_price": current_price,
+                        "last_price_update": fresh_timestamp,  # FRESH timestamp from master table
                         "created_at": holding.stock.created_at,
                         "updated_at": holding.stock.updated_at
                     },
@@ -339,36 +353,79 @@ class DynamicPortfolioService(LoggerMixin):
 
     def _get_cached_prices(self, symbols: List[str]) -> Dict[str, Decimal]:
         """
-        Get the most recent cached prices for the given symbols.
+        Get current prices from master table (single source of truth).
 
         Args:
             symbols: List of stock symbols to get prices for
 
         Returns:
-            Dictionary mapping symbols to their cached prices
+            Dictionary mapping symbols to their current prices from master table
         """
         if not symbols:
             return {}
 
         try:
-            # Get most recent price for each symbol from cache
+            # Get current prices from master table (realtime_symbols)
             prices = {}
 
             for symbol in symbols:
-                # Get the most recent price record for this symbol
-                price_record = self.db.query(RealtimePriceHistory).filter(
-                    RealtimePriceHistory.symbol == symbol
-                ).order_by(desc(RealtimePriceHistory.fetched_at)).first()
+                # Get current price from master table
+                master_record = self.db.query(RealtimeSymbol).filter(
+                    RealtimeSymbol.symbol == symbol
+                ).first()
 
-                if price_record:
-                    prices[symbol] = Decimal(str(price_record.price))
-                    self.log_debug(f"Cached price for {symbol}: {price_record.price}")
+                if master_record:
+                    prices[symbol] = Decimal(str(master_record.current_price))
+                    self.log_debug(f"Master table price for {symbol}: {master_record.current_price}")
 
-            self.log_info("Retrieved cached prices", symbols=symbols, found_count=len(prices))
+            self.log_info("Retrieved prices from master table", symbols=symbols, found_count=len(prices))
             return prices
 
         except Exception as e:
-            self.log_error("Error retrieving cached prices", error=str(e))
+            self.log_error("Error retrieving prices from master table", error=str(e))
+            return {}
+
+    def _get_prices_and_timestamps(self, symbols: List[str]) -> Dict[str, Dict]:
+        """
+        Get current prices AND timestamps from master table (single source of truth).
+
+        This ensures portfolio holdings display fresh timestamps from RealtimeSymbol,
+        not stale timestamps from Stock table.
+
+        Args:
+            symbols: List of stock symbols to get prices for
+
+        Returns:
+            Dictionary mapping symbols to their price data with fresh timestamps
+        """
+        if not symbols:
+            return {}
+
+        try:
+            # Get current prices and timestamps from master table (realtime_symbols)
+            price_data = {}
+
+            for symbol in symbols:
+                # Get current price and fresh timestamp from master table
+                master_record = self.db.query(RealtimeSymbol).filter(
+                    RealtimeSymbol.symbol == symbol
+                ).first()
+
+                if master_record:
+                    price_data[symbol] = {
+                        "price": Decimal(str(master_record.current_price)),
+                        "last_updated": master_record.last_updated  # FRESH timestamp
+                    }
+                    # Use INFO level to ensure we see this in logs
+                    self.log_info(f"TIMESTAMP DEBUG - Master table data for {symbol}: ${master_record.current_price} at {master_record.last_updated}")
+                else:
+                    self.log_info(f"TIMESTAMP DEBUG - No master record found for symbol: {symbol}")
+
+            self.log_info("Retrieved prices and timestamps from master table", symbols=symbols, found_count=len(price_data))
+            return price_data
+
+        except Exception as e:
+            self.log_error("Error retrieving prices and timestamps from master table", error=str(e))
             return {}
 
     def _get_cached_portfolio_value(self, portfolio_id: UUID) -> Optional[PortfolioValue]:
@@ -410,6 +467,126 @@ class DynamicPortfolioService(LoggerMixin):
         except Exception as e:
             self.log_error("Error retrieving cached portfolio value", portfolio_id=str(portfolio_id), error=str(e))
             return None
+
+    def calculate_daily_change(self, portfolio_id: UUID) -> Decimal:
+        """
+        Calculate portfolio daily change based on (current_price - previous_close) * quantity.
+
+        Args:
+            portfolio_id: UUID of the portfolio
+
+        Returns:
+            Daily change amount in dollars
+        """
+        try:
+            # Get all holdings for the portfolio
+            holdings = self.db.query(Holding).options(
+                joinedload(Holding.stock)
+            ).filter(
+                Holding.portfolio_id == portfolio_id,
+                Holding.quantity > 0
+            ).all()
+
+            if not holdings:
+                return Decimal("0.00")
+
+            total_daily_change = Decimal("0.00")
+
+            for holding in holdings:
+                symbol = holding.stock.symbol
+                quantity = holding.quantity
+
+                # Get master symbol record
+                master_symbol = self.db.query(RealtimeSymbol).filter(
+                    RealtimeSymbol.symbol == symbol
+                ).first()
+
+                if not master_symbol:
+                    self.log_warning(f"No master symbol found for {symbol}, skipping daily change calculation")
+                    continue
+
+                current_price = master_symbol.current_price
+
+                # Get previous close from linked history record
+                previous_close = None
+                if master_symbol.latest_history_id:
+                    history_record = self.db.query(RealtimePriceHistory).filter(
+                        RealtimePriceHistory.id == master_symbol.latest_history_id
+                    ).first()
+                    if history_record and history_record.previous_close:
+                        previous_close = history_record.previous_close
+
+                if previous_close is None:
+                    # No previous close data available, skip this holding for daily change
+                    self.log_debug(f"No previous close data for {symbol}, daily change = 0")
+                    continue
+
+                # Calculate daily change for this holding
+                price_change = current_price - previous_close
+                holding_daily_change = price_change * quantity
+                total_daily_change += holding_daily_change
+
+                self.log_debug(
+                    f"Daily change calculation: {symbol}",
+                    current_price=str(current_price),
+                    previous_close=str(previous_close),
+                    price_change=str(price_change),
+                    quantity=str(quantity),
+                    holding_daily_change=str(holding_daily_change)
+                )
+
+            self.log_info("Portfolio daily change calculated", portfolio_id=str(portfolio_id), daily_change=str(total_daily_change))
+            return total_daily_change
+
+        except Exception as e:
+            self.log_error("Error calculating daily change", portfolio_id=str(portfolio_id), error=str(e))
+            return Decimal("0.00")
+
+    def calculate_daily_change_percent(self, portfolio_id: UUID, daily_change: Decimal) -> Decimal:
+        """
+        Calculate daily change percentage based on yesterday's portfolio value.
+
+        Args:
+            portfolio_id: UUID of the portfolio
+            daily_change: Daily change amount in dollars
+
+        Returns:
+            Daily change percentage
+        """
+        try:
+            if daily_change == 0:
+                return Decimal("0.00")
+
+            # Get current portfolio value
+            portfolio_value = self.calculate_portfolio_value(portfolio_id, use_cache=False)
+            current_value = portfolio_value.total_value
+
+            if current_value == 0:
+                return Decimal("0.00")
+
+            # Calculate yesterday's value: current_value - daily_change
+            yesterday_value = current_value - daily_change
+
+            if yesterday_value <= 0:
+                return Decimal("0.00")
+
+            # Calculate percentage: (daily_change / yesterday_value) * 100
+            daily_change_percent = (daily_change / yesterday_value) * 100
+
+            self.log_debug(
+                "Daily change percentage calculated",
+                portfolio_id=str(portfolio_id),
+                daily_change=str(daily_change),
+                current_value=str(current_value),
+                yesterday_value=str(yesterday_value),
+                percentage=str(daily_change_percent)
+            )
+
+            return daily_change_percent
+
+        except Exception as e:
+            self.log_error("Error calculating daily change percentage", portfolio_id=str(portfolio_id), error=str(e))
+            return Decimal("0.00")
 
     def _cache_portfolio_value(self, portfolio_id: UUID, portfolio_value: PortfolioValue, holdings_count: int) -> bool:
         """

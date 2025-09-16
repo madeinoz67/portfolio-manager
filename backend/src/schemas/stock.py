@@ -4,12 +4,13 @@ Stock API schemas for validation and serialization.
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.models.stock import StockStatus
+from src.utils.datetime_utils import to_iso_string
 
 
 class StockResponse(BaseModel):
@@ -22,7 +23,25 @@ class StockResponse(BaseModel):
     daily_change: Optional[Decimal] = None
     daily_change_percent: Optional[Decimal] = None
     status: StockStatus = StockStatus.ACTIVE
-    last_price_update: Optional[datetime] = None
+    last_price_update: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def convert_timestamp(cls, data: Any) -> Any:
+        """Convert datetime fields to consistent ISO string format."""
+        if hasattr(data, '__dict__'):
+            # Handle SQLAlchemy objects
+            if hasattr(data, 'last_price_update') and data.last_price_update is not None:
+                # Only convert if it's not already a string
+                if not isinstance(data.last_price_update, str):
+                    data.last_price_update = to_iso_string(data.last_price_update)
+        elif isinstance(data, dict):
+            # Handle dict data
+            if 'last_price_update' in data and data['last_price_update'] is not None:
+                # Only convert if it's not already a string
+                if not isinstance(data['last_price_update'], str):
+                    data['last_price_update'] = to_iso_string(data['last_price_update'])
+        return data
 
     class Config:
         from_attributes = True

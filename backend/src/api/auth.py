@@ -6,7 +6,7 @@ import json
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from src.core.auth import (
@@ -30,6 +30,8 @@ from src.schemas.auth import (
     UserResponse,
     UserUpdate
 )
+from src.utils.datetime_utils import to_iso_string
+from src.services.audit_service import AuditService
 
 logger = get_logger(__name__)
 
@@ -39,6 +41,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     user_data: UserRegister,
+    request: Request,
     db: Session = Depends(get_db)
 ) -> UserResponse:
     """
@@ -85,7 +88,24 @@ async def register_user(
             logger.info(f"User registered with standard user role: {new_user.email}")
         
         logger.info(f"User registered successfully: {new_user.email} (ID: {new_user.id})")
-        
+
+        # Audit logging
+        try:
+            audit_service = AuditService(db)
+            audit_service.log_user_created(
+                user_id=new_user.id,
+                email=new_user.email,
+                first_name=new_user.first_name,
+                last_name=new_user.last_name,
+                role=new_user.role.value,
+                ip_address=getattr(request.client, 'host', None) if request.client else None,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.commit()  # Commit audit log
+        except Exception as e:
+            # Log error but don't fail the registration
+            logger.error(f"Failed to create audit log for user registration: {e}")
+
         return UserResponse(
             id=str(new_user.id),
             email=new_user.email,
@@ -93,7 +113,7 @@ async def register_user(
             last_name=new_user.last_name,
             role=new_user.role.value,
             is_active=new_user.is_active,
-            created_at=new_user.created_at.isoformat()
+            created_at=to_iso_string(new_user.created_at)
         )
         
     except Exception as e:
@@ -108,6 +128,7 @@ async def register_user(
 @router.post("/login", response_model=TokenResponse)
 async def login_user(
     user_credentials: UserLogin,
+    request: Request,
     db: Session = Depends(get_db)
 ) -> TokenResponse:
     """
@@ -152,7 +173,20 @@ async def login_user(
         )
         
         logger.info(f"User login successful: {user.email} (ID: {user.id})")
-        
+
+        # Audit logging
+        try:
+            audit_service = AuditService(db)
+            audit_service.log_user_login(
+                user_id=user.id,
+                ip_address=getattr(request.client, 'host', None) if request.client else None,
+                user_agent=request.headers.get('User-Agent')
+            )
+            db.commit()  # Commit audit log
+        except Exception as e:
+            # Log error but don't fail the login
+            logger.error(f"Failed to create audit log for user login: {e}")
+
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
@@ -164,7 +198,7 @@ async def login_user(
                 last_name=user.last_name,
                 role=user.role.value,
                 is_active=user.is_active,
-                created_at=user.created_at.isoformat()
+                created_at=to_iso_string(user.created_at)
             )
         )
         
@@ -191,7 +225,7 @@ async def get_current_user_profile(
         last_name=current_user.last_name,
         role=current_user.role.value,
         is_active=current_user.is_active,
-        created_at=current_user.created_at.isoformat()
+        created_at=to_iso_string(current_user.created_at)
     )
 
 
@@ -229,7 +263,7 @@ async def update_current_user_profile(
             last_name=current_user.last_name,
             role=current_user.role.value,
             is_active=current_user.is_active,
-            created_at=current_user.created_at.isoformat()
+            created_at=to_iso_string(current_user.created_at)
         )
         
     except Exception as e:
@@ -260,10 +294,10 @@ async def list_api_keys(
             id=str(key.id),
             name=key.name,
             permissions=json.loads(key.permissions) if key.permissions else None,
-            last_used_at=key.last_used_at.isoformat() if key.last_used_at else None,
-            expires_at=key.expires_at.isoformat() if key.expires_at else None,
+            last_used_at=to_iso_string(key.last_used_at) if key.last_used_at else None,
+            expires_at=to_iso_string(key.expires_at) if key.expires_at else None,
             is_active=key.is_active,
-            created_at=key.created_at.isoformat()
+            created_at=to_iso_string(key.created_at)
         ) for key in api_keys
     ]
 
@@ -302,8 +336,8 @@ async def create_api_key(
             name=new_api_key.name,
             key=api_key_value,  # Only shown once!
             permissions=json.loads(new_api_key.permissions) if new_api_key.permissions else None,
-            expires_at=new_api_key.expires_at.isoformat() if new_api_key.expires_at else None,
-            created_at=new_api_key.created_at.isoformat()
+            expires_at=to_iso_string(new_api_key.expires_at) if new_api_key.expires_at else None,
+            created_at=to_iso_string(new_api_key.created_at)
         )
         
     except Exception as e:
@@ -352,4 +386,36 @@ async def delete_api_key(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="API key deletion failed"
+        )
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout_user(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout current user and create audit log entry.
+    In a JWT system, logout is primarily client-side, but we log the event for audit purposes.
+    """
+    try:
+        # Audit logging
+        audit_service = AuditService(db)
+        audit_service.log_user_logout(
+            user_id=str(current_user.id),
+            ip_address=getattr(request.client, 'host', None) if request.client else None,
+            user_agent=request.headers.get('User-Agent')
+        )
+        db.commit()  # Commit audit log
+
+        logger.info(f"User logout successful: {current_user.email} (ID: {current_user.id})")
+
+        return {"message": "Logout successful"}
+
+    except Exception as e:
+        logger.error(f"Logout failed for user {current_user.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logout failed"
         )

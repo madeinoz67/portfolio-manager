@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, Uuid
 from sqlalchemy.orm import relationship
 
@@ -26,7 +28,7 @@ class ApiKey(Base):
     last_used_at = Column(DateTime)
     expires_at = Column(DateTime)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
 
     # Relationships
     user: "User" = relationship("User", back_populates="api_keys")

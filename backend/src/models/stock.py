@@ -8,6 +8,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Column, DateTime, Enum as SQLEnum, Numeric, String, Uuid
 from sqlalchemy.orm import relationship
 
@@ -16,7 +18,6 @@ from src.database import Base
 if TYPE_CHECKING:
     from .holding import Holding
     from .news_notice import NewsNotice
-    from .price_history import PriceHistory
     from .transaction import Transaction
 
 
@@ -40,8 +41,8 @@ class Stock(Base):
     daily_change_percent = Column(Numeric(5, 2))
     status = Column(SQLEnum(StockStatus), default=StockStatus.ACTIVE)
     last_price_update = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now)
+    updated_at = Column(DateTime, default=now, onupdate=now)
 
     # Relationships
     holdings: list["Holding"] = relationship(
@@ -49,9 +50,6 @@ class Stock(Base):
     )
     transactions: list["Transaction"] = relationship(
         "Transaction", back_populates="stock", cascade="all, delete-orphan"
-    )
-    price_history: list["PriceHistory"] = relationship(
-        "PriceHistory", back_populates="stock", cascade="all, delete-orphan"
     )
     news_notices: list["NewsNotice"] = relationship(
         "NewsNotice", back_populates="stock", cascade="all, delete-orphan"
@@ -62,8 +60,6 @@ class Stock(Base):
 
     @property
     def volume(self) -> Optional[int]:
-        """Get latest trading volume from most recent price history."""
-        if self.price_history:
-            latest = max(self.price_history, key=lambda p: p.price_date)
-            return latest.volume
-        return None
+        """Get latest trading volume from realtime price data."""
+        # Volume now comes from realtime_symbols table
+        return None  # To be implemented with realtime data lookup

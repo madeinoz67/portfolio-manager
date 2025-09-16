@@ -1,0 +1,361 @@
+openapi: 3.0.3
+info:
+  title: Admin Dashboard API
+  version: 1.0.0
+  description: API endpoints for admin dashboard functionality
+  contact:
+    name: Portfolio Manager Admin API
+
+servers:
+  - url: http://localhost:8001/api/v1
+    description: Development server
+
+security:
+  - bearerAuth: []
+
+paths:
+  /admin/users:
+    get:
+      summary: List all users (admin only)
+      description: Retrieve paginated list of all users with admin metadata
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number for pagination
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of users per page
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, user]
+          description: Filter users by role
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        '200':
+          description: List of users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUserListItem'
+                  total:
+                    type: integer
+                    description: Total number of users
+                  page:
+                    type: integer
+                    description: Current page number
+                  pages:
+                    type: integer
+                    description: Total number of pages
+                required: [users, total, page, pages]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{user_id}:
+    get:
+      summary: Get specific user details (admin only)
+      description: Retrieve detailed information about a specific user
+      operationId: getUserDetails
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique identifier of the user
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/system/metrics:
+    get:
+      summary: Get system metrics (admin only)
+      description: Retrieve system-wide metrics and statistics
+      operationId: getSystemMetrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: System metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/market-data/status:
+    get:
+      summary: Get market data provider status (admin only)
+      description: Retrieve status and usage information for all market data providers
+      operationId: getMarketDataStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Market data status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MarketDataStatus'
+                required: [providers]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for admin authentication
+
+  schemas:
+    AdminUserListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+        email:
+          type: string
+          format: email
+          description: User email address
+        firstName:
+          type: string
+          nullable: true
+          description: User first name
+        lastName:
+          type: string
+          nullable: true
+          description: User last name
+        role:
+          type: string
+          enum: [admin, user]
+          description: User role
+        isActive:
+          type: boolean
+          description: Whether user account is active
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+        portfolioCount:
+          type: integer
+          minimum: 0
+          description: Number of portfolios owned by user
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last login timestamp
+      required: [id, email, role, isActive, createdAt, portfolioCount]
+
+    AdminUserDetails:
+      allOf:
+        - $ref: '#/components/schemas/AdminUserListItem'
+        - type: object
+          properties:
+            totalAssets:
+              type: number
+              format: float
+              minimum: 0
+              description: Total asset value across all portfolios
+            portfolios:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  value:
+                    type: number
+                    format: float
+                    minimum: 0
+                  lastUpdated:
+                    type: string
+                    format: date-time
+                required: [id, name, value, lastUpdated]
+              description: Summary of user's portfolios
+
+    SystemMetrics:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+          minimum: 0
+          description: Total number of registered users
+        totalPortfolios:
+          type: integer
+          minimum: 0
+          description: Total number of portfolios
+        activeUsers:
+          type: integer
+          minimum: 0
+          description: Number of users active in last 30 days
+        adminUsers:
+          type: integer
+          minimum: 0
+          description: Number of admin users
+        systemStatus:
+          type: string
+          enum: [healthy, warning, error]
+          description: Overall system health status
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Timestamp when metrics were last calculated
+      required: [totalUsers, totalPortfolios, activeUsers, adminUsers, systemStatus, lastUpdated]
+
+    MarketDataStatus:
+      type: object
+      properties:
+        providerId:
+          type: string
+          description: Unique identifier for the provider
+        providerName:
+          type: string
+          description: Human-readable provider name
+        isEnabled:
+          type: boolean
+          description: Whether provider is currently enabled
+        lastUpdate:
+          type: string
+          format: date-time
+          description: Timestamp of last successful data update
+        apiCallsToday:
+          type: integer
+          minimum: 0
+          description: Number of API calls made today
+        monthlyLimit:
+          type: integer
+          minimum: 0
+          description: Monthly API call limit
+        monthlyUsage:
+          type: integer
+          minimum: 0
+          description: API calls used this month
+        costPerCall:
+          type: number
+          format: float
+          minimum: 0
+          description: Cost per API call in USD
+        status:
+          type: string
+          enum: [active, disabled, error, rate_limited]
+          description: Current provider status
+      required: [providerId, providerName, isEnabled, lastUpdate, apiCallsToday, monthlyLimit, monthlyUsage, costPerCall, status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error type or code
+        message:
+          type: string
+          description: Human-readable error message
+        detail:
+          type: string
+          nullable: true
+          description: Additional error details
+      required: [error, message]
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "unauthorized"
+            message: "Authentication required"
+
+    Forbidden:
+      description: Admin role required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "forbidden"
+            message: "Admin role required"
+
+    UserNotFound:
+      description: User not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "not_found"
+            message: "User not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "internal_error"
+            message: "An unexpected error occurred"

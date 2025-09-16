@@ -246,7 +246,7 @@ export function useMarketDataStream(
                             price: priceData.price,
                             volume: priceData.volume,
                             market_cap: undefined,
-                            fetched_at: priceData.timestamp,
+                            fetched_at: priceData.fetched_at,
                             cached: false
                           } as PriceResponse
                         ])

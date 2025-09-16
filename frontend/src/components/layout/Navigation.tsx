@@ -6,13 +6,21 @@ import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/contexts/AuthContext'
 
-const navigationItems = [
-  { name: 'Dashboard', href: '/', icon: 'dashboard' },
-  { name: 'Portfolios', href: '/portfolios', icon: 'briefcase' },
-  { name: 'Analytics', href: '/analytics', icon: 'chart' },
-  { name: 'Markets', href: '/market-data', icon: 'trending' },
-  { name: 'Settings', href: '/settings', icon: 'settings' },
-]
+const getNavigationItems = (isAdmin: boolean) => {
+  const baseItems = [
+    { name: 'Dashboard', href: '/', icon: 'dashboard' },
+    { name: 'Portfolios', href: '/portfolios', icon: 'briefcase' },
+    { name: 'Analytics', href: '/analytics', icon: 'chart' },
+    { name: 'Markets', href: '/market-data', icon: 'trending' },
+    { name: 'Settings', href: '/settings', icon: 'settings' },
+  ]
+
+  if (isAdmin) {
+    baseItems.push({ name: 'Admin', href: '/admin', icon: 'admin' })
+  }
+
+  return baseItems
+}
 
 const getIcon = (iconName: string) => {
   const icons = {
@@ -43,6 +51,11 @@ const getIcon = (iconName: string) => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
+    admin: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
   }
   return icons[iconName as keyof typeof icons] || icons.dashboard
 }
@@ -51,6 +64,9 @@ export default function Navigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const pathname = usePathname()
   const { user, logout } = useAuth()
+
+  const isAdmin = user?.role === 'admin'
+  const navigationItems = getNavigationItems(isAdmin)
 
   return (
     <nav className="bg-white dark:bg-gray-900 shadow-lg border-b dark:border-gray-800">

@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
+from src.utils.datetime_utils import now
+
 from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Boolean, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -31,9 +33,9 @@ class SSEConnection(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     last_heartbeat = Column(DateTime, nullable=True)
     messages_sent = Column(Integer, default=0, nullable=False)
-    connected_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    connected_at = Column(DateTime, default=now, nullable=False)
     disconnected_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=now, nullable=False)
 
     # Relationships
     user = relationship("User", lazy="select")
@@ -43,7 +45,7 @@ class SSEConnection(Base):
         """Check if connection hasn't sent heartbeat in over 5 minutes."""
         if self.last_heartbeat is None:
             return False
-        return (datetime.utcnow() - self.last_heartbeat).total_seconds() > 300
+        return (now() - self.last_heartbeat).total_seconds() > 300
 
     def __repr__(self) -> str:
         return f"<SSEConnection(id={self.connection_id}, user_id={self.user_id}, active={self.is_active})>"

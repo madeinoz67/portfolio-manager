@@ -8,6 +8,7 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from src.utils.datetime_utils import to_iso_string
 
 
 class PortfolioCreate(BaseModel):
@@ -22,16 +23,34 @@ class PortfolioUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
 
 
+class PortfolioDeleteConfirmation(BaseModel):
+    """Schema for portfolio deletion with confirmation."""
+    confirmation_name: str = Field(..., min_length=1, max_length=100)
+
+
 class PortfolioResponse(BaseModel):
     """Schema for portfolio API responses."""
     id: UUID
     name: str
     description: Optional[str] = None
+
+    # Portfolio value
     total_value: Decimal = Field(default=Decimal("0.00"))
+
+    # Daily P&L - movement from previous close to current price
     daily_change: Decimal = Field(default=Decimal("0.00"))
     daily_change_percent: Decimal = Field(default=Decimal("0.00"))
+
+    # Unrealized P&L - total gain/loss from purchase cost to current value
+    unrealized_gain_loss: Decimal = Field(default=Decimal("0.00"))
+    unrealized_gain_loss_percent: Decimal = Field(default=Decimal("0.00"))
+
     created_at: datetime
     updated_at: datetime
+    price_last_updated: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: to_iso_string
+        }

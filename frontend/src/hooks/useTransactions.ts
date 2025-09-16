@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Transaction, TransactionCreate, TransactionListResponse } from '@/types/transaction'
 import { useAuth } from '@/contexts/AuthContext'
+import { parseServerDate, compareDates } from '@/utils/timezone'
 
 interface TransactionUpdate {
   stock_symbol?: string
@@ -304,7 +305,9 @@ export function useTransactions(portfolioId: string) {
       filtered = filtered.filter(t => {
         // Handle both test structure (t.date) and API structure (t.transaction_date)
         const date = (t as any).date || t.transaction_date
-        return new Date(date) >= new Date(filters.dateFrom!)
+        const transactionDate = parseServerDate(date)
+        const filterDate = new Date(filters.dateFrom! + 'T00:00:00')
+        return transactionDate && transactionDate.getTime() >= filterDate.getTime()
       })
     }
 
@@ -312,7 +315,9 @@ export function useTransactions(portfolioId: string) {
       filtered = filtered.filter(t => {
         // Handle both test structure (t.date) and API structure (t.transaction_date)
         const date = (t as any).date || t.transaction_date
-        return new Date(date) <= new Date(filters.dateTo!)
+        const transactionDate = parseServerDate(date)
+        const filterDate = new Date(filters.dateTo! + 'T23:59:59')
+        return transactionDate && transactionDate.getTime() <= filterDate.getTime()
       })
     }
 
@@ -325,8 +330,8 @@ export function useTransactions(portfolioId: string) {
         case 'date':
           const aDate = (a as any).date || a.transaction_date
           const bDate = (b as any).date || b.transaction_date
-          aVal = new Date(aDate)
-          bVal = new Date(bDate)
+          aVal = parseServerDate(aDate) || new Date(0)
+          bVal = parseServerDate(bDate) || new Date(0)
           break
         case 'total_amount':
           const aAmount = (a as any).total_amount || a.total_amount
@@ -343,8 +348,8 @@ export function useTransactions(portfolioId: string) {
         default:
           const aDefaultDate = (a as any).date || a.transaction_date
           const bDefaultDate = (b as any).date || b.transaction_date
-          aVal = new Date(aDefaultDate)
-          bVal = new Date(bDefaultDate)
+          aVal = parseServerDate(aDefaultDate) || new Date(0)
+          bVal = parseServerDate(bDefaultDate) || new Date(0)
       }
 
       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1

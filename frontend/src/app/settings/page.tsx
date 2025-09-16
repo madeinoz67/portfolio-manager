@@ -8,6 +8,8 @@ import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
 import DatePicker from '@/components/ui/DatePicker'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
+import { getCurrentDateInUserTimezone, formatDisplayDate, parseServerDate, convertLocalDateToUTC } from '@/utils/timezone'
 
 interface User {
   id: string
@@ -40,6 +42,7 @@ interface ApiKeyCreateResponse {
 export default function Settings() {
   const router = useRouter()
   const { addToast } = useToast()
+  const { user: authUser, isAdmin } = useAuth()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,15 +65,17 @@ export default function Settings() {
     fetchUserProfile()
     fetchApiKeys()
     // Set default expiry to 90 days from now
-    const defaultExpiry = new Date()
-    defaultExpiry.setDate(defaultExpiry.getDate() + 90)
-    setNewKeyExpiryDate(defaultExpiry.toISOString().split('T')[0])
+    const today = new Date()
+    const defaultExpiry = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000)
+    const year = defaultExpiry.getFullYear()
+    const month = String(defaultExpiry.getMonth() + 1).padStart(2, '0')
+    const day = String(defaultExpiry.getDate()).padStart(2, '0')
+    setNewKeyExpiryDate(`${year}-${month}-${day}`)
   }, [])
 
   // Helper functions for date validation
   const getTodayDate = () => {
-    const today = new Date()
-    return today.toISOString().split('T')[0]
+    return getCurrentDateInUserTimezone()
   }
 
   const getMaxExpiryDate = () => {
@@ -388,6 +393,25 @@ export default function Settings() {
                 }`}>
                   {user?.is_active ? 'Active' : 'Inactive'}
                 </span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Role
+                </label>
+                <div className="mt-1">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    authUser?.role === 'admin'
+                      ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                  }`}>
+                    {authUser?.role === 'admin' ? 'Administrator' : 'User'}
+                  </span>
+                  {authUser?.role === 'admin' && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      You have administrative privileges. <a href="/admin" className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200">Access Admin Panel</a>
+                    </p>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">

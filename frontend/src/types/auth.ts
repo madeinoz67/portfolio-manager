@@ -3,6 +3,7 @@ export interface User {
   email: string
   first_name?: string
   last_name?: string
+  role: 'admin' | 'user'
   is_active: boolean
   created_at: string
 }
@@ -41,4 +42,7 @@ export interface AuthContextType {
   loading: boolean
   error: AuthError | null
   clearError: () => void
+  isAdmin: () => boolean
+  hasRole: (role: 'admin' | 'user') => boolean
+  isAuthenticated: () => boolean
 }

@@ -90,3 +90,22 @@ const originalSetTimeout = global.setTimeout
 const originalClearTimeout = global.clearTimeout
 global.setTimeout = jest.fn((cb, delay) => originalSetTimeout(cb, delay))
 global.clearTimeout = jest.fn((id) => originalClearTimeout(id))
+
+// Mock Next.js router
+const mockRouter = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  prefetch: jest.fn(),
+  back: jest.fn(),
+  forward: jest.fn(),
+  refresh: jest.fn(),
+};
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+// Export the router mock for tests to access
+global.mockRouter = mockRouter;

@@ -5,10 +5,12 @@ Portfolio business logic service.
 from typing import List, Optional
 from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
+from decimal import Decimal
 
 from src.core.exceptions import PortfolioNotFoundError
 from src.core.logging import LoggerMixin
 from src.models import Portfolio
+from src.models.realtime_symbol import RealtimeSymbol
 from src.schemas.portfolio import PortfolioCreate, PortfolioResponse
 
 
@@ -131,3 +133,28 @@ class PortfolioService(LoggerMixin):
         self.db.commit()
         
         self.log_info("Portfolio deleted successfully", portfolio_id=str(portfolio_id))
+
+    def get_current_price(self, symbol: str) -> Optional[Decimal]:
+        """
+        Get current price for a symbol from the master table.
+
+        Args:
+            symbol: Stock symbol to get price for
+
+        Returns:
+            Current price from master table, or None if not found
+        """
+        self.log_info("Getting current price from master table", symbol=symbol)
+
+        master_record = self.db.query(RealtimeSymbol).filter(
+            RealtimeSymbol.symbol == symbol
+        ).first()
+
+        if master_record:
+            price = Decimal(str(master_record.current_price))
+            self.log_info("Current price retrieved from master table",
+                         symbol=symbol, price=str(price))
+            return price
+
+        self.log_warning("No price found in master table", symbol=symbol)
+        return None
