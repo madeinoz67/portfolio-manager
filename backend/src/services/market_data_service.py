@@ -923,6 +923,28 @@ class MarketDataService:
             )
 
             self.db.add(price_record)
+
+            # CRITICAL FIX: Also update stocks table so holdings show fresh timestamps
+            # Find existing stock record or create new one
+            stock = self.db.query(Stock).filter_by(symbol=symbol).first()
+
+            if stock:
+                # Update existing stock with fresh price and timestamp
+                stock.current_price = price_data["price"]
+                stock.last_price_update = price_data["source_timestamp"]
+                logger.info(f"Updated stock table for {symbol}: ${price_data['price']}")
+            else:
+                # Create new stock record for new symbols
+                stock = Stock(
+                    symbol=symbol,
+                    company_name=price_data.get("company_name", f"{symbol} Company"),
+                    exchange="ASX" if symbol.endswith(".AX") else "NASDAQ",  # Simple heuristic
+                    current_price=price_data["price"],
+                    last_price_update=price_data["source_timestamp"]
+                )
+                self.db.add(stock)
+                logger.info(f"Created new stock record for {symbol}: ${price_data['price']}")
+
             self.db.commit()
 
             logger.info(f"Stored comprehensive price data for {symbol}: ${price_data['price']}")
