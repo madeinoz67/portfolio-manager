@@ -21,19 +21,15 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
 
   // Helper function to format portfolio timestamp properly
   const formatPortfolioTimestamp = (timestamp: string): string => {
-    const relativeTime = getRelativeTime(timestamp)
-    // If getRelativeTime returns an actual date (longer than 7 days),
-    // use formatDisplayDateTime instead for proper timezone handling
-    if (relativeTime.includes(',') || relativeTime.includes('Invalid')) {
-      return formatDisplayDateTime(timestamp, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      })
-    }
-    return relativeTime
+    // Use formatDisplayDateTime for proper timezone handling as per frontend-date-handling.md
+    // For datetime timestamps, this is the recommended approach
+    return formatDisplayDateTime(timestamp, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
   }
 
   const handleAddTrade = () => {
