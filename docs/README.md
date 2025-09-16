@@ -10,6 +10,11 @@ Welcome to the Portfolio Manager documentation. This directory contains comprehe
 - **[Metric Monitoring System](./metric-monitoring-system.md)** - System-specific metrics tracking and API usage monitoring
 - **[API Reference](./api-reference.md)** - Comprehensive API endpoint documentation
 
+### 💰 Pricing & Market Data Systems
+- **[Pricing Update Mechanisms](./pricing-update-mechanisms.md)** - Complete market data integration architecture
+- **[Database Schema: Pricing](./database-schema-pricing.md)** - Detailed pricing database schema and relationships
+- **[Troubleshooting Pricing Issues](./troubleshooting-pricing-issues.md)** - Practical guide for resolving pricing problems
+
 ### 🚀 Quick Start
 
 #### For Developers
@@ -49,11 +54,14 @@ Welcome to the Portfolio Manager documentation. This directory contains comprehe
 
 ```
 docs/
-├── README.md                    # This file - documentation index
-├── admin-dashboard.md           # Admin dashboard comprehensive guide
-├── portfolio-monitoring.md      # Portfolio monitoring system details
-├── metric-monitoring-system.md  # System-specific metrics tracking and API usage
-└── api-reference.md            # Complete API endpoint reference
+├── README.md                       # This file - documentation index
+├── admin-dashboard.md              # Admin dashboard comprehensive guide
+├── portfolio-monitoring.md         # Portfolio monitoring system details
+├── metric-monitoring-system.md     # System-specific metrics tracking and API usage
+├── api-reference.md               # Complete API endpoint reference
+├── pricing-update-mechanisms.md   # Market data integration architecture
+├── database-schema-pricing.md     # Pricing database schema and relationships
+└── troubleshooting-pricing-issues.md # Pricing problems and solutions
 ```
 
 ### 🔧 Key Features Documented
@@ -81,6 +89,13 @@ docs/
 - **Portfolio Management**: CRUD operations for portfolios and holdings
 - **Market Data**: Real-time price fetching and provider status
 - **Admin Endpoints**: System administration and monitoring APIs
+
+#### Pricing & Market Data Systems ([Full Guide](./pricing-update-mechanisms.md))
+- **Dual-Table Synchronization**: Consistent pricing across `stocks` and `realtime_price_history` tables
+- **Provider Management**: Yahoo Finance, Alpha Vantage integration with failover
+- **Real-Time Updates**: 15-minute scheduled updates with WebSocket streaming (planned)
+- **Data Consistency**: Comprehensive TDD testing and timestamp handling
+- **Performance Optimization**: Indexed queries, caching, and batch processing
 
 ### 🎯 Key Use Cases
 

@@ -16,13 +16,11 @@ from src.models.portfolio import Portfolio
 from src.models.holding import Holding
 from src.models.user import User
 from src.utils.datetime_utils import now, to_iso_string
-from tests.conftest import test_db_session, sample_user, auth_headers
 
 
 def test_stock_timestamp_serialization_matches_market_data_format(
-    test_db_session: Session,
-    sample_user: User,
-    auth_headers: dict
+    db_session: Session,
+    test_data
 ):
     """
     Test that stock.last_price_update is serialized in the same format
@@ -44,18 +42,18 @@ def test_stock_timestamp_serialization_matches_market_data_format(
         current_price=100.50,
         last_price_update=test_timestamp
     )
-    test_db_session.add(stock)
-    test_db_session.commit()
-    test_db_session.refresh(stock)
+    db_session.add(stock)
+    db_session.commit()
+    db_session.refresh(stock)
 
     # Create portfolio and holding to test holdings API
     portfolio = Portfolio(
         name="Test Portfolio",
-        user_id=sample_user.id
+        owner_id=test_data.user.id
     )
-    test_db_session.add(portfolio)
-    test_db_session.commit()
-    test_db_session.refresh(portfolio)
+    db_session.add(portfolio)
+    db_session.commit()
+    db_session.refresh(portfolio)
 
     holding = Holding(
         portfolio_id=portfolio.id,
@@ -66,13 +64,13 @@ def test_stock_timestamp_serialization_matches_market_data_format(
         unrealized_gain_loss=550.00,
         unrealized_gain_loss_percent=5.79
     )
-    test_db_session.add(holding)
-    test_db_session.commit()
+    db_session.add(holding)
+    db_session.commit()
 
     # Test holdings API response (this is where the issue occurs)
     response = client.get(
         f"/api/v1/portfolios/{portfolio.id}/holdings",
-        headers=auth_headers
+        headers={"Authorization": f"Bearer {test_data.access_token}"}
     )
 
     assert response.status_code == 200
@@ -106,9 +104,8 @@ def test_stock_timestamp_serialization_matches_market_data_format(
 
 
 def test_market_data_timestamp_format_baseline(
-    test_db_session: Session,
-    sample_user: User,
-    auth_headers: dict
+    db_session: Session,
+    test_data
 ):
     """
     Baseline test to verify market data API timestamp format.
