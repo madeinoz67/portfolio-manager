@@ -14,10 +14,13 @@ interface PortfolioCardProps {
 export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardProps) {
   const router = useRouter()
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const isPositiveChange = parseFloat(portfolio.daily_change) >= 0
+  const isDailyPositive = parseFloat(portfolio.daily_change) >= 0
+  const isUnrealizedPositive = parseFloat(portfolio.unrealized_gain_loss) >= 0
   const totalValue = parseFloat(portfolio.total_value || '0')
   const dailyChange = parseFloat(portfolio.daily_change || '0')
   const dailyChangePercent = parseFloat(portfolio.daily_change_percent || '0')
+  const unrealizedGainLoss = parseFloat(portfolio.unrealized_gain_loss || '0')
+  const unrealizedGainLossPercent = parseFloat(portfolio.unrealized_gain_loss_percent || '0')
 
   // Helper function to format portfolio timestamp properly
   const formatPortfolioTimestamp = (timestamp: string): string => {
@@ -91,23 +94,49 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
             </div>
           </div>
 
-          {/* Daily Performance */}
+          {/* Daily P&L Performance */}
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <div className={`p-2 rounded-lg ${isPositiveChange ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                  <svg className={`w-4 h-4 ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isPositiveChange ? "M7 17l9.2-9.2M17 17V7H7" : "M17 7l-9.2 9.2M7 7v10h10"} />
+                <div className={`p-2 rounded-lg ${isDailyPositive ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                  <svg className={`w-4 h-4 ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isDailyPositive ? "M7 17l9.2-9.2M17 17V7H7" : "M17 7l-9.2 9.2M7 7v10h10"} />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Today's Change</p>
-                  <div className="flex items-center space-x-2">
-                    <span className={`font-bold ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Daily Price Movement</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">Today's change from previous close</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className={`font-bold ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       ${Math.abs(dailyChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    <span className={`text-sm font-medium ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <span className={`text-sm font-medium ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       ({dailyChangePercent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Unrealized P&L Performance */}
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className={`p-2 rounded-lg ${isUnrealizedPositive ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-orange-100 dark:bg-orange-900/30'}`}>
+                  <svg className={`w-4 h-4 ${isUnrealizedPositive ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Unrealized P&L</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">Total gain/loss from purchase cost</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className={`font-bold ${isUnrealizedPositive ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                      {isUnrealizedPositive ? '+' : '-'}${Math.abs(unrealizedGainLoss).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className={`text-sm font-medium ${isUnrealizedPositive ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                      ({isUnrealizedPositive ? '+' : ''}{unrealizedGainLossPercent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
                     </span>
                   </div>
                 </div>
