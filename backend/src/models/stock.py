@@ -18,7 +18,6 @@ from src.database import Base
 if TYPE_CHECKING:
     from .holding import Holding
     from .news_notice import NewsNotice
-    from .price_history import PriceHistory
     from .transaction import Transaction
 
 
@@ -52,9 +51,6 @@ class Stock(Base):
     transactions: list["Transaction"] = relationship(
         "Transaction", back_populates="stock", cascade="all, delete-orphan"
     )
-    price_history: list["PriceHistory"] = relationship(
-        "PriceHistory", back_populates="stock", cascade="all, delete-orphan"
-    )
     news_notices: list["NewsNotice"] = relationship(
         "NewsNotice", back_populates="stock", cascade="all, delete-orphan"
     )
@@ -64,8 +60,6 @@ class Stock(Base):
 
     @property
     def volume(self) -> Optional[int]:
-        """Get latest trading volume from most recent price history."""
-        if self.price_history:
-            latest = max(self.price_history, key=lambda p: p.price_date)
-            return latest.volume
-        return None
+        """Get latest trading volume from realtime price data."""
+        # Volume now comes from realtime_symbols table
+        return None  # To be implemented with realtime data lookup

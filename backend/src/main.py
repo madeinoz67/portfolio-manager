@@ -121,6 +121,21 @@ async def periodic_price_updates():
                     successful_fetches = len([result for result in results.values() if result is not None])
                     logger.info(f"Fetch completed: {successful_fetches}/{len(symbols_to_fetch)} successful")
 
+                    # After successful price updates, update portfolio calculations
+                    if successful_fetches > 0:
+                        logger.info("Updating portfolio calculations with fresh market data")
+                        try:
+                            from src.services.real_time_portfolio_service import RealTimePortfolioService
+                            portfolio_service = RealTimePortfolioService(db)
+
+                            # Update portfolios that have holdings in the fetched symbols
+                            successfully_fetched_symbols = [symbol for symbol, result in results.items() if result is not None]
+                            updated_portfolios = portfolio_service.bulk_update_portfolios_for_symbols(successfully_fetched_symbols)
+                            logger.info(f"Updated {len(updated_portfolios)} portfolios with fresh market data for symbols: {successfully_fetched_symbols}")
+
+                        except Exception as portfolio_error:
+                            logger.error(f"Error updating portfolio calculations: {portfolio_error}")
+
                     # Record successful execution in scheduler service
                     scheduler_service.record_execution_success(symbols_processed=successful_fetches)
 

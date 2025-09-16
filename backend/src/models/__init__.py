@@ -10,7 +10,6 @@ from .api_key import ApiKey
 from .holding import Holding
 from .news_notice import NewsNotice, NewsNoticeType
 from .portfolio import Portfolio
-from .price_history import PriceHistory
 from .stock import Stock, StockStatus
 from .transaction import Transaction, TransactionType, SourceType
 from .user import User
@@ -32,7 +31,6 @@ __all__ = [
     "Transaction",
     "TransactionType",
     "SourceType",
-    "PriceHistory",
     "NewsNotice",
     "NewsNoticeType",
     "RealtimePriceHistory",

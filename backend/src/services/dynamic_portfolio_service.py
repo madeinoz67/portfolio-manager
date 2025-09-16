@@ -229,6 +229,9 @@ class DynamicPortfolioService(LoggerMixin):
                 current_price = symbol_data.get("price", holding.average_cost)
                 fresh_timestamp = symbol_data.get("last_updated")
 
+                # Debug logging for timestamp tracing
+                self.log_info(f"TIMESTAMP DEBUG - Building holding for {symbol}: fresh_timestamp={fresh_timestamp}, price={current_price}")
+
                 if current_price is None:
                     current_price = holding.average_cost
 
@@ -413,7 +416,10 @@ class DynamicPortfolioService(LoggerMixin):
                         "price": Decimal(str(master_record.current_price)),
                         "last_updated": master_record.last_updated  # FRESH timestamp
                     }
-                    self.log_debug(f"Master table data for {symbol}: ${master_record.current_price} at {master_record.last_updated}")
+                    # Use INFO level to ensure we see this in logs
+                    self.log_info(f"TIMESTAMP DEBUG - Master table data for {symbol}: ${master_record.current_price} at {master_record.last_updated}")
+                else:
+                    self.log_info(f"TIMESTAMP DEBUG - No master record found for symbol: {symbol}")
 
             self.log_info("Retrieved prices and timestamps from master table", symbols=symbols, found_count=len(price_data))
             return price_data

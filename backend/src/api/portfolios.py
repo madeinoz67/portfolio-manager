@@ -12,7 +12,7 @@ from sqlalchemy import func
 
 from src.core.dependencies import get_current_active_user, get_current_user_flexible
 from src.database import get_db
-from src.models import Portfolio, Holding, User, Stock, NewsNotice
+from src.models import Portfolio, Holding, User, Stock, NewsNotice, RealtimeSymbol
 from src.schemas.portfolio import (
     PortfolioCreate,
     PortfolioDeleteConfirmation,
@@ -327,25 +327,36 @@ async def get_portfolio_holdings(
             detail="Portfolio not found"
         )
     
-    # Get holdings with recent news counts
+    # Get holdings with fresh timestamps from master table
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    
+
     holdings = db.query(Holding).join(Stock).filter(Holding.portfolio_id == portfolio_id).all()
-    
-    # Calculate recent news count for each holding
-    holdings_with_news_count = []
+
+    # Calculate recent news count and get fresh timestamps for each holding
+    holdings_with_fresh_data = []
     for holding in holdings:
         recent_news_count = db.query(func.count(NewsNotice.id)).filter(
             NewsNotice.stock_id == holding.stock_id,
             NewsNotice.published_date >= thirty_days_ago
         ).scalar() or 0
-        
-        # Convert to dict and add recent news count
+
+        # Get fresh price and timestamp from RealtimeSymbol master table
+        realtime_data = db.query(RealtimeSymbol).filter(
+            RealtimeSymbol.symbol == holding.stock.symbol
+        ).first()
+
+        # Convert to dict and add fresh data
         holding_dict = HoldingResponse.model_validate(holding).model_dump()
         holding_dict['recent_news_count'] = recent_news_count
-        holdings_with_news_count.append(HoldingResponse.model_validate(holding_dict))
-    
-    return holdings_with_news_count
+
+        # Update stock data with fresh timestamps and prices from master table
+        if realtime_data:
+            holding_dict['stock']['current_price'] = float(realtime_data.current_price)
+            holding_dict['stock']['last_price_update'] = realtime_data.last_updated
+
+        holdings_with_fresh_data.append(HoldingResponse.model_validate(holding_dict))
+
+    return holdings_with_fresh_data
 
 
 @router.get("/{portfolio_id}/holdings/{holding_id}", response_model=HoldingResponse)
