@@ -4,7 +4,7 @@ import { useHoldings, type Holding } from '@/hooks/useHoldings'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
-import { getRelativeTime } from '@/utils/timezone'
+import { getRelativeTime, isWithinTimeRange } from '@/utils/timezone'
 
 interface HoldingsDisplayProps {
   portfolioId: string
@@ -15,10 +15,11 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
     holdings,
     loading,
     error,
+    lastUpdated,
     fetchHoldings,
     calculatePortfolioSummary,
     clearError
-  } = useHoldings(portfolioId)
+  } = useHoldings(portfolioId, true)
 
   const summary = calculatePortfolioSummary()
 
@@ -235,18 +236,28 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {holdings.map((holding) => (
-                  <tr key={holding.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {holding.stock.symbol}
+                {holdings.map((holding) => {
+                  const isStale = holding.stock.last_price_update ? !isWithinTimeRange(holding.stock.last_price_update, 30) : false
+
+                  return (
+                    <tr key={holding.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-1 sm:space-x-2">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {holding.stock.symbol}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {holding.stock.company_name}
+                            </div>
+                          </div>
+                          {isStale && (
+                            <span className="px-1 sm:px-1.5 py-0.5 text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 rounded">
+                              S
+                            </span>
+                          )}
                         </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {holding.stock.company_name}
-                        </div>
-                      </div>
-                    </td>
+                      </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
                       {parseFloat(holding.quantity).toLocaleString()}
                     </td>
@@ -288,11 +299,12 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                         )
                       })()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right">
-                      {holding.stock.last_price_update ? getRelativeTime(holding.stock.last_price_update) : '—'}
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right">
+                        {holding.stock.last_price_update ? getRelativeTime(holding.stock.last_price_update) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
