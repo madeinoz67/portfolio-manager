@@ -118,4 +118,48 @@ describe('HoldingsDisplay Last Updated Column', () => {
     expect(dataElement).not.toHaveClass('hidden')
     expect(dataElement).not.toHaveClass('sm:table-cell')
   })
+
+  test('Last Updated column should have proper CSS classes for styling', () => {
+    render(<HoldingsDisplay portfolioId="portfolio1" />)
+
+    const lastUpdatedHeader = screen.getByText('Last Updated')
+    const headerElement = lastUpdatedHeader.closest('th')
+
+    // Verify header has expected styling classes
+    expect(headerElement).toHaveClass('px-6', 'py-3', 'text-right')
+    expect(headerElement).toHaveClass('text-xs', 'font-medium')
+    expect(headerElement).toHaveClass('uppercase', 'tracking-wider')
+
+    const lastUpdatedValue = screen.getByText('5 minutes ago')
+    const dataElement = lastUpdatedValue.closest('td')
+
+    // Verify data cell has expected styling classes
+    expect(dataElement).toHaveClass('px-6', 'py-4', 'whitespace-nowrap')
+    expect(dataElement).toHaveClass('text-sm', 'text-right')
+  })
+
+  test('Last Updated column renders in browser DOM structure', () => {
+    const { container } = render(<HoldingsDisplay portfolioId="portfolio1" />)
+
+    // Find the table element
+    const table = container.querySelector('table')
+    expect(table).toBeInTheDocument()
+
+    // Find all table headers
+    const headers = table?.querySelectorAll('th')
+    expect(headers).toHaveLength(8) // All columns including Last Updated
+
+    // Verify Last Updated is the 8th column (last one)
+    const lastUpdatedHeader = headers?.[7]
+    expect(lastUpdatedHeader).toHaveTextContent('Last Updated')
+
+    // Find all data cells in the first row
+    const firstRow = table?.querySelector('tbody tr')
+    const dataCells = firstRow?.querySelectorAll('td')
+    expect(dataCells).toHaveLength(8) // All data cells including Last Updated
+
+    // Verify Last Updated data cell exists and has content
+    const lastUpdatedCell = dataCells?.[7]
+    expect(lastUpdatedCell).toHaveTextContent('5 minutes ago')
+  })
 })
