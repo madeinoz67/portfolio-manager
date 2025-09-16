@@ -6,6 +6,7 @@ This directory contains guides and documentation specifically for developers wor
 
 - [Audit Developer Guide](audit-developer-guide.md) - Technical guide for implementing audit system features
 - [Frontend Date Handling](frontend-date-handling.md) - Date/time patterns and timezone handling in the frontend
+- [Authentication Testing](authentication-testing.md) - Authentication system testing procedures and results
 
 ## Development Principles
 

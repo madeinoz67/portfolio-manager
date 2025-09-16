@@ -70,7 +70,7 @@ Development notes and temporary documentation (internal use)
 |-----|------------|---------------|
 | **New Users** | [User Guide](user-guide/README.md) | [Admin Dashboard](user-guide/admin-dashboard.md) |
 | **API Integration** | [Reference](reference/README.md) | [API Reference](reference/api-reference.md) |
-| **Development** | [Developer](developer/README.md) | [Frontend Date Handling](developer/frontend-date-handling.md) |
+| **Development** | [Developer](developer/README.md) | [Authentication Testing](developer/authentication-testing.md) |
 | **Backend Development** | [Backend](backend/README.md) | [Deployment Guide](backend/deployment-guide.md) |
 | **Frontend Development** | [Frontend](frontend/README.md) | [P&L Improvements](frontend/frontend-pl-improvements.md) |
 | **System Architecture** | [Architecture](architecture/README.md) | [Database Schema](architecture/database-schema-pricing.md) |
