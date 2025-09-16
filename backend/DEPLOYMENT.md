@@ -91,6 +91,10 @@ NODE_ENV=development
 
 ```bash
 cd backend
+# Initialize database schema with Alembic (recommended)
+uv run alembic upgrade head
+
+# Alternative: Direct SQLAlchemy initialization
 uv run python -c "
 from src.database import engine, Base
 from src.models import *
@@ -122,6 +126,11 @@ GRANT ALL PRIVILEGES ON DATABASE portfolio_manager TO portfolio_user;
 ```bash
 cd backend
 export PM_DATABASE_URL="postgresql://portfolio_user:secure_password@localhost:5432/portfolio_manager"
+
+# Initialize with Alembic migrations (recommended)
+uv run alembic upgrade head
+
+# Alternative: Direct SQLAlchemy initialization
 uv run python -c "
 from src.database import engine, Base
 from src.models import *
@@ -312,7 +321,8 @@ git clone https://github.com/yourusername/portfolio-manager.git .
 # Setup backend
 cd backend
 uv sync
-uv run python -c "from src.database import engine, Base; from src.models import *; Base.metadata.create_all(bind=engine)"
+# Apply database migrations
+uv run alembic upgrade head
 
 # Setup frontend
 cd ../frontend
@@ -593,9 +603,19 @@ sudo -u postgres psql -c "SELECT * FROM pg_stat_activity WHERE application_name 
 
 ```sql
 -- Create indexes for better performance
+
+-- Single Master Symbol Table optimizations
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_symbols_last_updated
+ON realtime_symbols(last_updated DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_symbols_provider
+ON realtime_symbols(provider_id);
+
+-- Historical data optimizations
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_prices_symbol_time
 ON realtime_price_history(symbol, fetched_at DESC);
 
+-- Portfolio performance optimizations
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_portfolio_valuations_calc
 ON portfolio_valuations(portfolio_id, calculated_at DESC);
 ```
