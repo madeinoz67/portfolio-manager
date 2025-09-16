@@ -412,6 +412,17 @@ class MarketDataSchedulerService:
             self._last_run = completion_time
             self._calculate_next_run()
 
+            # Create execution record if one doesn't exist (defensive programming)
+            if self._current_execution is None:
+                self._current_execution = SchedulerExecution(
+                    started_at=completion_time,
+                    status="running",
+                    symbols_processed=0,
+                    successful_fetches=0,
+                    failed_fetches=0
+                )
+                self.db.add(self._current_execution)
+
             # Update current execution record in database
             if self._current_execution:
                 self._current_execution.completed_at = completion_time
