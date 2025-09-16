@@ -4,7 +4,7 @@ This repository contains comprehensive documentation for the Portfolio Manager a
 
 ## Documentation Structure
 
-The documentation is organized into the following directories:
+The documentation is organized according to CLAUDE.md specifications into the following directories:
 
 ### 📁 [Architecture](architecture/)
 Technical architecture documentation, design decisions, and system implementation details:
@@ -13,12 +13,47 @@ Technical architecture documentation, design decisions, and system implementatio
 - Market data fetching and processing
 - Performance optimizations and troubleshooting
 
-### 📁 [User](user/)
-User-facing documentation, guides, and API references:
-- Admin dashboard guides
-- API documentation
-- User role and permission guides
-- Portfolio monitoring and management
+### 📁 [Backend](backend/)
+Backend-specific documentation and guides:
+- Backend setup and deployment
+- Database management and migrations
+- API implementation details
+- Debugging and troubleshooting
+
+### 📁 [Frontend](frontend/)
+Frontend-specific documentation:
+- React/Next.js implementation details
+- UI components and patterns
+- Real-time data handling
+- Performance optimizations
+
+### 📁 [Developer](developer/)
+Developer guides and development documentation:
+- Development workflow and guidelines
+- Testing patterns and TDD practices
+- Code conventions and best practices
+- Integration guides
+
+### 📁 [Design](design/)
+Design-related documentation:
+- User experience principles
+- Visual design guidelines
+- Component design patterns
+- Responsive design approach
+
+### 📁 [Reference](reference/)
+Reference documentation and API specifications:
+- Complete API documentation
+- Request/response schemas
+- Authentication and authorization
+- Error codes and handling
+
+### 📁 [User Guide](user-guide/)
+End-user documentation and guides:
+- Admin dashboard features
+- Portfolio management guides
+- User interface help
+- Feature documentation
 
 ### 📁 [Release Notes](release_notes/)
 Version history, feature releases, and changelog:
@@ -27,16 +62,19 @@ Version history, feature releases, and changelog:
 - Upcoming releases and roadmap
 
 ### 📁 [Working Notes](working-notes/)
-Development notes and temporary documentation (not for end users)
+Development notes and temporary documentation (internal use)
 
 ## Quick Navigation
 
-| Category | Key Documents |
-|----------|---------------|
-| **Getting Started** | [User Guide](user/README.md), [API Reference](user/api-reference.md) |
-| **Admin Features** | [Admin Dashboard](user/admin-dashboard.md), [Audit Guide](user/admin-audit-guide.md) |
-| **Architecture** | [Database Schema](architecture/database-schema-pricing.md), [System Design](architecture/single-master-symbol-table-architecture.md) |
-| **Development** | [Architecture Overview](architecture/README.md), [Troubleshooting](architecture/troubleshooting-pricing-issues.md) |
+| For | Start Here | Key Documents |
+|-----|------------|---------------|
+| **New Users** | [User Guide](user-guide/README.md) | [Admin Dashboard](user-guide/admin-dashboard.md) |
+| **API Integration** | [Reference](reference/README.md) | [API Reference](reference/api-reference.md) |
+| **Development** | [Developer](developer/README.md) | [Frontend Date Handling](developer/frontend-date-handling.md) |
+| **Backend Development** | [Backend](backend/README.md) | [Deployment Guide](backend/deployment-guide.md) |
+| **Frontend Development** | [Frontend](frontend/README.md) | [P&L Improvements](frontend/frontend-pl-improvements.md) |
+| **System Architecture** | [Architecture](architecture/README.md) | [Database Schema](architecture/database-schema-pricing.md) |
+| **Troubleshooting** | [Architecture](architecture/README.md) | [Debugging Notes](backend/debugging-notes.md) |
 
 ## Key Features
 
@@ -96,13 +134,6 @@ Development notes and temporary documentation (not for end users)
    - User Management: http://localhost:3000/admin/users
    - System Monitoring: http://localhost:3000/admin/system
    - Market Data: http://localhost:3000/admin/market-data
-   - Portfolio Metrics: http://localhost:3000/admin/portfolio-metrics
-
-## Getting Started
-
-1. **New Users**: Start with the [User Documentation](user/README.md)
-2. **Developers**: Review the [Architecture Documentation](architecture/README.md) and [API Reference](user/api-reference.md)
-3. **System Admins**: Check the [Admin Dashboard Guide](user/admin-dashboard.md)
 
 ## Development Status
 
@@ -111,10 +142,24 @@ The application is in active development:
 - **Feature 002**: Market Data Integration 🚧 IN PLANNING
 - **Feature 001**: Portfolio Performance Dashboard ✅ COMPLETE
 
+## Development Guidelines
+
+Key principles from CLAUDE.md:
+- **TDD**: Always use Test-Driven Development, all tests must pass
+- **Single Instance**: Ensure only one backend/frontend instance running
+- **Database Changes**: Always use Alembic for schema changes
+- **Data Freshness**: Use `fetched_at` for market data freshness
+- **Commit Often**: Frequent commits with clear messages
+- **Check Metrics**: Verify metrics work after core changes
+
 ## Support
 
-For technical issues and troubleshooting, consult the [Architecture Documentation](architecture/README.md) which contains detailed troubleshooting guides and system information.
+For technical issues and troubleshooting:
+- **Architecture Issues**: See [Architecture Documentation](architecture/README.md)
+- **Backend Problems**: Check [Backend Debugging](backend/debugging-notes.md)
+- **API Questions**: Review [API Reference](reference/api-reference.md)
+- **Development Help**: See [Developer Guide](developer/README.md)
 
 ---
 
-For specific implementation details, please refer to the individual documentation files linked above. Each guide provides comprehensive coverage of its respective system area with practical examples and troubleshooting information.
+For specific implementation details, please refer to the individual documentation directories. Each section provides comprehensive coverage with practical examples and troubleshooting information.
