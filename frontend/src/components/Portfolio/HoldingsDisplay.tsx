@@ -31,6 +31,105 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
     return `${sign}${percent.toFixed(2)}%`
   }
 
+  // Trend calculation functions (similar to market-data table)
+  const calculateTrendData = (stock: any) => {
+    if (!stock.daily_change || !stock.daily_change_percent) {
+      return null
+    }
+
+    const change = parseFloat(stock.daily_change)
+    const changePercent = parseFloat(stock.daily_change_percent)
+
+    const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'neutral'
+
+    return {
+      trend,
+      change,
+      change_percent: changePercent
+    }
+  }
+
+  const formatTrendChange = (change: number) => {
+    if (change === 0) return '$0.00'
+    return change >= 0 ? `+$${change.toFixed(2)}` : `-$${Math.abs(change).toFixed(2)}`
+  }
+
+  const formatTrendPercent = (changePercent: number) => {
+    if (changePercent === 0) return '(0.00%)'
+    return changePercent >= 0 ? `(+${changePercent.toFixed(2)}%)` : `(${changePercent.toFixed(2)}%)`
+  }
+
+  const getTrendColor = (trend: string | null) => {
+    if (!trend) return 'text-gray-600 dark:text-gray-400'
+    switch (trend) {
+      case 'up':
+        return 'text-green-600 dark:text-green-400'
+      case 'down':
+        return 'text-red-600 dark:text-red-400'
+      case 'neutral':
+        return 'text-gray-600 dark:text-gray-400'
+      default:
+        return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  const getTrendIcon = (trend: string | null) => {
+    if (!trend) {
+      return (
+        <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
+          <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
+        </div>
+      )
+    }
+
+    if (trend === 'up') {
+      return (
+        <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center" aria-label="Upward trend">
+          <svg
+            className="w-3 h-3 stroke-current text-green-600 dark:text-green-400"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )
+    }
+
+    if (trend === 'down') {
+      return (
+        <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center" aria-label="Downward trend">
+          <svg
+            className="w-3 h-3 stroke-current text-red-600 dark:text-red-400"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <path d="M3 3L13 13M13 13H7M13 13V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )
+    }
+
+    if (trend === 'neutral') {
+      return (
+        <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="Neutral trend">
+          <svg
+            className="w-3 h-3 fill-current text-gray-600 dark:text-gray-400"
+            viewBox="0 0 20 20"
+          >
+            <path d="M3 10h14v2H3z" />
+          </svg>
+        </div>
+      )
+    }
+
+    return (
+      <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center" aria-label="No trend data">
+        <span className="w-2 h-2 bg-black dark:bg-white rounded-full" />
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -111,6 +210,9 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Return %
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Trend
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Last Updated
                   </th>
@@ -157,6 +259,26 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                         : 'text-red-600 dark:text-red-400'
                     }`}>
                       {formatPercent(parseFloat(holding.unrealized_gain_loss_percent))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {(() => {
+                        const trendData = calculateTrendData(holding.stock)
+                        const trendColor = getTrendColor(trendData?.trend || null)
+
+                        return (
+                          <div className={`flex flex-col items-center space-y-1 ${trendColor}`}>
+                            <div className="flex justify-center items-center">
+                              {getTrendIcon(trendData?.trend || null)}
+                            </div>
+                            {trendData && (
+                              <div className="flex flex-col items-center text-xs font-medium">
+                                <span>{formatTrendChange(trendData.change)}</span>
+                                <span>{formatTrendPercent(trendData.change_percent)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right">
                       {holding.stock.last_price_update ? getRelativeTime(holding.stock.last_price_update) : '—'}
