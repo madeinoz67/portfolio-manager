@@ -4,6 +4,7 @@ import { useHoldings, type Holding } from '@/hooks/useHoldings'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import Button from '@/components/ui/Button'
+import { getRelativeTime } from '@/utils/timezone'
 
 interface HoldingsDisplayProps {
   portfolioId: string
@@ -110,6 +111,9 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Return %
                   </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
+                    Last Updated
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -148,11 +152,14 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                       {formatCurrency(parseFloat(holding.unrealized_gain_loss))}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
-                      parseFloat(holding.unrealized_gain_loss_percent) >= 0 
-                        ? 'text-green-600 dark:text-green-400' 
+                      parseFloat(holding.unrealized_gain_loss_percent) >= 0
+                        ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                     }`}>
                       {formatPercent(parseFloat(holding.unrealized_gain_loss_percent))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right hidden sm:table-cell">
+                      {holding.stock.last_price_update ? getRelativeTime(holding.stock.last_price_update) : '—'}
                     </td>
                   </tr>
                 ))}
