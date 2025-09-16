@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Portfolio } from '@/types/portfolio'
 import Button from '@/components/ui/Button'
 import PortfolioDeletionModal from './PortfolioDeletionModal'
+import { getRelativeTime } from '@/utils/timezone'
 
 interface PortfolioCardProps {
   portfolio: Portfolio
@@ -116,7 +117,7 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>Last updated: Today</span>
+            <span>Last updated: {portfolio.price_last_updated ? getRelativeTime(portfolio.price_last_updated) : getRelativeTime(portfolio.updated_at)}</span>
           </span>
         </div>
 

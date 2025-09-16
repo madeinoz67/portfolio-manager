@@ -7,6 +7,7 @@ export interface Portfolio {
   daily_change_percent: string
   created_at: string
   updated_at: string
+  price_last_updated?: string
 }
 
 export interface CreatePortfolioData {

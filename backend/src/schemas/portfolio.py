@@ -37,6 +37,7 @@ class PortfolioResponse(BaseModel):
     daily_change_percent: Decimal = Field(default=Decimal("0.00"))
     created_at: datetime
     updated_at: datetime
+    price_last_updated: Optional[datetime] = None
 
     class Config:
         from_attributes = True
