@@ -16,6 +16,7 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
   const isPositiveChange = parseFloat(portfolio.daily_change) >= 0
   const totalValue = parseFloat(portfolio.total_value || '0')
   const dailyChange = parseFloat(portfolio.daily_change || '0')
+  const dailyChangePercent = parseFloat(portfolio.daily_change_percent || '0')
 
   const handleAddTrade = () => {
     router.push(`/portfolios/${portfolio.id}/add-transaction`)
@@ -99,7 +100,7 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
                       ${Math.abs(dailyChange).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                     <span className={`text-sm font-medium ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                      ({portfolio.daily_change_percent}%)
+                      ({dailyChangePercent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)
                     </span>
                   </div>
                 </div>

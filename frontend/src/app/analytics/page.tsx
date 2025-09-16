@@ -138,7 +138,10 @@ export default function Analytics() {
           <StatsCard
             title={selectedPortfolio ? "Current Portfolio" : "Best Performer"}
             value={selectedPortfolio ? selectedPortfolio.name : (analytics.bestPerformer?.name || 'N/A')}
-            change={`${selectedPortfolio ? selectedPortfolio.daily_change_percent : (analytics.bestPerformer?.daily_change_percent || '0')}%`}
+            change={`${selectedPortfolio
+              ? parseFloat(selectedPortfolio.daily_change_percent || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : parseFloat(analytics.bestPerformer?.daily_change_percent || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            }%`}
             changeType="positive"
             icon={
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
