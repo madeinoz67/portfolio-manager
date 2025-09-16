@@ -32,21 +32,37 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
   }
 
   // Trend calculation functions (similar to market-data table)
-  const calculateTrendData = (stock: any) => {
-    if (!stock.daily_change || !stock.daily_change_percent) {
-      return null
+  const calculateTrendData = (stock: any, holding?: any) => {
+    // First try to use stock daily_change data (preferred)
+    if (stock.daily_change && stock.daily_change_percent) {
+      const change = parseFloat(stock.daily_change)
+      const changePercent = parseFloat(stock.daily_change_percent)
+      const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'neutral'
+
+      return {
+        trend,
+        change,
+        change_percent: changePercent
+      }
     }
 
-    const change = parseFloat(stock.daily_change)
-    const changePercent = parseFloat(stock.daily_change_percent)
+    // Fallback: use holding's unrealized gain/loss data
+    if (holding) {
+      const gainLoss = parseFloat(holding.unrealized_gain_loss)
+      const gainLossPercent = parseFloat(holding.unrealized_gain_loss_percent)
 
-    const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'neutral'
+      if (!isNaN(gainLoss) && !isNaN(gainLossPercent)) {
+        const trend = gainLoss > 0 ? 'up' : gainLoss < 0 ? 'down' : 'neutral'
 
-    return {
-      trend,
-      change,
-      change_percent: changePercent
+        return {
+          trend,
+          change: gainLoss,
+          change_percent: gainLossPercent
+        }
+      }
     }
+
+    return null
   }
 
   const formatTrendChange = (change: number) => {
@@ -262,7 +278,7 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       {(() => {
-                        const trendData = calculateTrendData(holding.stock)
+                        const trendData = calculateTrendData(holding.stock, holding)
                         const trendColor = getTrendColor(trendData?.trend || null)
 
                         return (
