@@ -32,6 +32,7 @@ class Portfolio(Base):
     daily_change_percent = Column(Numeric(5, 2), default=Decimal("0.00"))
     created_at = Column(DateTime, default=now)
     updated_at = Column(DateTime, default=now, onupdate=now)
+    price_last_updated = Column(DateTime, nullable=True)  # When portfolio prices were last updated from market data
     is_active = Column(Boolean, default=True)
 
     # Relationships
