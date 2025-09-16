@@ -17,6 +17,7 @@ from sqlalchemy import desc, and_
 
 from src.models.market_data_provider import MarketDataProvider
 from src.models.realtime_price_history import RealtimePriceHistory
+from src.models.realtime_symbol import RealtimeSymbol
 from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.utils.datetime_utils import to_iso_string
 from src.models.holding import Holding
@@ -958,6 +959,111 @@ class MarketDataService:
             logger.error(f"Error storing comprehensive price data for {symbol}: {e}")
             self.db.rollback()
             raise
+
+    def store_price_to_master(self, symbol: str, price_data: Dict, provider: MarketDataProvider) -> RealtimeSymbol:
+        """
+        Store price data using single master table approach (Option C).
+
+        This method implements the new single-write pattern that eliminates
+        dual-table synchronization complexity. It writes to realtime_symbols
+        as the single source of truth and maintains a reference to history.
+        """
+        try:
+            # First, create history record to maintain time-series data
+            history_record = RealtimePriceHistory(
+                symbol=symbol,
+                price=price_data["price"],
+                opening_price=price_data.get("open_price"),
+                high_price=price_data.get("high_price"),
+                low_price=price_data.get("low_price"),
+                previous_close=price_data.get("previous_close"),
+                volume=price_data.get("volume"),
+                market_cap=price_data.get("market_cap"),
+                fifty_two_week_high=price_data.get("fifty_two_week_high"),
+                fifty_two_week_low=price_data.get("fifty_two_week_low"),
+                dividend_yield=price_data.get("dividend_yield"),
+                pe_ratio=price_data.get("pe_ratio"),
+                beta=price_data.get("beta"),
+                currency=price_data.get("currency", "USD"),
+                company_name=price_data.get("company_name"),
+                provider_id=provider.id,
+                source_timestamp=price_data["source_timestamp"],
+                fetched_at=utc_now()
+            )
+            self.db.add(history_record)
+            self.db.flush()  # Get the history record ID
+
+            # Now update or create master table record (single source of truth)
+            master_record = self.db.query(RealtimeSymbol).filter_by(symbol=symbol).first()
+
+            if master_record:
+                # Update existing master record
+                master_record.current_price = price_data["price"]
+                master_record.company_name = price_data.get("company_name") or master_record.company_name
+                master_record.last_updated = price_data["source_timestamp"]
+                master_record.provider_id = provider.id
+                master_record.volume = price_data.get("volume")
+                master_record.market_cap = price_data.get("market_cap")
+                master_record.latest_history_id = history_record.id
+                master_record.update_timestamp()  # Update the updated_at field
+
+                logger.info(f"Updated master symbol record for {symbol}: ${price_data['price']}")
+            else:
+                # Create new master record
+                master_record = RealtimeSymbol(
+                    symbol=symbol,
+                    current_price=price_data["price"],
+                    company_name=price_data.get("company_name", f"{symbol} Company"),
+                    last_updated=price_data["source_timestamp"],
+                    provider_id=provider.id,
+                    volume=price_data.get("volume"),
+                    market_cap=price_data.get("market_cap"),
+                    latest_history_id=history_record.id
+                )
+                self.db.add(master_record)
+
+                logger.info(f"Created new master symbol record for {symbol}: ${price_data['price']}")
+
+            self.db.commit()
+
+            logger.info(f"Stored price data to master table for {symbol}: ${price_data['price']}")
+
+            # Trigger portfolio updates for this symbol
+            self._trigger_portfolio_updates(symbol)
+
+            return master_record
+
+        except Exception as e:
+            logger.error(f"Error storing price data to master table for {symbol}: {e}")
+            self.db.rollback()
+            raise
+
+    def get_current_price_from_master(self, symbol: str) -> Optional[Dict]:
+        """
+        Get current price data from master table (single source of truth).
+
+        Returns price data from realtime_symbols table, ensuring consistent
+        pricing across all APIs and portfolio calculations.
+        """
+        try:
+            master_record = self.db.query(RealtimeSymbol).filter_by(symbol=symbol).first()
+
+            if not master_record:
+                return None
+
+            return {
+                "symbol": master_record.symbol,
+                "price": master_record.current_price,
+                "company_name": master_record.company_name,
+                "last_updated": master_record.last_updated,
+                "volume": master_record.volume,
+                "market_cap": master_record.market_cap,
+                "provider": master_record.provider.display_name if master_record.provider else None
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting current price from master table for {symbol}: {e}")
+            return None
 
     def _store_comprehensive_price_data(self, symbol: str, price_data: Dict, provider: MarketDataProvider, db_session: Session) -> RealtimePriceHistory:
         """Store comprehensive price data with custom session (for testing)."""

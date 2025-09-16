@@ -230,18 +230,19 @@ async def get_price(
     trend_service = TrendCalculationService(db)
 
     try:
-        # First check cache
-        cached_price = service.get_latest_price(symbol, max_age_minutes=30)
+        # First check master table for current price
+        master_price_data = service.get_current_price_from_master(symbol)
 
-        if cached_price:
+        if master_price_data:
             return build_price_response(
                 symbol=symbol,
-                price_record=cached_price,
+                price_record=None,
+                price_data=master_price_data,
                 cached=True,
                 trend_service=trend_service
             )
 
-        # Fetch fresh data if not in cache
+        # Fallback: Fetch fresh data if not in master table
         price_data = await service.fetch_price(symbol)
 
         if not price_data:
@@ -296,19 +297,20 @@ async def get_bulk_prices(
 
         for symbol in symbols:
             try:
-                # Check cache first
-                cached_price = service.get_latest_price(symbol, max_age_minutes=30)
+                # Check master table first
+                master_price_data = service.get_current_price_from_master(symbol)
 
-                if cached_price:
+                if master_price_data:
                     prices[symbol] = build_price_response(
                         symbol=symbol,
-                        price_record=cached_price,
+                        price_record=None,
+                        price_data=master_price_data,
                         cached=True,
                         trend_service=trend_service
                     )
                     cached_count += 1
                 else:
-                    # Fetch fresh data
+                    # Fallback: Fetch fresh data
                     price_data = await service.fetch_price(symbol)
 
                     if price_data:
@@ -480,18 +482,18 @@ async def stream_market_data(
                     # Send heartbeat
                     yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': to_iso_string(utc_now())})}\n\n"
 
-                    # Mock price update (in real implementation, this would be triggered by actual price changes)
+                    # Send price updates from master table
                     if symbols:
                         service = MarketDataService(db)
                         try:
                             price_updates = {}
                             for symbol in symbols[:10]:  # Limit to avoid overload
-                                latest = service.get_latest_price(symbol, max_age_minutes=30)
-                                if latest:
+                                master_price_data = service.get_current_price_from_master(symbol)
+                                if master_price_data:
                                     price_updates[symbol] = {
-                                        "price": float(latest.price),
-                                        "volume": latest.volume,
-                                        "timestamp": latest.fetched_at.isoformat() + "Z"
+                                        "price": float(master_price_data["price"]),
+                                        "volume": master_price_data.get("volume"),
+                                        "timestamp": master_price_data["last_updated"]
                                     }
 
                             if price_updates:

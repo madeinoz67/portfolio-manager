@@ -13,6 +13,7 @@ from sqlalchemy import text, desc
 
 from src.core.logging import LoggerMixin
 from src.models import Portfolio, Holding, Stock, RealtimePriceHistory, PortfolioValuation
+from src.models.realtime_symbol import RealtimeSymbol
 from src.schemas.portfolio import PortfolioResponse
 from src.schemas.holding import HoldingResponse
 
@@ -339,36 +340,36 @@ class DynamicPortfolioService(LoggerMixin):
 
     def _get_cached_prices(self, symbols: List[str]) -> Dict[str, Decimal]:
         """
-        Get the most recent cached prices for the given symbols.
+        Get current prices from master table (single source of truth).
 
         Args:
             symbols: List of stock symbols to get prices for
 
         Returns:
-            Dictionary mapping symbols to their cached prices
+            Dictionary mapping symbols to their current prices from master table
         """
         if not symbols:
             return {}
 
         try:
-            # Get most recent price for each symbol from cache
+            # Get current prices from master table (realtime_symbols)
             prices = {}
 
             for symbol in symbols:
-                # Get the most recent price record for this symbol
-                price_record = self.db.query(RealtimePriceHistory).filter(
-                    RealtimePriceHistory.symbol == symbol
-                ).order_by(desc(RealtimePriceHistory.fetched_at)).first()
+                # Get current price from master table
+                master_record = self.db.query(RealtimeSymbol).filter(
+                    RealtimeSymbol.symbol == symbol
+                ).first()
 
-                if price_record:
-                    prices[symbol] = Decimal(str(price_record.price))
-                    self.log_debug(f"Cached price for {symbol}: {price_record.price}")
+                if master_record:
+                    prices[symbol] = Decimal(str(master_record.current_price))
+                    self.log_debug(f"Master table price for {symbol}: {master_record.current_price}")
 
-            self.log_info("Retrieved cached prices", symbols=symbols, found_count=len(prices))
+            self.log_info("Retrieved prices from master table", symbols=symbols, found_count=len(prices))
             return prices
 
         except Exception as e:
-            self.log_error("Error retrieving cached prices", error=str(e))
+            self.log_error("Error retrieving prices from master table", error=str(e))
             return {}
 
     def _get_cached_portfolio_value(self, portfolio_id: UUID) -> Optional[PortfolioValue]:
