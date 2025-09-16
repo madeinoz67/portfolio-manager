@@ -33,9 +33,18 @@ class PortfolioResponse(BaseModel):
     id: UUID
     name: str
     description: Optional[str] = None
+
+    # Portfolio value
     total_value: Decimal = Field(default=Decimal("0.00"))
+
+    # Daily P&L - movement from previous close to current price
     daily_change: Decimal = Field(default=Decimal("0.00"))
     daily_change_percent: Decimal = Field(default=Decimal("0.00"))
+
+    # Unrealized P&L - total gain/loss from purchase cost to current value
+    unrealized_gain_loss: Decimal = Field(default=Decimal("0.00"))
+    unrealized_gain_loss_percent: Decimal = Field(default=Decimal("0.00"))
+
     created_at: datetime
     updated_at: datetime
     price_last_updated: Optional[datetime] = None

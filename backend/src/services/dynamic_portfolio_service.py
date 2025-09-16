@@ -173,7 +173,7 @@ class DynamicPortfolioService(LoggerMixin):
             daily_change_value = self.calculate_daily_change(portfolio_id)
             daily_change_percent = self.calculate_daily_change_percent(portfolio_id, daily_change_value)
 
-            # Create response with updated values
+            # Create response with updated values including unrealized P&L
             portfolio_dict = {
                 "id": portfolio.id,
                 "name": portfolio.name,
@@ -182,6 +182,8 @@ class DynamicPortfolioService(LoggerMixin):
                 "total_value": portfolio_value.total_value,
                 "daily_change": daily_change_value,
                 "daily_change_percent": daily_change_percent,
+                "unrealized_gain_loss": portfolio_value.total_unrealized_gain,
+                "unrealized_gain_loss_percent": portfolio_value.total_gain_percent,
                 "created_at": portfolio.created_at,
                 "updated_at": portfolio.updated_at,
                 "is_active": portfolio.is_active,
