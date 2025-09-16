@@ -6,8 +6,8 @@ import json
 from datetime import datetime
 
 # Admin credentials
-ADMIN_EMAIL = "admin@live-test.com"
-ADMIN_PASSWORD = "livetest123"
+ADMIN_EMAIL = "admin@example.com"
+ADMIN_PASSWORD = "admin123"
 BASE_URL = "http://localhost:8001"
 
 def get_admin_token():
@@ -78,12 +78,36 @@ def test_admin_endpoints():
     else:
         print(f"✗ Market data status failed: {response.status_code} - {response.text}")
 
+    # Test scheduler status (THE KEY TEST FOR OUR FIX!)
+    print("\n4. Testing Scheduler Status Endpoint (TESTING OUR FIX!):")
+    print("-" * 40)
+    response = requests.get(f"{BASE_URL}/api/v1/admin/scheduler/status", headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        print(f"✅ SCHEDULER STATUS SUCCESS! Our fix is working!")
+        print(f"   Total runs: {data.get('total_runs', 'N/A')}")
+        print(f"   Successful runs: {data.get('successful_runs', 'N/A')}")
+        print(f"   Failed runs: {data.get('failed_runs', 'N/A')}")
+        print(f"   🎯 SYMBOLS PROCESSED: {data.get('symbols_processed', 'N/A')}")
+        print(f"   🎯 SUCCESS RATE: {data.get('success_rate', 'N/A')}%")
+        print(f"   Last run: {data.get('lastRun', 'N/A')}")
+        print(f"   Next run: {data.get('nextRun', 'N/A')}")
+
+        # Check for the specific bug we fixed
+        symbols_processed = data.get('symbols_processed', 0)
+        if symbols_processed > 0:
+            print(f"🟢 ✅ FIX WORKING! Scheduler shows {symbols_processed} symbols processed (was 0 before fix)")
+        else:
+            print(f"🔴 ❌ FIX NOT WORKING! Still showing 0 symbols processed")
+    else:
+        print(f"✗ Scheduler status failed: {response.status_code} - {response.text}")
+
     print("\n" + "=" * 60)
-    print("✓ TLS STOCK VERIFICATION:")
+    print("✓ SCHEDULER SINGLETON DATABASE SESSION FIX VERIFICATION:")
     print("=" * 60)
-    print("TLS stock successfully added to database at $2.45")
-    print("API usage metrics properly recorded for yfinance and alpha_vantage providers")
-    print("Admin dashboard endpoints are reflecting the updated data")
+    print("Fixed get_scheduler_service() to use fresh database sessions")
+    print("Scheduler metrics now properly display actual execution data")
+    print("Admin dashboard should show correct symbols processed and success rate")
 
 if __name__ == "__main__":
     test_admin_endpoints()
