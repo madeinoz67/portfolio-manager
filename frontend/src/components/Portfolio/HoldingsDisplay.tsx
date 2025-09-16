@@ -111,7 +111,7 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Return %
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Last Updated
                   </th>
                 </tr>
@@ -158,7 +158,7 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                     }`}>
                       {formatPercent(parseFloat(holding.unrealized_gain_loss_percent))}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right hidden sm:table-cell">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right">
                       {holding.stock.last_price_update ? getRelativeTime(holding.stock.last_price_update) : '—'}
                     </td>
                   </tr>
