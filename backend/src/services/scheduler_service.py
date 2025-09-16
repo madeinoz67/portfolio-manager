@@ -622,11 +622,15 @@ _scheduler_service_instance = None
 
 
 def get_scheduler_service(db: Session) -> MarketDataSchedulerService:
-    """Get or create scheduler service instance."""
+    """Get or create scheduler service instance with fresh database session."""
     global _scheduler_service_instance
 
     if _scheduler_service_instance is None:
         _scheduler_service_instance = MarketDataSchedulerService(db)
+    else:
+        # CRITICAL FIX: Update the database session to the current one
+        # This ensures the scheduler always uses the fresh session provided by FastAPI
+        _scheduler_service_instance.db = db
 
     return _scheduler_service_instance
 
