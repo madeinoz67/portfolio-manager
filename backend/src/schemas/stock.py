@@ -32,11 +32,15 @@ class StockResponse(BaseModel):
         if hasattr(data, '__dict__'):
             # Handle SQLAlchemy objects
             if hasattr(data, 'last_price_update') and data.last_price_update is not None:
-                data.last_price_update = to_iso_string(data.last_price_update)
+                # Only convert if it's not already a string
+                if not isinstance(data.last_price_update, str):
+                    data.last_price_update = to_iso_string(data.last_price_update)
         elif isinstance(data, dict):
             # Handle dict data
             if 'last_price_update' in data and data['last_price_update'] is not None:
-                data['last_price_update'] = to_iso_string(data['last_price_update'])
+                # Only convert if it's not already a string
+                if not isinstance(data['last_price_update'], str):
+                    data['last_price_update'] = to_iso_string(data['last_price_update'])
         return data
 
     class Config:
