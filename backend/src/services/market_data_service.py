@@ -99,8 +99,8 @@ class MarketDataService:
                     # Record successful fetch time
                     self._recent_fetches[symbol] = now
 
-                    # Store in database
-                    await self._store_price_data(symbol, price_data, provider)
+                    # Store in database using new single master table approach
+                    self.store_price_to_master(symbol, price_data, provider)
 
                     # Log successful API usage
                     self._log_api_usage(provider, symbol, 200, True)
@@ -245,8 +245,8 @@ class MarketDataService:
                             price_data[symbol] = result
                             success_count += 1
                             successful_symbols.append(symbol)
-                            # Store in database
-                            await self._store_price_data(symbol, result, provider)
+                            # Store in database using new single master table approach
+                            self.store_price_to_master(symbol, result, provider)
                             # Log API usage
                             self._log_api_usage(provider, symbol, 200, True)
 
@@ -728,8 +728,8 @@ class MarketDataService:
             end_time = datetime.utcnow()
 
             if price_data:
-                # Store in database
-                await self._store_price_data(symbol, price_data, provider)
+                # Store in database using new single master table approach
+                self.store_price_to_master(symbol, price_data, provider)
 
                 # Log successful API usage
                 self._log_api_usage(provider, symbol, 200, True)
@@ -889,76 +889,6 @@ class MarketDataService:
             logger.error(f"Error in Alpha Vantage bulk fetch: {e}")
             return {symbol: None for symbol in symbols}
 
-    async def _store_price_data(self, symbol: str, price_data: Dict, provider: MarketDataProvider):
-        """Store price data in the database and trigger portfolio updates."""
-        try:
-            price_record = RealtimePriceHistory(
-                symbol=symbol,
-                price=price_data["price"],
-
-                # Extended price information for trend calculations
-                opening_price=price_data.get("open_price"),
-                high_price=price_data.get("high_price"),
-                low_price=price_data.get("low_price"),
-                previous_close=price_data.get("previous_close"),
-
-                # Volume and market data
-                volume=price_data.get("volume"),
-                market_cap=price_data.get("market_cap"),
-
-                # Extended market information
-                fifty_two_week_high=price_data.get("fifty_two_week_high"),
-                fifty_two_week_low=price_data.get("fifty_two_week_low"),
-                dividend_yield=price_data.get("dividend_yield"),
-                pe_ratio=price_data.get("pe_ratio"),
-                beta=price_data.get("beta"),
-
-                # Metadata
-                currency=price_data.get("currency", "USD"),
-                company_name=price_data.get("company_name"),
-
-                # System fields
-                provider_id=provider.id,
-                source_timestamp=price_data["source_timestamp"],
-                fetched_at=utc_now()
-            )
-
-            self.db.add(price_record)
-
-            # CRITICAL FIX: Also update stocks table so holdings show fresh timestamps
-            # Find existing stock record or create new one
-            stock = self.db.query(Stock).filter_by(symbol=symbol).first()
-
-            if stock:
-                # Update existing stock with fresh price and timestamp
-                stock.current_price = price_data["price"]
-                stock.last_price_update = price_data["source_timestamp"]
-                logger.info(f"Updated stock table for {symbol}: ${price_data['price']}")
-            else:
-                # Create new stock record for new symbols
-                stock = Stock(
-                    symbol=symbol,
-                    company_name=price_data.get("company_name", f"{symbol} Company"),
-                    exchange="ASX" if symbol.endswith(".AX") else "NASDAQ",  # Simple heuristic
-                    current_price=price_data["price"],
-                    last_price_update=price_data["source_timestamp"]
-                )
-                self.db.add(stock)
-                logger.info(f"Created new stock record for {symbol}: ${price_data['price']}")
-
-            self.db.commit()
-
-            logger.info(f"Stored comprehensive price data for {symbol}: ${price_data['price']}")
-
-            # Trigger real-time portfolio updates for this symbol
-            self._trigger_portfolio_updates(symbol)
-
-            return price_record
-
-        except Exception as e:
-            logger.error(f"Error storing comprehensive price data for {symbol}: {e}")
-            self.db.rollback()
-            raise
 
     def store_price_to_master(self, symbol: str, price_data: Dict, provider: MarketDataProvider) -> RealtimeSymbol:
         """
@@ -1055,7 +985,7 @@ class MarketDataService:
                 "symbol": master_record.symbol,
                 "price": master_record.current_price,
                 "company_name": master_record.company_name,
-                "last_updated": master_record.last_updated,
+                "fetched_at": master_record.last_updated,
                 "volume": master_record.volume,
                 "market_cap": master_record.market_cap,
                 "provider": master_record.provider.display_name if master_record.provider else None

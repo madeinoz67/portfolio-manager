@@ -156,7 +156,7 @@ def build_price_response(
             "price": float(price_data["price"]),
             "volume": price_data.get("volume"),
             "market_cap": float(price_data["market_cap"]) if price_data.get("market_cap") else None,
-            "fetched_at": to_iso_string(price_data["source_timestamp"]),
+            "fetched_at": to_iso_string(price_data["fetched_at"]),
             "cached": cached,
 
             # Extended price information
@@ -493,7 +493,7 @@ async def stream_market_data(
                                     price_updates[symbol] = {
                                         "price": float(master_price_data["price"]),
                                         "volume": master_price_data.get("volume"),
-                                        "timestamp": master_price_data["last_updated"]
+                                        "fetched_at": to_iso_string(master_price_data["fetched_at"])
                                     }
 
                             if price_updates:
