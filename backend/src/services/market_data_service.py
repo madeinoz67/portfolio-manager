@@ -389,34 +389,34 @@ class MarketDataService:
                     else:
                         # Use bulk API if available and within limit
                         logger.info(f"Using Alpha Vantage bulk fetch for {len(symbols)} symbols")
-                    try:
-                        results = await self._bulk_fetch_from_alpha_vantage(symbols, provider.api_key)
+                        try:
+                            results = await self._bulk_fetch_from_alpha_vantage(symbols, provider.api_key)
 
-                        # Log bulk operation
-                        log_provider_activity(
-                            db_session=self.db,
-                            provider_id=provider.name,
-                            activity_type="BULK_PRICE_UPDATE",
-                            description=f"Alpha Vantage bulk fetch for {len(symbols)} symbols",
-                            status="success",
-                            metadata={
-                                "symbols": symbols,
-                                "successful_fetches": len([r for r in results.values() if r is not None]),
-                                "bulk_optimization": "enabled"
-                            }
-                        )
+                            # Log bulk operation
+                            log_provider_activity(
+                                db_session=self.db,
+                                provider_id=provider.name,
+                                activity_type="BULK_PRICE_UPDATE",
+                                description=f"Alpha Vantage bulk fetch for {len(symbols)} symbols",
+                                status="success",
+                                metadata={
+                                    "symbols": symbols,
+                                    "successful_fetches": len([r for r in results.values() if r is not None]),
+                                    "bulk_optimization": "enabled"
+                                }
+                            )
 
-                    except Exception as bulk_error:
-                        logger.warning(f"Alpha Vantage bulk fetch failed: {bulk_error}, falling back to individual")
-                        # Fallback to individual fetches
-                        for symbol in symbols:
-                            try:
-                                result = await self._fetch_from_alpha_vantage(symbol, provider.api_key)
-                                results[symbol] = result
-                                await asyncio.sleep(2)  # Alpha Vantage rate limiting
-                            except Exception as e:
-                                logger.error(f"Individual fetch failed for {symbol}: {e}")
-                                results[symbol] = None
+                        except Exception as bulk_error:
+                            logger.warning(f"Alpha Vantage bulk fetch failed: {bulk_error}, falling back to individual")
+                            # Fallback to individual fetches
+                            for symbol in symbols:
+                                try:
+                                    result = await self._fetch_from_alpha_vantage(symbol, provider.api_key)
+                                    results[symbol] = result
+                                    await asyncio.sleep(2)  # Alpha Vantage rate limiting
+                                except Exception as e:
+                                    logger.error(f"Individual fetch failed for {symbol}: {e}")
+                                    results[symbol] = None
                 else:
                     # Single symbol or no API key - use individual fetches
                     for symbol in symbols:
@@ -613,8 +613,13 @@ class MarketDataService:
                             ticker = tickers.tickers[yf_symbol]
                             info = ticker.info
 
-                            if info and 'currentPrice' in info and info['currentPrice']:
+                            price = None
+                            if info and 'regularMarketPrice' in info and info['regularMarketPrice']:
+                                price = float(info['regularMarketPrice'])
+                            elif info and 'currentPrice' in info and info['currentPrice']:
                                 price = float(info['currentPrice'])
+
+                            if price:
                                 results[original_symbol] = {
                                     "symbol": original_symbol,
                                     "price": price,
@@ -623,6 +628,7 @@ class MarketDataService:
                                     "market_cap": info.get('marketCap'),
                                     "currency": info.get('currency', 'USD'),
                                     "fetched_at": to_iso_string(datetime.utcnow()),
+                                    "source_timestamp": utc_now(),
                                     "provider": "yfinance",
                                     "bulk_fetch": True
                                 }
