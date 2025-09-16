@@ -169,6 +169,10 @@ class DynamicPortfolioService(LoggerMixin):
             # Get holdings with current market prices
             updated_holdings = self._get_dynamic_holdings(portfolio_id)
 
+            # Calculate daily change separately from unrealized gain
+            daily_change_value = self.calculate_daily_change(portfolio_id)
+            daily_change_percent = self.calculate_daily_change_percent(portfolio_id, daily_change_value)
+
             # Create response with updated values
             portfolio_dict = {
                 "id": portfolio.id,
@@ -176,8 +180,8 @@ class DynamicPortfolioService(LoggerMixin):
                 "description": portfolio.description,
                 "owner_id": portfolio.owner_id,
                 "total_value": portfolio_value.total_value,
-                "daily_change": portfolio_value.total_unrealized_gain,
-                "daily_change_percent": portfolio_value.total_gain_percent,
+                "daily_change": daily_change_value,
+                "daily_change_percent": daily_change_percent,
                 "created_at": portfolio.created_at,
                 "updated_at": portfolio.updated_at,
                 "is_active": portfolio.is_active,
@@ -411,6 +415,126 @@ class DynamicPortfolioService(LoggerMixin):
         except Exception as e:
             self.log_error("Error retrieving cached portfolio value", portfolio_id=str(portfolio_id), error=str(e))
             return None
+
+    def calculate_daily_change(self, portfolio_id: UUID) -> Decimal:
+        """
+        Calculate portfolio daily change based on (current_price - previous_close) * quantity.
+
+        Args:
+            portfolio_id: UUID of the portfolio
+
+        Returns:
+            Daily change amount in dollars
+        """
+        try:
+            # Get all holdings for the portfolio
+            holdings = self.db.query(Holding).options(
+                joinedload(Holding.stock)
+            ).filter(
+                Holding.portfolio_id == portfolio_id,
+                Holding.quantity > 0
+            ).all()
+
+            if not holdings:
+                return Decimal("0.00")
+
+            total_daily_change = Decimal("0.00")
+
+            for holding in holdings:
+                symbol = holding.stock.symbol
+                quantity = holding.quantity
+
+                # Get master symbol record
+                master_symbol = self.db.query(RealtimeSymbol).filter(
+                    RealtimeSymbol.symbol == symbol
+                ).first()
+
+                if not master_symbol:
+                    self.log_warning(f"No master symbol found for {symbol}, skipping daily change calculation")
+                    continue
+
+                current_price = master_symbol.current_price
+
+                # Get previous close from linked history record
+                previous_close = None
+                if master_symbol.latest_history_id:
+                    history_record = self.db.query(RealtimePriceHistory).filter(
+                        RealtimePriceHistory.id == master_symbol.latest_history_id
+                    ).first()
+                    if history_record and history_record.previous_close:
+                        previous_close = history_record.previous_close
+
+                if previous_close is None:
+                    # No previous close data available, skip this holding for daily change
+                    self.log_debug(f"No previous close data for {symbol}, daily change = 0")
+                    continue
+
+                # Calculate daily change for this holding
+                price_change = current_price - previous_close
+                holding_daily_change = price_change * quantity
+                total_daily_change += holding_daily_change
+
+                self.log_debug(
+                    f"Daily change calculation: {symbol}",
+                    current_price=str(current_price),
+                    previous_close=str(previous_close),
+                    price_change=str(price_change),
+                    quantity=str(quantity),
+                    holding_daily_change=str(holding_daily_change)
+                )
+
+            self.log_info("Portfolio daily change calculated", portfolio_id=str(portfolio_id), daily_change=str(total_daily_change))
+            return total_daily_change
+
+        except Exception as e:
+            self.log_error("Error calculating daily change", portfolio_id=str(portfolio_id), error=str(e))
+            return Decimal("0.00")
+
+    def calculate_daily_change_percent(self, portfolio_id: UUID, daily_change: Decimal) -> Decimal:
+        """
+        Calculate daily change percentage based on yesterday's portfolio value.
+
+        Args:
+            portfolio_id: UUID of the portfolio
+            daily_change: Daily change amount in dollars
+
+        Returns:
+            Daily change percentage
+        """
+        try:
+            if daily_change == 0:
+                return Decimal("0.00")
+
+            # Get current portfolio value
+            portfolio_value = self.calculate_portfolio_value(portfolio_id, use_cache=False)
+            current_value = portfolio_value.total_value
+
+            if current_value == 0:
+                return Decimal("0.00")
+
+            # Calculate yesterday's value: current_value - daily_change
+            yesterday_value = current_value - daily_change
+
+            if yesterday_value <= 0:
+                return Decimal("0.00")
+
+            # Calculate percentage: (daily_change / yesterday_value) * 100
+            daily_change_percent = (daily_change / yesterday_value) * 100
+
+            self.log_debug(
+                "Daily change percentage calculated",
+                portfolio_id=str(portfolio_id),
+                daily_change=str(daily_change),
+                current_value=str(current_value),
+                yesterday_value=str(yesterday_value),
+                percentage=str(daily_change_percent)
+            )
+
+            return daily_change_percent
+
+        except Exception as e:
+            self.log_error("Error calculating daily change percentage", portfolio_id=str(portfolio_id), error=str(e))
+            return Decimal("0.00")
 
     def _cache_portfolio_value(self, portfolio_id: UUID, portfolio_value: PortfolioValue, holdings_count: int) -> bool:
         """

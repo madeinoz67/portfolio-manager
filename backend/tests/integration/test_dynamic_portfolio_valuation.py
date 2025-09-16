@@ -8,7 +8,7 @@ from decimal import Decimal
 from datetime import date, datetime
 from sqlalchemy.orm import Session
 
-from src.models import Portfolio, Stock, Holding, User, RealtimePriceHistory, MarketDataProvider
+from src.models import Portfolio, Stock, Holding, User, RealtimePriceHistory, MarketDataProvider, RealtimeSymbol
 from src.services.dynamic_portfolio_service import DynamicPortfolioService
 
 
@@ -117,40 +117,52 @@ def test_market_data_provider(db: Session):
 
 @pytest.fixture
 def test_cached_prices(db: Session, test_market_data_provider: MarketDataProvider):
-    """Create cached price data for test stocks."""
+    """Create cached price data for test stocks using single master table approach."""
     now = datetime.utcnow()
 
-    prices = [
-        RealtimePriceHistory(
-            symbol="CBA",
-            price=Decimal("55.00"),  # Up from $50 average cost
-            provider_id=test_market_data_provider.id,
-            source_timestamp=now,
-            fetched_at=now
-        ),
-        RealtimePriceHistory(
-            symbol="BHP",
-            price=Decimal("35.00"),  # Up from $30 average cost
-            provider_id=test_market_data_provider.id,
-            source_timestamp=now,
-            fetched_at=now
-        ),
-        RealtimePriceHistory(
-            symbol="WBC",
-            price=Decimal("18.00"),  # Down from $20 average cost
+    # Create price history records
+    price_history_data = [
+        {"symbol": "CBA", "price": Decimal("55.00")},  # Up from $50 average cost
+        {"symbol": "BHP", "price": Decimal("35.00")},  # Up from $30 average cost
+        {"symbol": "WBC", "price": Decimal("18.00")}   # Down from $20 average cost
+    ]
+
+    prices = []
+    master_symbols = []
+
+    for data in price_history_data:
+        # Create history record
+        price_history = RealtimePriceHistory(
+            symbol=data["symbol"],
+            price=data["price"],
             provider_id=test_market_data_provider.id,
             source_timestamp=now,
             fetched_at=now
         )
-    ]
+        db.add(price_history)
+        prices.append(price_history)
 
-    for price in prices:
-        db.add(price)
+    db.commit()
+
+    # Create master symbol records that reference the history
+    for i, data in enumerate(price_history_data):
+        master_symbol = RealtimeSymbol(
+            symbol=data["symbol"],
+            current_price=data["price"],
+            company_name=f"{data['symbol']} Corp",
+            last_updated=now,
+            provider_id=test_market_data_provider.id,
+            latest_history_id=prices[i].id
+        )
+        db.add(master_symbol)
+        master_symbols.append(master_symbol)
 
     db.commit()
 
     for price in prices:
         db.refresh(price)
+    for master in master_symbols:
+        db.refresh(master)
 
     return prices
 

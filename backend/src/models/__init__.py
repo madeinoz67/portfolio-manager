@@ -15,6 +15,7 @@ from .stock import Stock, StockStatus
 from .transaction import Transaction, TransactionType, SourceType
 from .user import User
 from .realtime_price_history import RealtimePriceHistory
+from .realtime_symbol import RealtimeSymbol
 from .portfolio_valuation import PortfolioValuation
 from .market_data_provider import MarketDataProvider
 from .market_data_usage_metrics import MarketDataUsageMetrics
@@ -35,6 +36,7 @@ __all__ = [
     "NewsNotice",
     "NewsNoticeType",
     "RealtimePriceHistory",
+    "RealtimeSymbol",
     "PortfolioValuation",
     "MarketDataProvider",
     "MarketDataUsageMetrics",
