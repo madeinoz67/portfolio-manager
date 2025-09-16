@@ -180,6 +180,7 @@ class RealTimePortfolioService(LoggerMixin):
                 portfolio.daily_change_percent = Decimal("0.00")
 
             portfolio.updated_at = datetime.utcnow()
+            portfolio.price_last_updated = datetime.utcnow()
             self.db.commit()
 
             # Record successful update metrics
@@ -268,6 +269,7 @@ class RealTimePortfolioService(LoggerMixin):
                 portfolio.daily_change_percent = Decimal("0.00")
 
             portfolio.updated_at = datetime.utcnow()
+            portfolio.price_last_updated = datetime.utcnow()
             self.db.commit()
 
             # Record successful bulk update metrics
