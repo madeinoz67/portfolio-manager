@@ -362,8 +362,8 @@ describe('HoldingsDisplay Trend Indicators', () => {
     expect(neutralTrendContainer).toHaveClass('text-gray-600', 'dark:text-gray-400')
   })
 
-  test('should handle missing trend data gracefully', () => {
-    const holdingsWithoutTrends = [{
+  test('should fallback to holding data when stock daily change unavailable', () => {
+    const holdingsWithoutStockData = [{
       ...mockHoldingsWithTrends[0],
       stock: {
         ...mockHoldingsWithTrends[0].stock,
@@ -373,7 +373,7 @@ describe('HoldingsDisplay Trend Indicators', () => {
     }]
 
     mockUseHoldings.mockReturnValue({
-      holdings: holdingsWithoutTrends,
+      holdings: holdingsWithoutStockData,
       loading: false,
       error: null,
       fetchHoldings: jest.fn(),
@@ -388,7 +388,44 @@ describe('HoldingsDisplay Trend Indicators', () => {
 
     render(<HoldingsDisplay portfolioId="portfolio1" />)
 
-    // Should show no trend data indicator
+    // Should use holding unrealized gain/loss data as fallback when stock daily change is unavailable
+    const trendCell = screen.getByLabelText('Upward trend')
+    expect(trendCell).toBeInTheDocument()
+
+    // Should show the unrealized gain/loss values
+    expect(screen.getByText('+$1500.00')).toBeInTheDocument()
+    expect(screen.getByText('(+10.71%)')).toBeInTheDocument()
+  })
+
+  test('should show no trend data when both stock and holding data unavailable', () => {
+    const holdingsWithNoTrendData = [{
+      ...mockHoldingsWithTrends[0],
+      stock: {
+        ...mockHoldingsWithTrends[0].stock,
+        daily_change: undefined,
+        daily_change_percent: undefined
+      },
+      unrealized_gain_loss: 'NaN',
+      unrealized_gain_loss_percent: 'NaN'
+    }]
+
+    mockUseHoldings.mockReturnValue({
+      holdings: holdingsWithNoTrendData,
+      loading: false,
+      error: null,
+      fetchHoldings: jest.fn(),
+      calculatePortfolioSummary: jest.fn(() => ({
+        totalValue: 15500,
+        totalCost: 14000,
+        totalGainLoss: 1500,
+        totalGainLossPercent: 10.71
+      })),
+      clearError: jest.fn()
+    })
+
+    render(<HoldingsDisplay portfolioId="portfolio1" />)
+
+    // Should show no trend data indicator when both sources are unavailable
     const noTrendCell = screen.getByLabelText('No trend data')
     expect(noTrendCell).toBeInTheDocument()
   })
