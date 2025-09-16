@@ -940,6 +940,7 @@ class MarketDataService:
     def _store_comprehensive_price_data(self, symbol: str, price_data: Dict, provider: MarketDataProvider, db_session: Session) -> RealtimePriceHistory:
         """Store comprehensive price data with custom session (for testing)."""
         try:
+            # Create price history record
             price_record = RealtimePriceHistory(
                 symbol=symbol,
                 price=price_data["price"],
@@ -972,6 +973,28 @@ class MarketDataService:
             )
 
             db_session.add(price_record)
+
+            # CRITICAL FIX: Also update stocks table so holdings show fresh timestamps
+            # Find existing stock record or create new one
+            stock = db_session.query(Stock).filter_by(symbol=symbol).first()
+
+            if stock:
+                # Update existing stock with fresh price and timestamp
+                stock.current_price = price_data["price"]
+                stock.last_price_update = price_data["source_timestamp"]
+                logger.info(f"Updated stock table for {symbol}: ${price_data['price']}")
+            else:
+                # Create new stock record for new symbols
+                stock = Stock(
+                    symbol=symbol,
+                    company_name=price_data.get("company_name", f"{symbol} Company"),
+                    exchange="ASX" if symbol.endswith(".AX") else "NASDAQ",  # Simple heuristic
+                    current_price=price_data["price"],
+                    last_price_update=price_data["source_timestamp"]
+                )
+                db_session.add(stock)
+                logger.info(f"Created new stock record for {symbol}: ${price_data['price']}")
+
             db_session.commit()
             logger.info(f"Stored comprehensive price data for {symbol}: ${price_data['price']}")
             return price_record
