@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Portfolio } from '@/types/portfolio'
 import Button from '@/components/ui/Button'
 import PortfolioDeletionModal from './PortfolioDeletionModal'
-import { getRelativeTime } from '@/utils/timezone'
+import { getRelativeTime, formatDisplayDateTime } from '@/utils/timezone'
 
 interface PortfolioCardProps {
   portfolio: Portfolio
@@ -18,6 +18,23 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
   const totalValue = parseFloat(portfolio.total_value || '0')
   const dailyChange = parseFloat(portfolio.daily_change || '0')
   const dailyChangePercent = parseFloat(portfolio.daily_change_percent || '0')
+
+  // Helper function to format portfolio timestamp properly
+  const formatPortfolioTimestamp = (timestamp: string): string => {
+    const relativeTime = getRelativeTime(timestamp)
+    // If getRelativeTime returns an actual date (longer than 7 days),
+    // use formatDisplayDateTime instead for proper timezone handling
+    if (relativeTime.includes(',') || relativeTime.includes('Invalid')) {
+      return formatDisplayDateTime(timestamp, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      })
+    }
+    return relativeTime
+  }
 
   const handleAddTrade = () => {
     router.push(`/portfolios/${portfolio.id}/add-transaction`)
@@ -117,7 +134,7 @@ export default function PortfolioCard({ portfolio, onDeleted }: PortfolioCardPro
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>Last updated: {portfolio.price_last_updated ? getRelativeTime(portfolio.price_last_updated) : getRelativeTime(portfolio.updated_at)}</span>
+            <span>Last updated: {portfolio.price_last_updated ? formatPortfolioTimestamp(portfolio.price_last_updated) : formatPortfolioTimestamp(portfolio.updated_at)}</span>
           </span>
         </div>
 
