@@ -1,23 +1,70 @@
 # Portfolio Manager Documentation
 
-## 📚 Documentation Index
+This repository contains comprehensive documentation for the Portfolio Manager application, a full-stack portfolio management system built with Python FastAPI backend and Next.js TypeScript frontend.
 
-Welcome to the Portfolio Manager documentation. This directory contains comprehensive guides for developers, administrators, and users.
+## Documentation Structure
 
-### 🏗️ System Architecture
-- **[Admin Dashboard](./admin-dashboard.md)** - Complete admin dashboard features and functionality
-- **[Portfolio Monitoring](./portfolio-monitoring.md)** - Real-time portfolio update monitoring system
-- **[Metric Monitoring System](./metric-monitoring-system.md)** - System-specific metrics tracking and API usage monitoring
-- **[API Reference](./api-reference.md)** - Comprehensive API endpoint documentation
+The documentation is organized into the following directories:
 
-### 💰 Pricing & Market Data Systems
-- **[Pricing Update Mechanisms](./pricing-update-mechanisms.md)** - Complete market data integration architecture
-- **[Database Schema: Pricing](./database-schema-pricing.md)** - Detailed pricing database schema and relationships
-- **[Troubleshooting Pricing Issues](./troubleshooting-pricing-issues.md)** - Practical guide for resolving pricing problems
+### 📁 [Architecture](architecture/)
+Technical architecture documentation, design decisions, and system implementation details:
+- Database schema and design patterns
+- System component architecture
+- Market data fetching and processing
+- Performance optimizations and troubleshooting
 
-### 🚀 Quick Start
+### 📁 [User](user/)
+User-facing documentation, guides, and API references:
+- Admin dashboard guides
+- API documentation
+- User role and permission guides
+- Portfolio monitoring and management
 
-#### For Developers
+### 📁 [Release Notes](release_notes/)
+Version history, feature releases, and changelog:
+- Current version status
+- Recent fixes and improvements
+- Upcoming releases and roadmap
+
+### 📁 [Working Notes](working-notes/)
+Development notes and temporary documentation (not for end users)
+
+## Quick Navigation
+
+| Category | Key Documents |
+|----------|---------------|
+| **Getting Started** | [User Guide](user/README.md), [API Reference](user/api-reference.md) |
+| **Admin Features** | [Admin Dashboard](user/admin-dashboard.md), [Audit Guide](user/admin-audit-guide.md) |
+| **Architecture** | [Database Schema](architecture/database-schema-pricing.md), [System Design](architecture/single-master-symbol-table-architecture.md) |
+| **Development** | [Architecture Overview](architecture/README.md), [Troubleshooting](architecture/troubleshooting-pricing-issues.md) |
+
+## Key Features
+
+### ✅ Currently Implemented
+- **Portfolio Management**: Multi-portfolio tracking with real-time valuations
+- **Holdings Management**: Stock tracking with cost basis and P&L calculations
+- **Admin Dashboard**: System administration with live activity monitoring
+- **User Management**: Role-based access control (Admin/User)
+- **Audit System**: Comprehensive activity logging and audit trails
+- **Real-time Updates**: Server-Sent Events for live market data
+
+### 🚧 In Development
+- **Market Data Integration**: 15-minute interval updates with Alpha Vantage API
+- **Advanced Analytics**: Enhanced portfolio performance metrics
+- **Mobile Responsiveness**: Improved mobile user experience
+
+## Technology Stack
+
+- **Backend**: Python 3.12, FastAPI 0.116.1, SQLAlchemy 2.0.43, PostgreSQL
+- **Frontend**: Next.js 15.5.3, React 19.1.0, TypeScript, Tailwind CSS
+- **Real-time**: Server-Sent Events (SSE)
+- **Authentication**: JWT with role-based access control
+- **Testing**: pytest (backend), Jest + React Testing Library (frontend)
+
+## Quick Start
+
+### 🚀 For Developers
+
 1. **Backend Setup:**
    ```bash
    cd backend
@@ -38,7 +85,8 @@ Welcome to the Portfolio Manager documentation. This directory contains comprehe
    - Backend API: http://localhost:8001
    - Admin Dashboard: http://localhost:3000/admin (requires admin user)
 
-#### For Administrators
+### 👥 For Administrators
+
 1. **Create Admin User:**
    ```sql
    UPDATE users SET role = 'ADMIN' WHERE email = 'admin@example.com';
@@ -50,182 +98,22 @@ Welcome to the Portfolio Manager documentation. This directory contains comprehe
    - Market Data: http://localhost:3000/admin/market-data
    - Portfolio Metrics: http://localhost:3000/admin/portfolio-metrics
 
-### 📖 Documentation Structure
+## Getting Started
 
-```
-docs/
-├── README.md                       # This file - documentation index
-├── admin-dashboard.md              # Admin dashboard comprehensive guide
-├── portfolio-monitoring.md         # Portfolio monitoring system details
-├── metric-monitoring-system.md     # System-specific metrics tracking and API usage
-├── api-reference.md               # Complete API endpoint reference
-├── pricing-update-mechanisms.md   # Market data integration architecture
-├── database-schema-pricing.md     # Pricing database schema and relationships
-└── troubleshooting-pricing-issues.md # Pricing problems and solutions
-```
+1. **New Users**: Start with the [User Documentation](user/README.md)
+2. **Developers**: Review the [Architecture Documentation](architecture/README.md) and [API Reference](user/api-reference.md)
+3. **System Admins**: Check the [Admin Dashboard Guide](user/admin-dashboard.md)
 
-### 🔧 Key Features Documented
+## Development Status
 
-#### Admin Dashboard ([Full Guide](./admin-dashboard.md))
-- **User Management**: Role-based access control, user administration
-- **System Monitoring**: Real-time health metrics, performance tracking
-- **Market Data**: Provider management, API usage statistics
-- **Audit Logging**: Comprehensive activity tracking and compliance
+The application is in active development:
+- **Feature 003**: Admin Dashboard ✅ COMPLETE
+- **Feature 002**: Market Data Integration 🚧 IN PLANNING
+- **Feature 001**: Portfolio Performance Dashboard ✅ COMPLETE
 
-#### Portfolio Monitoring ([Full Guide](./portfolio-monitoring.md))
-- **Real-time Metrics**: Automatic collection on portfolio updates
-- **Performance Analytics**: Success rates, response times, queue health
-- **Storm Protection**: Update coalescing and bulk operation tracking
-- **Monitoring Dashboard**: Live metrics with 10-second auto-refresh
+## Support
 
-#### Metric Monitoring System ([Full Guide](./metric-monitoring-system.md))
-- **System-Specific Tables**: Dedicated metrics tables per system (market_data_usage_metrics)
-- **API Usage Tracking**: Comprehensive logging of all market data provider calls
-- **Performance Monitoring**: Response times, rate limits, and error tracking
-- **Admin Analytics**: Real-time metrics visibility and cost estimation
-
-#### API Reference ([Full Guide](./api-reference.md))
-- **Authentication**: JWT-based auth with role-based access
-- **Portfolio Management**: CRUD operations for portfolios and holdings
-- **Market Data**: Real-time price fetching and provider status
-- **Admin Endpoints**: System administration and monitoring APIs
-
-#### Pricing & Market Data Systems ([Full Guide](./pricing-update-mechanisms.md))
-- **Dual-Table Synchronization**: Consistent pricing across `stocks` and `realtime_price_history` tables
-- **Provider Management**: Yahoo Finance, Alpha Vantage integration with failover
-- **Real-Time Updates**: 15-minute scheduled updates with WebSocket streaming (planned)
-- **Data Consistency**: Comprehensive TDD testing and timestamp handling
-- **Performance Optimization**: Indexed queries, caching, and batch processing
-
-### 🎯 Key Use Cases
-
-#### For System Administrators
-- **Monitor System Health**: Track API response times, error rates, and system status
-- **Manage Users**: View, modify, and control user access and roles
-- **Analyze Performance**: Deep dive into portfolio update performance and bottlenecks
-- **Troubleshoot Issues**: Comprehensive logging and error tracking
-
-#### For Developers
-- **API Integration**: Complete endpoint reference with request/response examples
-- **Testing**: Test data and example scenarios for development
-- **Architecture Understanding**: System design and component interactions
-- **Monitoring Setup**: Metrics collection and alerting configuration
-
-#### For Operations Teams
-- **Deployment**: Configuration and environment setup
-- **Monitoring**: External monitoring integration (Prometheus, Grafana)
-- **Alerting**: Performance thresholds and notification setup
-- **Maintenance**: Database migrations and system updates
-
-### 🔍 Advanced Topics
-
-#### Monitoring & Alerting
-- **Portfolio Update Performance**: Track success rates, response times, and queue health
-- **Market Data Reliability**: Monitor provider status and API performance
-- **System Health**: Database connectivity, memory usage, and error tracking
-- **User Activity**: Authentication events, portfolio operations, and admin actions
-
-#### Security & Compliance
-- **Role-Based Access**: Admin vs. user permissions and capabilities
-- **Audit Trails**: Complete activity logging for compliance requirements
-- **Data Protection**: Secure handling of financial and personal data
-- **API Security**: JWT authentication and rate limiting
-
-#### Performance Optimization
-- **Database Indexing**: Optimized queries for portfolio calculations
-- **Caching Strategies**: Redis integration for market data and portfolio values
-- **Background Jobs**: Efficient processing of market data updates
-- **Queue Management**: Handling high-volume portfolio update scenarios
-
-### 🛠️ Development Workflow
-
-#### Testing
-```bash
-# Backend tests
-cd backend
-uv run pytest tests/integration/ -v
-uv run pytest tests/unit/ -v
-
-# Frontend tests
-cd frontend
-npm test
-npm run test:e2e
-```
-
-#### Database Management
-```bash
-# Create new migration
-alembic revision --autogenerate -m "Description"
-
-# Apply migrations
-alembic upgrade head
-
-# Check current version
-alembic current
-```
-
-#### Monitoring Setup
-```bash
-# View portfolio metrics
-curl -H "Authorization: Bearer <admin_token>" \
-  http://localhost:8001/api/v1/admin/portfolio-updates/stats/24h
-
-# Export Prometheus metrics
-curl -H "Authorization: Bearer <admin_token>" \
-  http://localhost:8001/api/v1/admin/portfolio-updates/metrics/export
-```
-
-### 📞 Support & Troubleshooting
-
-#### Common Issues
-1. **Admin Access Denied**: Verify user role in database and JWT token validity
-2. **Missing Metrics Data**: Check database migrations and background services
-3. **API Performance**: Review database query performance and system resources
-4. **Market Data Issues**: Verify provider configuration and API key validity
-
-#### Debug Commands
-```bash
-# Check database connectivity
-alembic current
-
-# Verify admin users
-echo "SELECT email, role FROM users WHERE role = 'ADMIN';" | sqlite3 portfolio.db
-
-# Check recent errors
-tail -f logs/application.log | grep ERROR
-
-# Test API endpoints
-curl -H "Authorization: Bearer <token>" http://localhost:8001/api/v1/auth/me
-```
-
-#### Getting Help
-- **Issues**: Check logs and error messages first
-- **Performance**: Use admin dashboard monitoring tools
-- **API Questions**: Reference the complete API documentation
-- **Feature Requests**: Review architecture documentation for extensibility
-
-### 🔄 Updates & Maintenance
-
-This documentation is maintained alongside the codebase. Key areas that receive regular updates:
-
-- **API Reference**: Updated with new endpoints and schema changes
-- **Admin Features**: Enhanced with new monitoring and management capabilities
-- **Performance Metrics**: Expanded monitoring and alerting features
-- **Security**: Updated authentication and authorization procedures
-
-### 📈 Roadmap
-
-#### Planned Documentation Additions
-- **Deployment Guide**: Production deployment and scaling
-- **Integration Guide**: Third-party service integrations
-- **Performance Tuning**: Advanced optimization techniques
-- **Backup & Recovery**: Data protection and disaster recovery
-
-#### Feature Documentation Pipeline
-- Real-time streaming updates (SSE)
-- Advanced analytics and reporting
-- Multi-tenant architecture
-- External API integrations
+For technical issues and troubleshooting, consult the [Architecture Documentation](architecture/README.md) which contains detailed troubleshooting guides and system information.
 
 ---
 
