@@ -199,6 +199,42 @@ describe('HoldingsDisplay Last Updated Column', () => {
     // Verify the converted time is displayed
     expect(screen.getByText('2 hours ago (local)')).toBeInTheDocument()
   })
+
+  test('Last Updated column correctly displays relative time', () => {
+    // Mock getRelativeTime to test the integration properly
+    const mockGetRelativeTime = require('@/utils/timezone').getRelativeTime as jest.Mock
+    mockGetRelativeTime.mockReturnValue('2 minutes ago')
+
+    const holdingsWithRecentTime = [{
+      ...mockHoldings[0],
+      stock: {
+        ...mockHoldings[0].stock,
+        last_price_update: '2025-09-16T04:13:00Z' // A specific timestamp for testing
+      }
+    }]
+
+    mockUseHoldings.mockReturnValue({
+      holdings: holdingsWithRecentTime,
+      loading: false,
+      error: null,
+      fetchHoldings: jest.fn(),
+      calculatePortfolioSummary: jest.fn(() => ({
+        totalValue: 15000,
+        totalCost: 14000,
+        totalGainLoss: 1000,
+        totalGainLossPercent: 7.14
+      })),
+      clearError: jest.fn()
+    })
+
+    render(<HoldingsDisplay portfolioId="portfolio1" />)
+
+    // Verify getRelativeTime was called with the UTC timestamp
+    expect(mockGetRelativeTime).toHaveBeenCalledWith('2025-09-16T04:13:00Z')
+
+    // Should show the mocked relative time
+    expect(screen.getByText('2 minutes ago')).toBeInTheDocument()
+  })
 })
 
 /**
@@ -332,34 +368,35 @@ describe('HoldingsDisplay Trend Indicators', () => {
     expect(trendCell).toBeInTheDocument()
   })
 
-  test('should display change amount and percentage in trend column', () => {
+  test('should display only trend arrows without redundant price data', () => {
     render(<HoldingsDisplay portfolioId="portfolio1" />)
 
-    // Check AAPL positive change display
-    expect(screen.getByText('+$5.00')).toBeInTheDocument()
-    expect(screen.getByText('(+3.33%)')).toBeInTheDocument()
+    // Check that trend icons are displayed
+    expect(screen.getByLabelText('Upward trend')).toBeInTheDocument()
+    expect(screen.getByLabelText('Downward trend')).toBeInTheDocument()
+    expect(screen.getByLabelText('Neutral trend')).toBeInTheDocument()
 
-    // Check MSFT negative change display
-    expect(screen.getByText('-$2.50')).toBeInTheDocument()
-    expect(screen.getByText('(-0.88%)')).toBeInTheDocument()
-
-    // Check GOOGL neutral change display
-    expect(screen.getByText('$0.00')).toBeInTheDocument()
-    expect(screen.getByText('(0.00%)')).toBeInTheDocument()
+    // Check that price data is NOT displayed in trend column (since it's redundant with other columns)
+    expect(screen.queryByText('+$5.00')).not.toBeInTheDocument()
+    expect(screen.queryByText('(+3.33%)')).not.toBeInTheDocument()
+    expect(screen.queryByText('-$2.50')).not.toBeInTheDocument()
+    expect(screen.queryByText('(-0.88%)')).not.toBeInTheDocument()
+    expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
+    expect(screen.queryByText('(0.00%)')).not.toBeInTheDocument()
   })
 
   test('should apply correct color styling for trend indicators', () => {
     render(<HoldingsDisplay portfolioId="portfolio1" />)
 
-    // Find trend cells by their content - look for the parent container with color classes
-    const positiveTrendContainer = screen.getByText('+$5.00').closest('.text-green-600')
-    const negativeTrendContainer = screen.getByText('-$2.50').closest('.text-red-600')
-    const neutralTrendContainer = screen.getByText('$0.00').closest('.text-gray-600')
+    // Check that trend icons have correct color styling through their SVG elements
+    const positiveTrendIcon = screen.getByLabelText('Upward trend')
+    const negativeTrendIcon = screen.getByLabelText('Downward trend')
+    const neutralTrendIcon = screen.getByLabelText('Neutral trend')
 
-    // Check color classes are present on the container
-    expect(positiveTrendContainer).toHaveClass('text-green-600', 'dark:text-green-400')
-    expect(negativeTrendContainer).toHaveClass('text-red-600', 'dark:text-red-400')
-    expect(neutralTrendContainer).toHaveClass('text-gray-600', 'dark:text-gray-400')
+    // Verify the icons have the correct background colors
+    expect(positiveTrendIcon).toHaveClass('bg-green-100', 'dark:bg-green-900')
+    expect(negativeTrendIcon).toHaveClass('bg-red-100', 'dark:bg-red-900')
+    expect(neutralTrendIcon).toHaveClass('bg-gray-100', 'dark:bg-gray-700')
   })
 
   test('should fallback to holding data when stock daily change unavailable', () => {
@@ -392,9 +429,7 @@ describe('HoldingsDisplay Trend Indicators', () => {
     const trendCell = screen.getByLabelText('Upward trend')
     expect(trendCell).toBeInTheDocument()
 
-    // Should show the unrealized gain/loss values
-    expect(screen.getByText('+$1500.00')).toBeInTheDocument()
-    expect(screen.getByText('(+10.71%)')).toBeInTheDocument()
+    // Should show only the trend icon without price/percentage text (which is redundant)
   })
 
   test('should show no trend data when both stock and holding data unavailable', () => {

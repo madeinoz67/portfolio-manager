@@ -282,16 +282,8 @@ export default function HoldingsDisplay({ portfolioId }: HoldingsDisplayProps) {
                         const trendColor = getTrendColor(trendData?.trend || null)
 
                         return (
-                          <div className={`flex flex-col items-center space-y-1 ${trendColor}`}>
-                            <div className="flex justify-center items-center">
-                              {getTrendIcon(trendData?.trend || null)}
-                            </div>
-                            {trendData && (
-                              <div className="flex flex-col items-center text-xs font-medium">
-                                <span>{formatTrendChange(trendData.change)}</span>
-                                <span>{formatTrendPercent(trendData.change_percent)}</span>
-                              </div>
-                            )}
+                          <div className="flex justify-center items-center">
+                            {getTrendIcon(trendData?.trend || null)}
                           </div>
                         )
                       })()}
