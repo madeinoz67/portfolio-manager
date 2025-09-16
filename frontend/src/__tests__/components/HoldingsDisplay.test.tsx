@@ -162,4 +162,41 @@ describe('HoldingsDisplay Last Updated Column', () => {
     const lastUpdatedCell = dataCells?.[7]
     expect(lastUpdatedCell).toHaveTextContent('5 minutes ago')
   })
+
+  test('Last Updated column properly converts UTC to local time', () => {
+    // Mock getRelativeTime to verify it's called with UTC timestamp
+    const mockGetRelativeTime = require('@/utils/timezone').getRelativeTime as jest.Mock
+    mockGetRelativeTime.mockReturnValue('2 hours ago (local)')
+
+    // Holdings with UTC timestamp
+    const holdingsWithUTCTime = [{
+      ...mockHoldings[0],
+      stock: {
+        ...mockHoldings[0].stock,
+        last_price_update: '2025-09-16T10:00:00Z' // UTC timestamp
+      }
+    }]
+
+    mockUseHoldings.mockReturnValue({
+      holdings: holdingsWithUTCTime,
+      loading: false,
+      error: null,
+      fetchHoldings: jest.fn(),
+      calculatePortfolioSummary: jest.fn(() => ({
+        totalValue: 15000,
+        totalCost: 14000,
+        totalGainLoss: 1000,
+        totalGainLossPercent: 7.14
+      })),
+      clearError: jest.fn()
+    })
+
+    render(<HoldingsDisplay portfolioId="portfolio1" />)
+
+    // Verify getRelativeTime was called with the UTC timestamp
+    expect(mockGetRelativeTime).toHaveBeenCalledWith('2025-09-16T10:00:00Z')
+
+    // Verify the converted time is displayed
+    expect(screen.getByText('2 hours ago (local)')).toBeInTheDocument()
+  })
 })
