@@ -230,6 +230,9 @@ class MarketDataService:
                 if (provider.name == "yfinance" and len(remaining_symbols) > 1) or \
                    (provider.name == "alpha_vantage" and len(remaining_symbols) > 1 and provider.api_key):
 
+                    # Initialize bulk_results
+                    bulk_results = {}
+
                     # Determine which bulk method to use
                     if provider.name == "yfinance":
                         logger.info(f"Using bulk yfinance fetch for {len(remaining_symbols)} symbols")
