@@ -5,6 +5,7 @@ This directory contains development notes and temporary documentation used durin
 ## Current Working Notes
 
 - [Single Master Symbol Implementation](single-master-symbol-implementation.md) - Complete implementation notes for the single master symbol table architecture
+- [Bulk Fetch and Scheduler Fixes](bulk-fetch-scheduler-fixes.md) - Fixes for data provider symbol batching issues (2025-09-17)
 
 ## Purpose
 
