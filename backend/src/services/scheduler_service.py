@@ -519,16 +519,13 @@ class MarketDataSchedulerService:
             self.db.commit()
             self._current_execution = execution
 
-            # Get all unique stock symbols from portfolio holdings
-            unique_symbols = (
-                self.db.query(Stock.symbol)
-                .join(Holding, Stock.id == Holding.stock_id)
-                .distinct()
-                .all()
+            # Use actively monitored symbols (includes both portfolio holdings and recent price requests)
+            market_service = MarketDataService(self.db)
+            symbols_to_fetch = market_service.get_actively_monitored_symbols(
+                provider_bulk_limit=50,  # Allow more symbols for bulk operations
+                minutes_lookback=60      # Consider symbols requested in last hour
             )
-
-            symbols_to_fetch = [symbol[0] for symbol in unique_symbols]
-            logger.info(f"Scheduler executing market data fetch for {len(symbols_to_fetch)} symbols: {symbols_to_fetch}")
+            logger.info(f"Scheduler executing market data fetch for {len(symbols_to_fetch)} actively monitored symbols: {symbols_to_fetch}")
 
             if not symbols_to_fetch:
                 logger.warning("No portfolio holdings found - no symbols to fetch")
@@ -543,8 +540,7 @@ class MarketDataSchedulerService:
                     "message": "No symbols to fetch"
                 }
 
-            # Initialize market data service
-            market_service = MarketDataService(self.db)
+            # Market data service already initialized above for symbol fetching
 
             try:
                 # Use bulk fetch for optimal API calls - provider adapters handle bulk vs single
