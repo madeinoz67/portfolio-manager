@@ -1,18 +1,23 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { usePortfolios } from '@/hooks/usePortfolios'
+import { usePortfolioView } from '@/hooks/usePortfolioView'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import ErrorMessage from '@/components/ui/ErrorMessage'
 import CreatePortfolioForm from '@/components/Portfolio/CreatePortfolioForm'
 import PortfolioCard from '@/components/Portfolio/PortfolioCard'
+import PortfolioTable from '@/components/Portfolio/PortfolioTable'
+import ViewToggle from '@/components/Portfolio/ViewToggle'
 import { PortfolioGridSkeleton } from '@/components/ui/PortfolioCardSkeleton'
 import { useToast } from '@/components/ui/Toast'
 import Navigation from '@/components/layout/Navigation'
 import Button from '@/components/ui/Button'
+import { Portfolio } from '@/types/portfolio'
 
 export default function PortfoliosPage() {
   const { portfolios, loading, error, createPortfolio, fetchPortfolios } = usePortfolios()
+  const { viewMode, tableColumns, setViewMode } = usePortfolioView()
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'value' | 'change' | 'created'>('name')
@@ -35,6 +40,41 @@ export default function PortfoliosPage() {
     addToast('Portfolio deleted successfully', 'success')
     fetchPortfolios()
   }
+
+  // Portfolio table event handlers
+  const handlePortfolioClick = useCallback((portfolio: Portfolio) => {
+    // Navigate to portfolio details
+    window.location.href = `/portfolios/${portfolio.id}`
+  }, [])
+
+  const handleTableSort = useCallback((column: keyof Portfolio) => {
+    // Map table column keys to existing sort options
+    const columnToSortBy: Record<keyof Portfolio, 'name' | 'value' | 'change' | 'created'> = {
+      name: 'name',
+      total_value: 'value',
+      daily_change: 'change',
+      created_at: 'created',
+      // Add other mappings as needed
+      id: 'name', // fallback
+      description: 'name', // fallback
+      daily_change_percent: 'change',
+      unrealized_gain_loss: 'change',
+      unrealized_gain_loss_percent: 'change',
+      updated_at: 'created',
+      price_last_updated: 'created'
+    }
+
+    const newSortBy = columnToSortBy[column] || 'name'
+
+    if (sortBy === newSortBy) {
+      // Toggle sort order if same column
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      // New column, default to ascending
+      setSortBy(newSortBy)
+      setSortOrder('asc')
+    }
+  }, [sortBy, sortOrder])
 
   // Calculate portfolio statistics
   const stats = useMemo(() => {
@@ -145,18 +185,28 @@ export default function PortfoliosPage() {
                 </div>
               </div>
             </div>
-            
-            <Button
-              onClick={() => setShowCreateForm(true)}
-              size="lg"
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              }
-            >
-              New Portfolio
-            </Button>
+
+            <div className="flex flex-col sm:flex-row gap-4">
+              {/* View Toggle */}
+              <ViewToggle
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                disabled={loading}
+                className="self-start"
+              />
+
+              <Button
+                onClick={() => setShowCreateForm(true)}
+                size="lg"
+                icon={
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                }
+              >
+                New Portfolio
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -257,6 +307,21 @@ export default function PortfoliosPage() {
               )}
             </div>
           </div>
+        ) : viewMode === 'table' ? (
+          <PortfolioTable
+            portfolios={filteredAndSortedPortfolios}
+            columns={tableColumns}
+            loading={loading}
+            sortBy={sortBy === 'name' ? 'name' : sortBy === 'value' ? 'total_value' : sortBy === 'change' ? 'daily_change' : 'created_at'}
+            sortOrder={sortOrder}
+            onSort={handleTableSort}
+            onPortfolioClick={handlePortfolioClick}
+            onPortfolioDelete={async (portfolio) => {
+              handlePortfolioDeleted()
+            }}
+            showActions={true}
+            className="w-full"
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredAndSortedPortfolios.map((portfolio) => (
@@ -264,6 +329,7 @@ export default function PortfoliosPage() {
                 key={portfolio.id}
                 portfolio={portfolio}
                 onDeleted={handlePortfolioDeleted}
+                data-testid="portfolio-card"
               />
             ))}
           </div>
