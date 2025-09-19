@@ -1,50 +1,82 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report:
+Version change: Template → 1.0.0
+Modified principles: All new (initial constitution)
+Added sections: All core principles and governance established
+Removed sections: None
+Templates requiring updates:
+  ✅ .specify/templates/plan-template.md - reviewed for alignment
+  ✅ .specify/templates/spec-template.md - reviewed for alignment
+  ✅ .specify/templates/tasks-template.md - reviewed for alignment
+Follow-up TODOs: None
+-->
+
+# Portfolio Manager Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Test-First Development (NON-NEGOTIABLE)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+TDD MUST be followed for all development: Tests written → Tests fail → Implementation → Tests pass. Every feature starts with failing tests. Red-Green-Refactor cycle is mandatory. All tests MUST pass before code review or merge.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+*Rationale: Portfolio management involves financial calculations where bugs can cause monetary loss. Test-first ensures reliability and prevents regression in critical financial logic.*
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Financial Data Integrity
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+All financial calculations MUST use decimal precision (never floats). Database schema changes MUST preserve existing data through Alembic migrations. No data corruption or loss is acceptable during migrations. Store facts, calculate opinions.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+*Rationale: Financial applications require precise decimal arithmetic. Loss of user portfolio data or calculation errors undermine trust and violate fiduciary responsibility.*
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Database Schema Safety
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+ALL database changes MUST use Alembic migrations. Migrations MUST migrate existing data safely. When column changes cause conflicts, use rename-create-migrate-validate-remove pattern. Single source of truth for each data type.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+*Rationale: Portfolio data is irreplaceable user asset information. Schema changes must be reversible and data-preserving to maintain system reliability.*
+
+### IV. Market Data Single Source
+
+One master table for each data type (realtime_symbols for current prices). No duplicate data tables. APIs MUST query the authoritative source. Historical data separate from current data tables.
+
+*Rationale: Multiple price sources create inconsistency and staleness issues. Single source of truth ensures data consistency and simplifies debugging.*
+
+### V. Security and Access Control
+
+Role-based access control MUST be enforced at API level. JWT authentication required for all protected endpoints. Admin functions isolated with separate validation. Audit trails for security-sensitive operations.
+
+*Rationale: Portfolio data is sensitive financial information requiring proper access controls and audit capabilities for compliance and security.*
+
+## Development Standards
+
+### Code Quality Requirements
+
+All code MUST pass linting and type checking before merge. Frontend date/time handling MUST convert UTC backend data to local timezone for display. Error handling MUST be graceful with user-friendly messages.
+
+### Documentation Standards
+
+All architectural decisions MUST be documented in /docs/architecture. API changes MUST update OpenAPI specifications. Breaking changes MUST include migration guides.
+
+## Testing Requirements
+
+### Coverage Requirements
+
+Contract tests MUST exist for all API endpoints. Integration tests MUST cover end-to-end user workflows. Performance tests MUST validate financial calculation speed requirements.
+
+### Test Environment
+
+Tests MUST use isolated database instances. Market data tests MUST use mock data to avoid external API dependencies. All tests MUST be deterministic and repeatable.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+### Amendment Process
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Constitution changes require documentation of impact and rationale. All dependent templates MUST be updated for consistency. Version increments follow semantic versioning: MAJOR for incompatible changes, MINOR for additions, PATCH for clarifications.
+
+### Compliance Review
+
+All pull requests MUST verify constitutional compliance. Complexity deviations MUST be justified with rationale. CLAUDE.md provides runtime development guidance supplementing this constitution.
+
+### Quality Gates
+
+Database migrations MUST be tested in staging environment. Financial calculations MUST be verified against known test cases. Security changes MUST include threat model review.
+
+**Version**: 1.0.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-19

@@ -47,7 +47,11 @@
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+**I. Test-First Development**: TDD approach defined? Tests written before implementation?
+**II. Financial Data Integrity**: Decimal precision for financial calculations? Safe data migration plan?
+**III. Database Schema Safety**: Alembic migrations planned? Data preservation strategy defined?
+**IV. Market Data Single Source**: Using authoritative data sources? No duplicate data tables?
+**V. Security and Access Control**: Role-based access verified? JWT authentication in place?
 
 ## Project Structure
 
@@ -208,4 +212,4 @@ ios/ or android/
 - [ ] Complexity deviations documented
 
 ---
-*Based on Constitution v2.1.1 - See `/memory/constitution.md`*
+*Based on Constitution v1.0.0 - See `/memory/constitution.md`*
