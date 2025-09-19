@@ -19,6 +19,11 @@ from .portfolio_valuation import PortfolioValuation
 from .market_data_provider import MarketDataProvider
 from .market_data_usage_metrics import MarketDataUsageMetrics
 from .audit_log import AuditLog
+from .provider_configuration import ProviderConfiguration
+from .provider_metrics import ProviderMetrics
+from .cost_tracking_record import CostTrackingRecord
+from .adapter_registry import AdapterRegistry
+from .adapter_health_check import AdapterHealthCheck
 
 __all__ = [
     "Base",
@@ -39,4 +44,9 @@ __all__ = [
     "MarketDataProvider",
     "MarketDataUsageMetrics",
     "AuditLog",
+    "ProviderConfiguration",
+    "ProviderMetrics",
+    "CostTrackingRecord",
+    "AdapterRegistry",
+    "AdapterHealthCheck",
 ]
