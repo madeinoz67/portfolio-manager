@@ -22,9 +22,9 @@ import {
   BarChart3,
   RefreshCw,
 } from 'lucide-react';
-import AdapterConfigForm from '@/components/Admin/Adapters/AdapterConfigForm';
-import AdapterMetricsView from '@/components/Admin/Adapters/AdapterMetricsView';
-import AdapterHealthStatus from '@/components/Admin/Adapters/AdapterHealthStatus';
+import AdapterConfigForm from '@/components/admin/Adapters/AdapterConfigForm';
+import AdapterMetricsView from '@/components/admin/Adapters/AdapterMetricsView';
+import AdapterHealthStatus from '@/components/admin/Adapters/AdapterHealthStatus';
 import { AdapterConfiguration } from '@/types/adapters';
 import { formatDistanceToNow } from 'date-fns';
 

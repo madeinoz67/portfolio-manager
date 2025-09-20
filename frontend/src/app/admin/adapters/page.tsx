@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import AdapterList from '@/components/Admin/Adapters/AdapterList';
-import AdapterConfigForm from '@/components/Admin/Adapters/AdapterConfigForm';
-import AdapterMetricsView from '@/components/Admin/Adapters/AdapterMetricsView';
-import AdapterHealthStatus from '@/components/Admin/Adapters/AdapterHealthStatus';
+import AdapterList from '@/components/admin/Adapters/AdapterList';
+import AdapterConfigForm from '@/components/admin/Adapters/AdapterConfigForm';
+import AdapterMetricsView from '@/components/admin/Adapters/AdapterMetricsView';
+import AdapterHealthStatus from '@/components/admin/Adapters/AdapterHealthStatus';
 import { AdapterConfiguration } from '@/types/adapters';
 
 type ViewMode = 'list' | 'create' | 'edit' | 'metrics' | 'health';
