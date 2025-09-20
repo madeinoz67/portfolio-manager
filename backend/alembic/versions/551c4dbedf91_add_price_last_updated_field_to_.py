@@ -1,7 +1,7 @@
 """Add price_last_updated field to Portfolio model
 
 Revision ID: 551c4dbedf91
-Revises: 89662fc34fab
+Revises: 88ff55aea2fa
 Create Date: 2025-09-16 11:01:15.018006
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '551c4dbedf91'
-down_revision = '89662fc34fab'
+down_revision = '88ff55aea2fa'
 branch_labels = None
 depends_on = None
 
