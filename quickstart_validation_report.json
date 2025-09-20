@@ -1,0 +1,83 @@
+{
+  "validation_timestamp": "2025-09-19T14:04:52.502436+00:00",
+  "overall_success_rate": 37.5,
+  "scenarios_passed": 3,
+  "scenarios_total": 8,
+  "results": [
+    {
+      "scenario": "Provider Registry",
+      "passed": false,
+      "message": "Insufficient providers registered",
+      "details": {
+        "expected": [
+          "alpha_vantage",
+          "yahoo_finance"
+        ],
+        "found": []
+      }
+    },
+    {
+      "scenario": "Adapter Configuration",
+      "passed": false,
+      "message": "Configuration validation error: 'ConfigurationManager' object has no attribute 'validate_configuration_schema'",
+      "details": null
+    },
+    {
+      "scenario": "Metrics Collection",
+      "passed": false,
+      "message": "Metrics validation error: ProviderMetricsCollector.__init__() got an unexpected keyword argument 'registry'",
+      "details": null
+    },
+    {
+      "scenario": "Health Monitoring",
+      "passed": true,
+      "message": "Health monitoring system operational",
+      "details": {
+        "health_checker_initialized": true,
+        "check_capability": true,
+        "database_integration": true
+      }
+    },
+    {
+      "scenario": "Error Handling",
+      "passed": false,
+      "message": "Error handling import failed: cannot import name 'AdapterConnectionError' from 'src.services.adapters.base_adapter' (/Users/seaton/Documents/src/portfolio-manager/backend/src/services/adapters/base_adapter.py)",
+      "details": null
+    },
+    {
+      "scenario": "Performance",
+      "passed": true,
+      "message": "Performance requirements met (0.00ms)",
+      "details": {
+        "registry_response_time": "0.00ms",
+        "provider_count": 0,
+        "target": "<100ms"
+      }
+    },
+    {
+      "scenario": "Security",
+      "passed": true,
+      "message": "Security framework complete",
+      "details": {
+        "components_verified": [
+          "credential_encryption",
+          "admin_authentication"
+        ],
+        "encryption": "available",
+        "authentication": "available"
+      }
+    },
+    {
+      "scenario": "Functional Requirements",
+      "passed": false,
+      "message": "Only 3/5 requirements met",
+      "details": {
+        "standardized_interface": false,
+        "multiple_providers": false,
+        "metrics_framework": true,
+        "extensible_architecture": true,
+        "admin_dashboard_ready": true
+      }
+    }
+  ]
+}

@@ -52,6 +52,7 @@
 **III. Database Schema Safety**: Alembic migrations planned? Data preservation strategy defined?
 **IV. Market Data Single Source**: Using authoritative data sources? No duplicate data tables?
 **V. Security and Access Control**: Role-based access verified? JWT authentication in place?
+**VI. Continuous Integration**: Frequent commits planned? Working code push strategy defined?
 
 ## Project Structure
 

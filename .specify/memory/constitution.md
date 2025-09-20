@@ -1,13 +1,13 @@
 <!--
 Sync Impact Report:
-Version change: Template → 1.0.0
-Modified principles: All new (initial constitution)
-Added sections: All core principles and governance established
+Version change: 1.0.0 → 1.1.0
+Modified principles: None
+Added sections: VI. Continuous Integration (new principle)
 Removed sections: None
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md - reviewed for alignment
-  ✅ .specify/templates/spec-template.md - reviewed for alignment
-  ✅ .specify/templates/tasks-template.md - reviewed for alignment
+  ✅ .specify/templates/plan-template.md - updated with new principle check
+  ✅ .specify/templates/spec-template.md - reviewed, no changes needed
+  ✅ .specify/templates/tasks-template.md - reviewed, no changes needed
 Follow-up TODOs: None
 -->
 
@@ -45,6 +45,12 @@ Role-based access control MUST be enforced at API level. JWT authentication requ
 
 *Rationale: Portfolio data is sensitive financial information requiring proper access controls and audit capabilities for compliance and security.*
 
+### VI. Continuous Integration
+
+Working code MUST be committed and pushed frequently. Commits MUST represent functional, tested increments. Code MUST be pushed to remote repositories regularly to prevent loss and enable collaboration. Work-in-progress MUST be committed often with clear commit messages.
+
+*Rationale: Financial software development requires robust backup and collaboration practices. Frequent commits provide granular rollback points and prevent code loss. Regular pushes ensure team visibility and enable continuous integration workflows.*
+
 ## Development Standards
 
 ### Code Quality Requirements
@@ -79,4 +85,4 @@ All pull requests MUST verify constitutional compliance. Complexity deviations M
 
 Database migrations MUST be tested in staging environment. Financial calculations MUST be verified against known test cases. Security changes MUST include threat model review.
 
-**Version**: 1.0.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-19
+**Version**: 1.1.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-20
