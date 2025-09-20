@@ -8,7 +8,7 @@ error handling, rate limiting, and metrics collection.
 
 import asyncio
 import aiohttp
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from decimal import Decimal
 from datetime import datetime
 import logging
@@ -154,17 +154,62 @@ class AlphaVantageAdapter(ResilientProviderMixin, MetricsCollectionMixin, Cachin
                 error_code="HEALTH_CHECK_FAILED"
             )
 
+    async def fetch_prices(self, symbols: Union[str, List[str]]) -> AdapterResponse:
+        """
+        Unified interface for fetching prices.
+
+        Alpha Vantage doesn't support bulk quotes, so this implementation
+        always uses sequential single API calls regardless of input type.
+        """
+        # Normalize input to list for processing
+        if isinstance(symbols, str):
+            symbol_list = [symbols]
+            return_single = True
+        else:
+            symbol_list = symbols
+            return_single = False
+
+        # Alpha Vantage optimization: Always use single API calls
+        # This provider doesn't support bulk, so we use sequential calls
+        if len(symbol_list) == 1:
+            # Single symbol - use caching and full resilience
+            cache_key = self._cache_key("current_price", symbol_list[0])
+            response = await self._execute_with_cache(
+                self._execute_with_resilience,
+                cache_key,
+                self._get_current_price_impl,
+                symbol_list[0],
+                operation_name=f"fetch_prices:single:{symbol_list[0]}",
+                timeout_seconds=self.timeout
+            )
+
+            if return_single:
+                return response
+            else:
+                # Wrap single result in dict format for list input
+                if response.success:
+                    return AdapterResponse.success_response(
+                        data={symbol_list[0]: response.data},
+                        response_time_ms=response.response_time_ms
+                    )
+                else:
+                    return AdapterResponse.success_response(
+                        data={symbol_list[0]: None},
+                        response_time_ms=response.response_time_ms
+                    )
+        else:
+            # Multiple symbols - sequential calls
+            response = await self._execute_with_resilience(
+                self._get_multiple_prices_impl,
+                symbol_list,
+                operation_name=f"fetch_prices:multiple:{len(symbol_list)}",
+                timeout_seconds=self.timeout * len(symbol_list)
+            )
+            return response
+
     async def get_current_price(self, symbol: str) -> AdapterResponse:
-        """Get current price for a single symbol."""
-        cache_key = self._cache_key("current_price", symbol)
-        return await self._execute_with_cache(
-            self._execute_with_resilience,
-            cache_key,
-            self._get_current_price_impl,
-            symbol,
-            operation_name=f"get_current_price:{symbol}",
-            timeout_seconds=self.timeout
-        )
+        """Legacy method - delegates to fetch_prices."""
+        return await self.fetch_prices(symbol)
 
     async def _get_current_price_impl(self, symbol: str) -> AdapterResponse:
         """Implementation of get_current_price."""
@@ -218,13 +263,8 @@ class AlphaVantageAdapter(ResilientProviderMixin, MetricsCollectionMixin, Cachin
             raise AdapterError(f"Unexpected error getting price for {symbol}: {str(e)}", self.provider_name)
 
     async def get_multiple_prices(self, symbols: List[str]) -> AdapterResponse:
-        """Get current prices for multiple symbols (sequential calls for Alpha Vantage)."""
-        return await self._execute_with_resilience(
-            self._get_multiple_prices_impl,
-            symbols,
-            operation_name=f"get_multiple_prices:{len(symbols)}",
-            timeout_seconds=self.timeout * len(symbols)
-        )
+        """Legacy method - delegates to fetch_prices."""
+        return await self.fetch_prices(symbols)
 
     async def _get_multiple_prices_impl(self, symbols: List[str]) -> AdapterResponse:
         """Implementation of get_multiple_prices."""

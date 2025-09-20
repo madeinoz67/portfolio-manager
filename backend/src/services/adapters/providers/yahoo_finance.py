@@ -8,7 +8,7 @@ error handling, rate limiting, and metrics collection.
 
 import asyncio
 import aiohttp
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from decimal import Decimal
 from datetime import datetime, timedelta
 import logging
@@ -140,17 +140,51 @@ class YahooFinanceAdapter(ResilientProviderMixin, MetricsCollectionMixin, Cachin
                 error_code="HEALTH_CHECK_FAILED"
             )
 
-    async def get_current_price(self, symbol: str) -> AdapterResponse:
-        """Get current price for a single symbol."""
-        cache_key = self._cache_key("current_price", symbol)
-        return await self._execute_with_cache(
-            self._execute_with_resilience,
-            cache_key,
-            self._get_current_price_impl,
-            symbol,
-            operation_name=f"get_current_price:{symbol}",
+    async def fetch_prices(self, symbols: Union[str, List[str]]) -> AdapterResponse:
+        """
+        Unified interface for fetching prices.
+
+        Yahoo Finance supports bulk quotes, so this implementation can optimize
+        by using bulk requests for multiple symbols and single/bulk based on efficiency.
+        """
+        # Normalize input to list for processing
+        if isinstance(symbols, str):
+            symbol_list = [symbols]
+            return_single = True
+        else:
+            symbol_list = symbols
+            return_single = False
+
+        # Yahoo Finance optimization: Use bulk API for efficiency
+        # Even single symbols can benefit from bulk API for consistency
+
+        # Use bulk request for all cases since Yahoo supports it efficiently
+        response = await self._execute_with_resilience(
+            self._get_multiple_prices_impl,
+            symbol_list,
+            operation_name=f"fetch_prices:bulk:{len(symbol_list)}",
             timeout_seconds=self.timeout
         )
+
+        if return_single and response.success:
+            # Extract single result from bulk response
+            symbol = symbol_list[0]
+            if symbol in response.data:
+                return AdapterResponse.success_response(
+                    data=response.data[symbol],
+                    response_time_ms=response.response_time_ms
+                )
+            else:
+                return AdapterResponse.error_response(
+                    error_message=f"No data for symbol {symbol}",
+                    error_code="NO_DATA"
+                )
+
+        return response
+
+    async def get_current_price(self, symbol: str) -> AdapterResponse:
+        """Legacy method - delegates to fetch_prices."""
+        return await self.fetch_prices(symbol)
 
     async def _get_current_price_impl(self, symbol: str) -> AdapterResponse:
         """Implementation of get_current_price."""
@@ -213,13 +247,8 @@ class YahooFinanceAdapter(ResilientProviderMixin, MetricsCollectionMixin, Cachin
             raise AdapterError(f"Unexpected error getting price for {symbol}: {str(e)}", self.provider_name)
 
     async def get_multiple_prices(self, symbols: List[str]) -> AdapterResponse:
-        """Get current prices for multiple symbols (bulk request)."""
-        return await self._execute_with_resilience(
-            self._get_multiple_prices_impl,
-            symbols,
-            operation_name=f"get_multiple_prices:{len(symbols)}",
-            timeout_seconds=self.timeout
-        )
+        """Legacy method - delegates to fetch_prices."""
+        return await self.fetch_prices(symbols)
 
     async def _get_multiple_prices_impl(self, symbols: List[str]) -> AdapterResponse:
         """Implementation of get_multiple_prices using bulk request."""

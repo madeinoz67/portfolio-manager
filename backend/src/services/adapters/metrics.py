@@ -8,7 +8,7 @@ with Prometheus-compatible metrics and database persistence for historical analy
 import time
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from dataclasses import dataclass, asdict
 
@@ -23,6 +23,107 @@ from src.database import get_db
 from .base_adapter import AdapterResponse
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AdapterMetrics:
+    """Basic adapter metrics tracking for testing and monitoring."""
+
+    total_requests: int = 0
+    successful_requests: int = 0
+    failed_requests: int = 0
+    total_response_time: float = 0.0
+    last_request_at: Optional[datetime] = None
+    error_counts: Dict[str, int] = None
+
+    def __post_init__(self):
+        if self.error_counts is None:
+            self.error_counts = {}
+
+    def record_success(self, response_time: float):
+        """Record a successful request."""
+        self.total_requests += 1
+        self.successful_requests += 1
+        self.total_response_time += response_time
+        self.last_request_at = datetime.now(timezone.utc)
+
+    def record_failure(self, error_type: str, response_time: float = 0.0):
+        """Record a failed request."""
+        self.total_requests += 1
+        self.failed_requests += 1
+        self.total_response_time += response_time
+        self.last_request_at = datetime.now(timezone.utc)
+        self.error_counts[error_type] = self.error_counts.get(error_type, 0) + 1
+
+    def record_request(self, success: bool, response_time: float, error_type: str = None):
+        """Record a request with success/failure status."""
+        if success:
+            self.record_success(response_time)
+        else:
+            self.record_failure(error_type or "Unknown", response_time)
+
+    @property
+    def average_response_time(self) -> float:
+        """Calculate average response time."""
+        if self.total_requests == 0:
+            return 0.0
+        return self.total_response_time / self.total_requests
+
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate."""
+        if self.total_requests == 0:
+            return 0.0
+        return self.successful_requests / self.total_requests
+
+    @property
+    def failure_rate(self) -> float:
+        """Calculate failure rate."""
+        if self.total_requests == 0:
+            return 0.0
+        return self.failed_requests / self.total_requests
+
+    def reset(self):
+        """Reset all metrics to initial state."""
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
+        self.total_response_time = 0.0
+        self.last_request_at = None
+        self.error_counts = {}
+
+
+@dataclass
+class PerformanceMetrics:
+    """Performance tracking metrics."""
+
+    response_time_p50: float = 0.0
+    response_time_p95: float = 0.0
+    response_time_p99: float = 0.0
+    throughput_per_second: float = 0.0
+    concurrent_requests: int = 0
+
+
+@dataclass
+class CostMetrics:
+    """Cost tracking metrics."""
+
+    requests_this_period: int = 0
+    cost_this_period: Decimal = Decimal('0.00')
+    cost_per_request: Decimal = Decimal('0.00')
+    billing_period_start: Optional[datetime] = None
+    billing_period_end: Optional[datetime] = None
+
+
+@dataclass
+class HealthMetrics:
+    """Health monitoring metrics."""
+
+    is_healthy: bool = True
+    last_health_check: Optional[datetime] = None
+    consecutive_failures: int = 0
+    circuit_breaker_state: str = "CLOSED"
+    service_availability: float = 1.0
 
 
 @dataclass
@@ -59,38 +160,38 @@ class ProviderMetricsCollector:
         self.request_counter = Counter(
             "adapter_requests_total",
             "Total number of adapter requests",
-            ["provider", "operation", "status"]
+            const_labels={}
         )
 
         self.response_time_histogram = Histogram(
             "adapter_response_time_seconds",
             "Response time histogram for adapter requests",
-            ["provider", "operation"],
+            const_labels={},
             buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
         )
 
         self.active_requests_gauge = Gauge(
             "adapter_active_requests",
             "Number of active adapter requests",
-            ["provider"]
+            const_labels={}
         )
 
         self.circuit_breaker_state_gauge = Gauge(
             "adapter_circuit_breaker_state",
             "Circuit breaker state (0=closed, 1=half_open, 2=open)",
-            ["provider"]
+            const_labels={}
         )
 
         self.rate_limit_counter = Counter(
             "adapter_rate_limits_total",
             "Total number of rate limit hits",
-            ["provider"]
+            const_labels={}
         )
 
         self.success_rate_gauge = Gauge(
             "adapter_success_rate",
             "Success rate for adapter requests",
-            ["provider"]
+            const_labels={}
         )
 
         # Internal tracking

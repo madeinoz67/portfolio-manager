@@ -16,15 +16,27 @@ from src.api.performance import router as performance_router
 from src.api.api_keys import router as api_keys_router
 from src.api.market_data import router as market_data_router
 from src.api.admin import router as admin_router
+from src.api.admin_adapters import router as admin_adapters_router
+from src.api.metrics import router as metrics_router
 from src.core.exceptions import (
     PortfolioError,
     TransactionError,
     StockNotFoundError,
     ValidationError,
+    AdapterError,
+    AdapterConfigurationError,
+    AdapterConnectionError,
+    AdapterValidationError,
+    AdapterRateLimitError,
     portfolio_exception_handler,
     transaction_exception_handler,
     stock_not_found_exception_handler,
     validation_exception_handler,
+    adapter_error_handler,
+    adapter_configuration_error_handler,
+    adapter_connection_error_handler,
+    adapter_validation_error_handler,
+    adapter_rate_limit_error_handler,
     general_exception_handler,
 )
 from src.core.logging import setup_logging, set_request_id, get_logger
@@ -250,11 +262,24 @@ async def lifespan(app: FastAPI):
         from src.models import user, portfolio, stock, transaction, holding, news_notice  # noqa: F401
         from src.models import market_data_provider, realtime_price_history, portfolio_valuation  # noqa: F401
         from src.models import sse_connection, poll_interval_config, market_data_usage_metrics  # noqa: F401
+
+        # Import adapter models
+        from src.models import provider_configuration, provider_metrics, cost_tracking_record  # noqa: F401
+        from src.models import adapter_registry, adapter_health_check  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Failed to create database tables: {e}")
         raise
+
+    # Initialize adapter registry
+    logger.info("Initializing adapter registry...")
+    try:
+        from src.services.adapters.registry import get_provider_registry
+        provider_registry = get_provider_registry()
+        logger.info(f"Adapter registry initialized with {len(provider_registry.list_providers())} providers")
+    except Exception as e:
+        logger.error(f"Failed to initialize adapter registry: {e}")
 
     # Initialize portfolio update queue
     logger.info("Initializing portfolio update queue...")
@@ -349,6 +374,14 @@ app.add_exception_handler(PortfolioError, portfolio_exception_handler)
 app.add_exception_handler(TransactionError, transaction_exception_handler)
 app.add_exception_handler(StockNotFoundError, stock_not_found_exception_handler)
 app.add_exception_handler(ValidationError, validation_exception_handler)
+
+# Add adapter exception handlers
+app.add_exception_handler(AdapterConfigurationError, adapter_configuration_error_handler)
+app.add_exception_handler(AdapterConnectionError, adapter_connection_error_handler)
+app.add_exception_handler(AdapterValidationError, adapter_validation_error_handler)
+app.add_exception_handler(AdapterRateLimitError, adapter_rate_limit_error_handler)
+app.add_exception_handler(AdapterError, adapter_error_handler)
+
 app.add_exception_handler(Exception, general_exception_handler)
 
 # Configure CORS
@@ -385,6 +418,8 @@ app.include_router(performance_router)
 app.include_router(api_keys_router)
 app.include_router(market_data_router)
 app.include_router(admin_router)
+app.include_router(admin_adapters_router)
+app.include_router(metrics_router)
 
 
 @app.get("/")

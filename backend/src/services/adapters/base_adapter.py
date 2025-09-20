@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 import asyncio
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class MarketDataAdapter(ABC):
         """
         self.provider_name = provider_name
         self.config = config
+        self.adapter_id = str(uuid.uuid4())
         self.logger = logging.getLogger(f"adapter.{provider_name}")
         self._session = None  # For HTTP session management
 
@@ -175,27 +177,49 @@ class MarketDataAdapter(ABC):
         pass
 
     @abstractmethod
+    async def fetch_prices(self, symbols: Union[str, List[str]]) -> AdapterResponse:
+        """
+        Fetch current prices for one or more symbols.
+
+        This unified interface allows adapters to internally optimize API calls
+        based on their provider's capabilities and the request size.
+
+        Args:
+            symbols: Single symbol string or list of symbols
+
+        Returns:
+            AdapterResponse with price data:
+            - For single symbol string input: Returns single price data object
+            - For list input: Returns dict mapping symbol -> price data
+
+            Price data format:
+            - symbol: str
+            - price: Decimal
+            - currency: str (default "USD")
+            - timestamp: datetime (ISO format)
+            - volume: Optional[int]
+            - market_cap: Optional[Decimal]
+            - source: str (provider identifier)
+        """
+        pass
+
     async def get_current_price(self, symbol: str) -> AdapterResponse:
         """
-        Get the current price for a single symbol.
+        Legacy method for backwards compatibility.
+        Delegates to fetch_prices with single symbol.
 
         Args:
             symbol: Stock symbol (e.g., "AAPL")
 
         Returns:
-            AdapterResponse with price data including:
-            - current_price: Decimal
-            - currency: str
-            - last_updated: datetime
-            - volume: Optional[int]
-            - market_cap: Optional[Decimal]
+            AdapterResponse with single price data
         """
-        pass
+        return await self.fetch_prices(symbol)
 
-    @abstractmethod
     async def get_multiple_prices(self, symbols: List[str]) -> AdapterResponse:
         """
-        Get current prices for multiple symbols.
+        Legacy method for backwards compatibility.
+        Delegates to fetch_prices with symbol list.
 
         Args:
             symbols: List of stock symbols
@@ -203,7 +227,7 @@ class MarketDataAdapter(ABC):
         Returns:
             AdapterResponse with dict of symbol -> price data
         """
-        pass
+        return await self.fetch_prices(symbols)
 
     async def get_historical_data(
         self,

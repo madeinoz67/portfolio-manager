@@ -37,6 +37,7 @@ dependencies = [
     "tenacity>=9.0.0",
     "uvicorn>=0.35.0",
     "yfinance>=0.2.65",
+    "cryptography>=46.0.1",
 ]
 
 [project.scripts]

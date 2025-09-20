@@ -91,6 +91,85 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
+def log_adapter_operation(
+    logger: logging.Logger,
+    operation: str,
+    provider_name: str,
+    adapter_id: str = None,
+    status: str = "success",
+    duration_ms: float = None,
+    error: str = None,
+    **kwargs
+):
+    """
+    Log adapter operations with structured context.
+
+    Args:
+        logger: Logger instance
+        operation: Operation type (e.g., 'create_config', 'health_check', 'get_price')
+        provider_name: Name of the provider (e.g., 'alpha_vantage', 'yahoo_finance')
+        adapter_id: Unique adapter configuration ID
+        status: Operation status ('success', 'error', 'warning')
+        duration_ms: Operation duration in milliseconds
+        error: Error message if status is 'error'
+        **kwargs: Additional context fields
+    """
+    log_data = {
+        "operation": operation,
+        "provider_name": provider_name,
+        "status": status,
+        "component": "adapter"
+    }
+
+    if adapter_id:
+        log_data["adapter_id"] = adapter_id
+
+    if duration_ms is not None:
+        log_data["duration_ms"] = duration_ms
+
+    if error:
+        log_data["error"] = error
+
+    # Add any additional context
+    log_data.update(kwargs)
+
+    # Choose appropriate log level based on status
+    if status == "error":
+        logger.error(f"Adapter operation failed: {operation}", extra=log_data)
+    elif status == "warning":
+        logger.warning(f"Adapter operation warning: {operation}", extra=log_data)
+    else:
+        logger.info(f"Adapter operation completed: {operation}", extra=log_data)
+
+
+def log_adapter_metrics(
+    logger: logging.Logger,
+    provider_name: str,
+    metrics: dict,
+    adapter_id: str = None
+):
+    """
+    Log adapter performance metrics.
+
+    Args:
+        logger: Logger instance
+        provider_name: Name of the provider
+        metrics: Dictionary of metrics (success_rate, avg_latency_ms, error_count, etc.)
+        adapter_id: Unique adapter configuration ID
+    """
+    log_data = {
+        "operation": "metrics_collection",
+        "provider_name": provider_name,
+        "component": "adapter_metrics",
+        "metrics": metrics
+    }
+
+    if adapter_id:
+        log_data["adapter_id"] = adapter_id
+
+    logger.info(f"Adapter metrics collected for {provider_name}", extra=log_data)
+
+
 def log_with_context(logger: logging.Logger, level: str, message: str, **kwargs) -> None:
     """Log a message with additional context."""
     extra = {"extra": kwargs} if kwargs else {}

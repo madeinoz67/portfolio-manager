@@ -5,6 +5,7 @@ Custom exceptions and error handling for the portfolio management system.
 from typing import Any, Dict, Optional
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
+import logging
 
 
 class PortfolioError(Exception):
@@ -148,3 +149,108 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         code="INTERNAL_ERROR",
         details={"type": type(exc).__name__}
     )
+
+
+# Adapter-specific exceptions
+class AdapterError(Exception):
+    """Base exception for adapter-related errors."""
+
+    def __init__(self, message: str, code: str = "ADAPTER_ERROR", details: Optional[Dict[str, Any]] = None):
+        self.message = message
+        self.code = code
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class AdapterConfigurationError(AdapterError):
+    """Exception for adapter configuration errors."""
+
+    def __init__(self, message: str, provider_name: str = None, details: Optional[Dict[str, Any]] = None):
+        details = details or {}
+        if provider_name:
+            details["provider_name"] = provider_name
+        super().__init__(message, "ADAPTER_CONFIG_ERROR", details)
+
+
+class AdapterConnectionError(AdapterError):
+    """Exception for adapter connection failures."""
+
+    def __init__(self, message: str, provider_name: str = None, details: Optional[Dict[str, Any]] = None):
+        details = details or {}
+        if provider_name:
+            details["provider_name"] = provider_name
+        super().__init__(message, "ADAPTER_CONNECTION_ERROR", details)
+
+
+class AdapterValidationError(AdapterError):
+    """Exception for adapter validation failures."""
+
+    def __init__(self, message: str, validation_errors: list = None, details: Optional[Dict[str, Any]] = None):
+        details = details or {}
+        if validation_errors:
+            details["validation_errors"] = validation_errors
+        super().__init__(message, "ADAPTER_VALIDATION_ERROR", details)
+
+
+class AdapterRateLimitError(AdapterError):
+    """Exception for adapter rate limiting."""
+
+    def __init__(self, message: str, provider_name: str = None, retry_after: int = None, details: Optional[Dict[str, Any]] = None):
+        details = details or {}
+        if provider_name:
+            details["provider_name"] = provider_name
+        if retry_after:
+            details["retry_after"] = retry_after
+        super().__init__(message, "ADAPTER_RATE_LIMIT_ERROR", details)
+
+
+# Adapter exception handlers
+async def adapter_error_handler(request: Request, exc: AdapterError) -> JSONResponse:
+    """Handle adapter-related exceptions."""
+    logger = logging.getLogger("adapter.exception.handler")
+
+    # Log the adapter error with context
+    logger.error(f"Adapter error: {exc.message}", extra={
+        "error_code": exc.code,
+        "error_details": exc.details,
+        "request_path": str(request.url.path),
+        "request_method": request.method
+    })
+
+    # Map adapter errors to appropriate HTTP status codes
+    status_code_map = {
+        "ADAPTER_CONFIG_ERROR": status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "ADAPTER_CONNECTION_ERROR": status.HTTP_503_SERVICE_UNAVAILABLE,
+        "ADAPTER_VALIDATION_ERROR": status.HTTP_400_BAD_REQUEST,
+        "ADAPTER_RATE_LIMIT_ERROR": status.HTTP_429_TOO_MANY_REQUESTS,
+        "ADAPTER_ERROR": status.HTTP_500_INTERNAL_SERVER_ERROR
+    }
+
+    status_code = status_code_map.get(exc.code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return create_error_response(
+        status_code=status_code,
+        message=exc.message,
+        code=exc.code,
+        details=exc.details
+    )
+
+
+async def adapter_configuration_error_handler(request: Request, exc: AdapterConfigurationError) -> JSONResponse:
+    """Handle adapter configuration exceptions."""
+    return await adapter_error_handler(request, exc)
+
+
+async def adapter_connection_error_handler(request: Request, exc: AdapterConnectionError) -> JSONResponse:
+    """Handle adapter connection exceptions."""
+    return await adapter_error_handler(request, exc)
+
+
+async def adapter_validation_error_handler(request: Request, exc: AdapterValidationError) -> JSONResponse:
+    """Handle adapter validation exceptions."""
+    return await adapter_error_handler(request, exc)
+
+
+async def adapter_rate_limit_error_handler(request: Request, exc: AdapterRateLimitError) -> JSONResponse:
+    """Handle adapter rate limit exceptions."""
+    return await adapter_error_handler(request, exc)

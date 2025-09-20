@@ -1,0 +1,147 @@
+# Sample Adapter Configuration YAML
+# T070: Sample adapter configuration YAML for deployment
+
+# This file provides examples of how to configure market data adapters
+# Copy this file to adapters.yaml and modify with your actual API credentials
+
+adapters:
+  # Alpha Vantage - Professional market data
+  # Requires API key from https://www.alphavantage.co/support/#api-key
+  alpha_vantage_primary:
+    provider_name: alpha_vantage
+    display_name: "Alpha Vantage Primary"
+    description: "Primary Alpha Vantage adapter for real-time data"
+    config:
+      api_key: "${ALPHA_VANTAGE_API_KEY}"  # Set via environment variable
+      base_url: "https://www.alphavantage.co/query"
+      timeout: 30
+      requests_per_minute: 5  # Free tier limit
+    is_active: true
+    priority: 1  # Highest priority
+
+  # Yahoo Finance - Free market data
+  # No API key required, but rate limited
+  yahoo_finance_backup:
+    provider_name: yahoo_finance
+    display_name: "Yahoo Finance Backup"
+    description: "Backup data source using Yahoo Finance"
+    config:
+      base_url: "https://query1.finance.yahoo.com/v8/finance/chart"
+      timeout: 15
+      user_agent: "PortfolioManager/1.0"
+      max_retries: 3
+    is_active: true
+    priority: 2  # Secondary priority
+
+  # IEX Cloud - Real-time and historical data
+  # Requires API token from https://iexcloud.io/
+  iex_cloud_premium:
+    provider_name: iex_cloud
+    display_name: "IEX Cloud Premium"
+    description: "Real-time data from IEX Cloud"
+    config:
+      api_token: "${IEX_CLOUD_API_TOKEN}"  # Use publishable token for production
+      base_url: "https://cloud.iexapis.com/stable"
+      sandbox: false  # Set to true for testing
+      timeout: 20
+    is_active: false  # Disabled by default
+    priority: 3
+
+  # Polygon - Market data platform
+  # Requires API key from https://polygon.io/
+  polygon_stocks:
+    provider_name: polygon
+    display_name: "Polygon Stocks"
+    description: "Stock market data from Polygon"
+    config:
+      api_key: "${POLYGON_API_KEY}"
+      base_url: "https://api.polygon.io"
+      tier: "basic"  # basic, starter, developer, advanced
+      timeout: 25
+    is_active: false
+    priority: 4
+
+  # Finnhub - Financial data
+  # Requires API key from https://finnhub.io/
+  finnhub_stocks:
+    provider_name: finnhub
+    display_name: "Finnhub Stocks"
+    description: "Financial data from Finnhub"
+    config:
+      api_key: "${FINNHUB_API_KEY}"
+      base_url: "https://finnhub.io/api/v1"
+      timeout: 20
+    is_active: false
+    priority: 5
+
+# Environment Variables Required:
+# Set these in your environment or .env file:
+#
+# ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
+# IEX_CLOUD_API_TOKEN=pk_your_iex_cloud_token_here
+# POLYGON_API_KEY=your_polygon_api_key_here
+# FINNHUB_API_KEY=your_finnhub_api_key_here
+
+# Configuration Notes:
+#
+# 1. Priority (1-10): Lower numbers = higher priority
+#    The system will try providers in priority order for fallback
+#
+# 2. is_active: Set to false to disable an adapter without deleting it
+#
+# 3. Provider-specific settings:
+#    - Alpha Vantage: Limited to 5 req/min on free tier, 500 req/day
+#    - Yahoo Finance: No official rate limits, but be respectful
+#    - IEX Cloud: Rate limits depend on your plan
+#    - Polygon: Rate limits depend on your subscription tier
+#    - Finnhub: Free tier allows 60 calls/minute
+#
+# 4. Timeouts: Adjust based on your network and requirements
+#    - Lower values = faster failure detection
+#    - Higher values = more tolerance for slow responses
+#
+# 5. Security:
+#    - Never commit API keys to version control
+#    - Use environment variables or secure key management
+#    - Rotate API keys regularly
+#
+# 6. Testing:
+#    - Start with one adapter active to test
+#    - Use sandbox/test endpoints where available
+#    - Monitor costs and usage
+
+# Example production configuration with environment variables:
+# You can use environment variable substitution in your actual config:
+#
+# adapters:
+#   production_alpha_vantage:
+#     provider_name: alpha_vantage
+#     display_name: "Production Alpha Vantage"
+#     config:
+#       api_key: "${AV_API_KEY}"
+#       timeout: "${AV_TIMEOUT:-30}"
+#       requests_per_minute: "${AV_RATE_LIMIT:-5}"
+#     is_active: "${AV_ENABLED:-true}"
+#     priority: 1
+
+# Load Configuration in Python:
+#
+# import yaml
+# import os
+# from string import Template
+#
+# def load_adapter_config(config_file: str) -> dict:
+#     with open(config_file, 'r') as f:
+#         content = f.read()
+#
+#     # Replace environment variables
+#     template = Template(content)
+#     content = template.safe_substitute(os.environ)
+#
+#     return yaml.safe_load(content)
+#
+# # Usage:
+# config = load_adapter_config('adapters.yaml')
+# for adapter_name, adapter_config in config['adapters'].items():
+#     print(f"Loading adapter: {adapter_name}")
+#     # Create adapter instance...
