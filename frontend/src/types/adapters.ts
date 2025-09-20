@@ -1,3 +1,5 @@
+export type ProviderType = 'alpha_vantage' | 'yahoo_finance' | 'iex_cloud' | 'finnhub' | 'twelvedata'
+
 export interface AdapterConfiguration {
   id: string
   provider_name: string
