@@ -218,7 +218,7 @@ async def get_system_metrics(
     # Calculate metrics from database
     total_users = db.query(User).count()
     total_portfolios = db.query(Portfolio).count()
-    active_users = db.query(User).filter(User.is_active == True).count()
+    active_users = db.query(User).filter(User.is_active == 1).count()
     admin_users = db.query(User).filter(User.role == UserRole.ADMIN).count()
 
     # Determine system status

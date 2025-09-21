@@ -55,7 +55,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       clearError()
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 10 second timeout
 
       let response: Response
       try {
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearError()
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
 
       let response: Response
       try {
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearError()
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
 
       let response: Response
       try {

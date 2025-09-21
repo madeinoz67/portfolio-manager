@@ -34,6 +34,7 @@ class AdapterMetricsService:
         self.db_session = db_session
         self.registry = get_provider_registry()
         self.metrics_collector = get_metrics_collector()
+        self._health_cache = {}  # Cache health check results for 60 seconds
 
     async def get_adapter_metrics(self, adapter_id: Union[str, UUID], time_range: str = "24h") -> Optional[Dict[str, Any]]:
         """
@@ -76,7 +77,7 @@ class AdapterMetricsService:
         adapter_instance = await self.registry.get_provider_instance(provider_name)
 
         # Combine live and historical metrics
-        combined_metrics = self._combine_metrics(
+        combined_metrics = await self._combine_metrics(
             config, live_metrics, db_metrics, adapter_instance
         )
 
@@ -158,27 +159,30 @@ class AdapterMetricsService:
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             hour_start = now.replace(minute=0, second=0, microsecond=0)
 
+            def normalize_to_utc(dt):
+                """Normalize datetime to UTC timezone-aware."""
+                if dt is None:
+                    return None
+                return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
             requests_today = sum(
                 m.requests_count or 0 for m in metrics_records
-                if (m.recorded_at.replace(tzinfo=timezone.utc) if m.recorded_at.tzinfo is None else m.recorded_at) >= today_start
+                if normalize_to_utc(m.recorded_at) >= today_start
             )
             requests_this_hour = sum(
                 m.requests_count or 0 for m in metrics_records
-                if (m.recorded_at.replace(tzinfo=timezone.utc) if m.recorded_at.tzinfo is None else m.recorded_at) >= hour_start
+                if normalize_to_utc(m.recorded_at) >= hour_start
             )
 
             # Estimate daily and monthly costs
             daily_cost = sum(
                 float(m.cost_estimate or 0) for m in metrics_records
-                if (m.recorded_at.replace(tzinfo=timezone.utc) if m.recorded_at.tzinfo is None else m.recorded_at) >= today_start
+                if normalize_to_utc(m.recorded_at) >= today_start
             )
             monthly_cost_estimate = daily_cost * 30
 
-            # Calculate uptime (simplified - assume uptime if recent successful requests)
-            recent_successful = any(
-                (m.requests_count or 0) > (m.error_count or 0) for m in metrics_records[-10:]  # Last 10 records
-            )
-            uptime_percentage = 100.0 if recent_successful else 90.0
+            # Calculate realistic uptime percentage based on time-weighted performance
+            uptime_percentage = self._calculate_time_weighted_uptime(metrics_records, hours_back)
 
             return {
                 "total_requests": total_requests,
@@ -204,7 +208,7 @@ class AdapterMetricsService:
             logger.error(f"Error getting database metrics for {provider_name}: {e}")
             return {}
 
-    def _combine_metrics(
+    async def _combine_metrics(
         self,
         config: ProviderConfiguration,
         live_metrics: Optional[Any],
@@ -234,9 +238,19 @@ class AdapterMetricsService:
         # Calculate success rate
         success_rate = (successful_requests / total_requests) if total_requests > 0 else 0.0
 
-        # Determine adapter status
-        current_status = self._determine_adapter_status(db_metrics, adapter_instance)
-        is_healthy = current_status == "healthy"
+        # Get health status including error details (use cached if available)
+        health_status = await self._get_cached_health_status(config.provider_name, adapter_instance)
+
+        # Determine adapter status (use health check if available)
+        if health_status:
+            is_healthy = health_status["is_healthy"]
+            last_error = health_status["error_message"]
+            last_error_time = health_status["last_check_time"] if not is_healthy else None
+        else:
+            current_status = self._determine_adapter_status(db_metrics, adapter_instance)
+            is_healthy = current_status == "healthy"
+            last_error = None
+            last_error_time = None
 
         # Build current metrics object
         current_metrics = {
@@ -257,8 +271,8 @@ class AdapterMetricsService:
             "rate_limit_remaining": None,
             "rate_limit_reset_time": None,
             "error_count_24h": db_metrics.get("failed_requests", 0),
-            "last_error": None,
-            "last_error_time": None,
+            "last_error": last_error,
+            "last_error_time": last_error_time.isoformat() if last_error_time else None,
             "circuit_breaker_state": "closed",
             "circuit_breaker_failure_count": 0,
             "circuit_breaker_next_attempt": None
@@ -329,7 +343,7 @@ class AdapterMetricsService:
         """
         # Get all active provider configurations
         configs = self.db_session.query(ProviderConfiguration).filter(
-            ProviderConfiguration.is_active == True
+            ProviderConfiguration.is_active == 1
         ).all()
 
         metrics_list = []
@@ -416,3 +430,104 @@ class AdapterMetricsService:
             })
 
         return health_status
+
+    async def _get_cached_health_status(self, provider_name: str, adapter_instance) -> Optional[Dict[str, Any]]:
+        """
+        Get health status with 60-second caching to avoid blocking API responses.
+        """
+        cache_key = f"health_{provider_name}"
+        now = datetime.now(timezone.utc)
+
+        # Check if we have a cached result that's less than 60 seconds old
+        if cache_key in self._health_cache:
+            cached_result, cached_time = self._health_cache[cache_key]
+            if (now - cached_time).total_seconds() < 60:
+                return cached_result
+
+        # No cached result or cache expired, perform health check
+        health_status = None
+        if adapter_instance:
+            try:
+                # Use a shorter timeout for health checks to avoid blocking
+                health_response = await adapter_instance.health_check()
+                health_status = {
+                    "is_healthy": health_response.success,
+                    "error_message": health_response.error_message if not health_response.success else None,
+                    "last_check_time": now
+                }
+            except Exception as e:
+                health_status = {
+                    "is_healthy": False,
+                    "error_message": f"Health check failed: {str(e)}",
+                    "last_check_time": now
+                }
+
+        # Cache the result
+        if health_status:
+            self._health_cache[cache_key] = (health_status, now)
+
+        return health_status
+
+    def _calculate_time_weighted_uptime(self, metrics_records, hours_back: int) -> float:
+        """
+        Calculate time-weighted uptime percentage based on historical performance.
+
+        This considers the actual time periods when the service was working vs failing,
+        rather than just counting successful/failed requests.
+
+        Args:
+            metrics_records: List of MarketDataUsageMetrics records
+            hours_back: Number of hours to calculate over
+
+        Returns:
+            Uptime percentage (0-100) based on time-weighted analysis
+        """
+        if not metrics_records:
+            return 95.0  # Default for new adapters
+
+        # Sort records by time
+        sorted_records = sorted(metrics_records, key=lambda x: x.recorded_at)
+
+        total_seconds = hours_back * 3600
+        working_seconds = 0
+
+        # Group records into time periods
+        current_time = datetime.now(timezone.utc)
+        period_start = current_time - timedelta(hours=hours_back)
+
+        # Assume 15-minute intervals between scheduler runs
+        interval_minutes = 15
+        interval_seconds = interval_minutes * 60
+
+        # Go through each 15-minute interval and check if it was working
+        for i in range(0, hours_back * 4):  # 4 intervals per hour
+            interval_start = period_start + timedelta(minutes=i * interval_minutes)
+            interval_end = interval_start + timedelta(minutes=interval_minutes)
+
+            # Check if we have a successful metric record in this interval
+            interval_working = False
+
+            for record in sorted_records:
+                record_time = record.recorded_at
+                if record_time.tzinfo is None:
+                    record_time = record_time.replace(tzinfo=timezone.utc)
+
+                if interval_start <= record_time <= interval_end:
+                    # Consider working if more successes than failures
+                    success_count = (record.requests_count or 0) - (record.error_count or 0)
+                    if success_count > 0:
+                        interval_working = True
+                        break
+
+            if interval_working:
+                working_seconds += interval_seconds
+
+        # Calculate uptime percentage
+        uptime_percentage = (working_seconds / total_seconds) * 100
+
+        # Cap between reasonable bounds (10% minimum, 100% maximum)
+        uptime_percentage = max(10.0, min(100.0, uptime_percentage))
+
+        logger.debug(f"Calculated uptime: {uptime_percentage:.1f}% over {hours_back}h ({working_seconds}/{total_seconds} seconds)")
+
+        return uptime_percentage

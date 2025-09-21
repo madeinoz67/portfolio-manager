@@ -184,7 +184,7 @@ class ConfigurationManager:
     def get_active_configurations(self) -> List[ProviderConfiguration]:
         """Get all active provider configurations."""
         return self.db_session.query(ProviderConfiguration).filter(
-            ProviderConfiguration.is_active == True
+            ProviderConfiguration.is_active == 1
         ).all()
 
     def get_configurations_by_provider(self, provider_name: str) -> List[ProviderConfiguration]:
@@ -364,8 +364,8 @@ class AdapterContainer(containers.DeclarativeContainer):
     # Configuration
     config = providers.Configuration()
 
-    # Database session
-    db_session = providers.Singleton(get_db)
+    # Database session - properly handle the generator
+    db_session = providers.Resource(get_db)
 
     # Configuration manager
     config_manager = providers.Singleton(

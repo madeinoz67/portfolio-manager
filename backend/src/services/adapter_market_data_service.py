@@ -7,8 +7,9 @@ configuration system for modern market data operations.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from decimal import Decimal
+import decimal
 import asyncio
 import logging
 
@@ -59,8 +60,8 @@ class AdapterMarketDataService:
         """
         Get symbols that should be actively monitored for price updates.
 
-        This includes portfolio holdings and recently requested symbols.
-        Compatible interface with legacy MarketDataService.
+        This includes all existing symbols in realtime_symbols table, portfolio holdings,
+        and recently requested symbols. No fallback logic - processes all existing market data.
         """
         symbols = set()
 
@@ -96,8 +97,24 @@ class AdapterMarketDataService:
         except Exception as e:
             logger.error(f"Failed to get recent symbols: {e}")
 
+        # ALWAYS include all existing symbols from realtime_symbols table (no fallback logic)
+        try:
+            all_existing_symbols = (
+                self.db.query(RealtimeSymbol.symbol)
+                .distinct()
+                .all()
+            )
+
+            for symbol_record in all_existing_symbols:
+                symbols.add(symbol_record.symbol)
+
+            logger.debug(f"Added {len(all_existing_symbols)} existing symbols from realtime_symbols table")
+
+        except Exception as e:
+            logger.error(f"Failed to get all existing symbols: {e}")
+
         result = list(symbols)[:provider_bulk_limit]
-        logger.info(f"Found {len(result)} actively monitored symbols: {result}")
+        logger.info(f"Found {len(result)} actively monitored symbols (portfolios + recent + all existing): {result}")
         return result
 
     async def fetch_multiple_prices(self, symbols: List[str]) -> Dict[str, Optional[Dict]]:
@@ -116,14 +133,22 @@ class AdapterMarketDataService:
         results = {}
 
         # Get active provider configurations
-        active_configs = (
-            self.db.query(ProviderConfiguration)
-            .filter(ProviderConfiguration.is_active == True)
-            .all()
-        )
+        # Try a more direct query approach that works with SQLite boolean values
+        try:
+            # Use raw SQL to bypass any SQLAlchemy boolean conversion issues
+            active_configs = (
+                self.db.query(ProviderConfiguration)
+                .filter(ProviderConfiguration.is_active == 1)  # SQLite stores boolean as 1/0
+                .all()
+            )
+            logger.info(f"Found {len(active_configs)} active provider configurations")
 
-        if not active_configs:
-            logger.warning("No active provider configurations found")
+            if not active_configs:
+                logger.warning("No active provider configurations found")
+                return {}
+
+        except Exception as e:
+            logger.error(f"Error querying provider configurations: {e}")
             return {}
 
         # Try each provider until we get results
@@ -132,22 +157,23 @@ class AdapterMarketDataService:
                 provider_name = config.provider_name
                 logger.info(f"Fetching {len(symbols)} symbols using adapter: {provider_name}")
 
-                # Get adapter instance from registry
+                # Get or create adapter instance from registry
                 adapter = await self.registry.get_provider_instance(provider_name)
                 if not adapter:
-                    logger.warning(f"No adapter instance available for {provider_name}")
-                    continue
+                    # Create new instance with config
+                    adapter = await self.registry.create_provider_instance(provider_name, config.config_data)
+                    if not adapter:
+                        logger.warning(f"No adapter instance available for {provider_name}")
+                        continue
 
                 # Use bulk fetch if supported
                 if adapter.capabilities.supports_bulk_quotes and len(symbols) > 1:
-                    response = await adapter.fetch_bulk_quotes(symbols)
+                    response = await adapter.fetch_prices(symbols)
                     if response.success and response.data:
-                        bulk_results = response.data.get('quotes', {})
-
-                        # Process bulk results
+                        # Process bulk results - data should be a dict with symbol keys
                         for symbol in symbols:
-                            if symbol in bulk_results:
-                                quote_data = bulk_results[symbol]
+                            if symbol in response.data:
+                                quote_data = response.data[symbol]
 
                                 # Convert adapter response to legacy format
                                 price_data = self._convert_adapter_response(quote_data, symbol, provider_name)
@@ -163,7 +189,7 @@ class AdapterMarketDataService:
                     # Fall back to individual fetches
                     for symbol in symbols:
                         try:
-                            response = await adapter.fetch_quote(symbol)
+                            response = await adapter.fetch_prices([symbol])
                             if response.success and response.data:
                                 # Convert adapter response to legacy format
                                 price_data = self._convert_adapter_response(
@@ -251,44 +277,88 @@ class AdapterMarketDataService:
         try:
             now = utc_now().replace(tzinfo=None)
 
+            # Validate price data first and track invalid data metrics
+            price = price_data.get('price')
+            if price is None or str(price).lower() in ['nan', 'inf', '-inf']:
+                logger.warning(f"Invalid price data for {symbol}: {price}")
+
+                # Log invalid data metrics
+                self._log_invalid_data_metrics(symbol, price, provider_name, "invalid_price")
+                return
+
+            # Get provider_id from provider_name by querying the database
+            from uuid import UUID
+            provider_config = (
+                self.db.query(ProviderConfiguration)
+                .filter(ProviderConfiguration.provider_name == provider_name)
+                .filter(ProviderConfiguration.is_active == True)
+                .first()
+            )
+
+            if not provider_config:
+                logger.error(f"No active provider configuration found for: {provider_name}")
+                return
+
+            provider_id = UUID(provider_config.id)
+
             # Update or create master record
             master_record = self.db.query(RealtimeSymbol).filter(
                 RealtimeSymbol.symbol == symbol
             ).first()
 
+            # Safe decimal conversion function
+            def safe_decimal(value):
+                """Safely convert value to Decimal, returning None for invalid values."""
+                if value is None:
+                    return None
+                try:
+                    decimal_val = Decimal(str(value))
+                    if decimal_val.is_nan() or decimal_val.is_infinite():
+                        return None
+                    return decimal_val
+                except (ValueError, TypeError, decimal.InvalidOperation):
+                    return None
+
+            safe_price = safe_decimal(price_data['price'])
+            if safe_price is None:
+                logger.warning(f"Could not convert price to valid decimal for {symbol}")
+                return
+
             if master_record:
                 # Update existing record
-                master_record.current_price = Decimal(str(price_data['price']))
+                master_record.current_price = safe_price
                 master_record.last_updated = now
+                master_record.updated_at = now
                 master_record.volume = price_data.get('volume')
                 master_record.market_cap = price_data.get('market_cap')
                 master_record.company_name = price_data.get('company_name')
-                master_record.currency = price_data.get('currency', 'USD')
-                master_record.provider = provider_name
+                master_record.provider_id = provider_id
             else:
                 # Create new record
                 master_record = RealtimeSymbol(
                     symbol=symbol,
-                    current_price=Decimal(str(price_data['price'])),
+                    current_price=safe_price,
                     last_updated=now,
+                    created_at=now,
+                    updated_at=now,
                     volume=price_data.get('volume'),
                     market_cap=price_data.get('market_cap'),
                     company_name=price_data.get('company_name'),
-                    currency=price_data.get('currency', 'USD'),
-                    provider=provider_name
+                    provider_id=provider_id
                 )
                 self.db.add(master_record)
 
-            # Store historical record
+            # Store historical record with safe decimal conversion
             history_record = RealtimePriceHistory(
                 symbol=symbol,
-                price=Decimal(str(price_data['price'])),
+                price=safe_decimal(price_data['price']),
                 fetched_at=now,
-                open_price=Decimal(str(price_data['open'])) if price_data.get('open') else None,
-                high_price=Decimal(str(price_data['high'])) if price_data.get('high') else None,
-                low_price=Decimal(str(price_data['low'])) if price_data.get('low') else None,
+                opening_price=safe_decimal(price_data.get('open')),
+                high_price=safe_decimal(price_data.get('high')),
+                low_price=safe_decimal(price_data.get('low')),
                 volume=price_data.get('volume'),
-                provider=provider_name
+                provider_id=provider_id,
+                source_timestamp=now  # Add required source_timestamp field
             )
             self.db.add(history_record)
 
@@ -312,13 +382,16 @@ class AdapterMarketDataService:
 
             # Create usage metrics record
             metrics = MarketDataUsageMetrics(
+                metric_id=f"adapter_bulk_{provider_name}_{now.strftime('%Y%m%d_%H%M%S')}",
                 provider_name=provider_name,
+                request_type="bulk_price_fetch",
                 requests_count=len(results),
-                successful_requests=len(results),
+                data_points_fetched=len(results),
                 error_count=0,
                 avg_response_time_ms=100.0,  # Default reasonable value
                 cost_estimate=Decimal('0.00'),  # Free for most providers
-                recorded_at=now
+                recorded_at=now,
+                time_bucket="hourly"
             )
 
             self.db.add(metrics)
@@ -340,3 +413,103 @@ class AdapterMarketDataService:
 
         except Exception as e:
             logger.error(f"Failed to log usage metrics: {e}")
+
+    def _log_invalid_data_metrics(self, symbol: str, invalid_value: Any, provider_name: str, issue_type: str):
+        """
+        Log metrics for invalid data detected from providers.
+
+        Args:
+            symbol: Stock symbol with invalid data
+            invalid_value: The invalid value that was detected
+            provider_name: Name of provider that returned invalid data
+            issue_type: Type of issue (e.g., 'invalid_price', 'missing_data')
+        """
+        try:
+            now = utc_now().replace(tzinfo=None)
+
+            # Create usage metrics record for invalid data tracking
+            metrics = MarketDataUsageMetrics(
+                metric_id=f"invalid_data_{provider_name}_{symbol}_{now.strftime('%Y%m%d_%H%M%S')}",
+                provider_name=provider_name,
+                request_type="invalid_data_detection",
+                requests_count=1,
+                data_points_fetched=0,  # No valid data points
+                error_count=1,
+                avg_response_time_ms=0.0,
+                cost_estimate=Decimal('0.00'),
+                recorded_at=now,
+                time_bucket="hourly"
+            )
+
+            self.db.add(metrics)
+            self.db.commit()
+
+            # Log activity for admin dashboard
+            log_provider_activity(
+                db_session=self.db,
+                provider_id=provider_name,
+                activity_type="INVALID_DATA_DETECTED",
+                description=f"Invalid {issue_type} detected for {symbol}: {invalid_value}",
+                status="warning",
+                metadata={
+                    "symbol": symbol,
+                    "invalid_value": str(invalid_value),
+                    "issue_type": issue_type,
+                    "adapter_system": True
+                }
+            )
+
+            logger.warning(f"Logged invalid data metrics for {symbol}: {issue_type} = {invalid_value}")
+
+        except Exception as e:
+            logger.error(f"Failed to log invalid data metrics: {e}")
+
+    def get_current_price_from_master(self, symbol: str) -> Optional[Dict]:
+        """
+        Get current price for symbol from master realtime_symbols table.
+        Used by transaction validation and API endpoints.
+        """
+        try:
+            master_record = self.db.query(RealtimeSymbol).filter(
+                RealtimeSymbol.symbol == symbol
+            ).first()
+
+            if not master_record:
+                return None
+
+            return {
+                "symbol": symbol,
+                "price": float(master_record.current_price),
+                "source_timestamp": master_record.last_updated,
+                "volume": master_record.volume,
+                "market_cap": master_record.market_cap,
+                "company_name": master_record.company_name
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get current price for {symbol}: {e}")
+            return None
+
+    async def fetch_price(self, symbol: str) -> Optional[Dict]:
+        """
+        Fetch price for a single symbol directly from provider.
+        Used for transaction validation when symbol is not in local database.
+        """
+        try:
+            # First check if symbol exists in master table
+            existing_price = self.get_current_price_from_master(symbol)
+            if existing_price:
+                return existing_price
+
+            # If not found locally, fetch directly from provider
+            logger.info(f"Fetching {symbol} directly from provider for transaction validation")
+            result = await self.fetch_multiple_prices([symbol])
+
+            if result and symbol in result:
+                return result[symbol]
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to fetch price for {symbol}: {e}")
+            return None

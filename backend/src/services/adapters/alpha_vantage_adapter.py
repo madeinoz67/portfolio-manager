@@ -7,6 +7,7 @@ Provides market data through the Alpha Vantage API with full metrics tracking an
 import asyncio
 import aiohttp
 import time
+import pandas as pd
 from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union, Any
@@ -34,9 +35,16 @@ class AlphaVantageAdapter(MarketDataAdapter):
         self.timeout = config.get("timeout", 30)
         self.metrics_collector = get_metrics_collector()
 
-        # Alpha Vantage rate limits
-        self.rate_limit_per_minute = config.get("rate_limit_per_minute", 5)  # Free tier
-        self.rate_limit_per_day = config.get("rate_limit_per_day", 500)     # Free tier daily
+        # Alpha Vantage rate limits (realistic values)
+        # Free tier: 25 requests per day, Premium: 5 requests per minute
+        self.tier = config.get("tier", "free")  # "free" or "premium"
+
+        if self.tier == "free":
+            self.rate_limit_per_minute = config.get("rate_limit_per_minute", 1)   # Conservative for free tier
+            self.rate_limit_per_day = config.get("rate_limit_per_day", 25)       # Free tier daily limit
+        else:
+            self.rate_limit_per_minute = config.get("rate_limit_per_minute", 5)   # Premium tier
+            self.rate_limit_per_day = config.get("rate_limit_per_day", 500)      # Premium tier daily
 
         if not self.api_key:
             raise AuthenticationError("Alpha Vantage API key is required", self.provider_name, "MISSING_API_KEY")
@@ -47,7 +55,7 @@ class AlphaVantageAdapter(MarketDataAdapter):
         return ProviderCapabilities(
             supports_real_time=True,
             supports_historical=True,
-            supports_bulk_quotes=False,  # Alpha Vantage doesn't support bulk requests
+            supports_bulk_quotes=False,  # Alpha Vantage doesn't support bulk requests in free tier
             max_symbols_per_request=1,
             rate_limit_per_minute=self.rate_limit_per_minute,
             rate_limit_per_day=self.rate_limit_per_day,
@@ -156,7 +164,10 @@ class AlphaVantageAdapter(MarketDataAdapter):
 
                 # Rate limiting for multiple symbols
                 if len(symbol_list) > 1 and symbol != symbol_list[-1]:
-                    await asyncio.sleep(12)  # 5 requests per minute = 12 seconds between requests
+                    if self.tier == "free":
+                        await asyncio.sleep(60)  # 1 request per minute for free tier
+                    else:
+                        await asyncio.sleep(12)  # 5 requests per minute = 12 seconds between requests for premium
 
             response_time = (time.time() - start_time) * 1000
 
@@ -225,34 +236,59 @@ class AlphaVantageAdapter(MarketDataAdapter):
         return response
 
     async def _fetch_single_symbol(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetch data for a single symbol from Alpha Vantage."""
-        if not self._session or self._session.closed:
-            self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
-            )
-
-        params = {
-            'function': 'GLOBAL_QUOTE',
-            'symbol': symbol,
-            'apikey': self.api_key
-        }
-
+        """Fetch data for a single symbol using alpha_vantage library."""
         try:
-            async with self._session.get(self.base_url, params=params) as response:
-                if response.status == 429:
-                    raise RateLimitError("Alpha Vantage rate limit exceeded", self.provider_name, "RATE_LIMIT")
+            from alpha_vantage.timeseries import TimeSeries
+            import asyncio
 
-                if response.status == 401:
-                    raise AuthenticationError("Invalid Alpha Vantage API key", self.provider_name, "INVALID_API_KEY")
+            # Run alpha_vantage in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
 
-                if response.status != 200:
-                    raise AdapterError(f"HTTP {response.status}", self.provider_name, str(response.status))
+            def fetch_alpha_vantage_data():
+                ts = TimeSeries(key=self.api_key, output_format='pandas')
 
-                data = await response.json()
-                return self._parse_alpha_vantage_response(symbol, data)
+                try:
+                    # Get daily time series data
+                    data, meta_data = ts.get_daily(symbol=symbol)
 
-        except asyncio.TimeoutError:
-            raise ProviderTimeoutError(f"Timeout fetching {symbol}", self.provider_name, "TIMEOUT")
+                    if data.empty:
+                        return None
+
+                    # Get the most recent data point
+                    latest = data.iloc[-1]
+
+                    # Parse the response
+                    return {
+                        "symbol": symbol,
+                        "price": float(latest['4. close']),
+                        "open": float(latest['1. open']),
+                        "high": float(latest['2. high']),
+                        "low": float(latest['3. low']),
+                        "volume": int(latest['5. volume']),
+                        "change": 0.0,  # Calculate from previous close if available
+                        "change_percent": 0.0,
+                        "market_cap": 0,  # Alpha Vantage doesn't provide market cap in daily data
+                        "company_name": symbol,  # Could enhance with company overview API
+                        "fetched_at": datetime.now(timezone.utc).isoformat(),
+                        "provider": "alpha_vantage"
+                    }
+
+                except Exception as e:
+                    if "Thank you for using Alpha Vantage" in str(e) or "rate limit" in str(e).lower():
+                        raise RateLimitError("Alpha Vantage rate limit exceeded", self.provider_name, "RATE_LIMIT")
+                    elif "Invalid API call" in str(e) or "Invalid symbol" in str(e):
+                        return None  # Symbol not found
+                    else:
+                        raise AdapterError(f"Alpha Vantage error: {str(e)}", self.provider_name, "AV_ERROR")
+
+            result = await loop.run_in_executor(None, fetch_alpha_vantage_data)
+            return {symbol: result} if result else None
+
+        except ImportError:
+            raise AdapterError("alpha_vantage library not installed", self.provider_name, "MISSING_DEPENDENCY")
+        except Exception as e:
+            self.logger.error(f"Error fetching {symbol} from Alpha Vantage: {e}")
+            raise
 
     def _parse_alpha_vantage_response(self, symbol: str, data: Dict) -> Optional[Dict[str, Any]]:
         """Parse Alpha Vantage API response."""

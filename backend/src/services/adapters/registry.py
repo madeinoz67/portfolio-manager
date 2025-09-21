@@ -202,12 +202,13 @@ class ProviderRegistry:
             instance = provider_info.adapter_class(provider_name, config)
 
             # Initialize the adapter
-            if await instance.initialize():
+            init_success = await instance.initialize()
+            if init_success:
                 self._instances[provider_name] = instance
                 self.logger.info(f"Created provider instance: {provider_name}")
                 return instance
             else:
-                self.logger.error(f"Failed to initialize provider: {provider_name}")
+                self.logger.error(f"Failed to initialize provider: {provider_name} - initialize() returned False")
                 await instance.cleanup()
                 return None
 

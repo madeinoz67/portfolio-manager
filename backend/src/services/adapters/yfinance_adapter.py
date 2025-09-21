@@ -7,6 +7,7 @@ Provides market data through the Yahoo Finance API with full metrics tracking.
 import asyncio
 import aiohttp
 import time
+import pandas as pd
 from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union, Any
@@ -32,9 +33,10 @@ class YFinanceAdapter(MarketDataAdapter):
         self.timeout = config.get("timeout", 30)
         self.metrics_collector = get_metrics_collector()
 
-        # Yahoo Finance doesn't require API key but has rate limits
-        self.rate_limit_per_minute = config.get("rate_limit_per_minute", 100)
-        self.rate_limit_per_day = config.get("rate_limit_per_day", 10000)
+        # Yahoo Finance doesn't require API key but has informal rate limits
+        # yfinance library handles rate limiting internally, these are conservative estimates
+        self.rate_limit_per_minute = config.get("rate_limit_per_minute", 60)    # Conservative for yfinance library
+        self.rate_limit_per_day = config.get("rate_limit_per_day", 2000)       # Conservative daily limit
 
     @property
     def capabilities(self) -> ProviderCapabilities:
@@ -43,7 +45,7 @@ class YFinanceAdapter(MarketDataAdapter):
             supports_real_time=True,
             supports_historical=True,
             supports_bulk_quotes=True,
-            max_symbols_per_request=50,  # Yahoo supports bulk requests
+            max_symbols_per_request=50,  # yfinance library supports bulk requests efficiently
             rate_limit_per_minute=self.rate_limit_per_minute,
             rate_limit_per_day=self.rate_limit_per_day,
             supports_intraday=True,
@@ -65,37 +67,49 @@ class YFinanceAdapter(MarketDataAdapter):
     async def initialize(self) -> bool:
         """Initialize the Yahoo Finance adapter."""
         try:
+            self.logger.info(f"Initializing Yahoo Finance adapter for provider: {self.provider_name}")
             # Test connectivity with a simple request
             test_response = await self.health_check()
-            return test_response.success
+            if test_response.success:
+                self.logger.info(f"Yahoo Finance adapter initialized successfully for provider: {self.provider_name}")
+                return True
+            else:
+                self.logger.error(f"Yahoo Finance adapter health check failed: {test_response.error_message}")
+                return False
         except Exception as e:
             self.logger.error(f"Failed to initialize Yahoo Finance adapter: {e}")
             return False
 
     async def health_check(self) -> AdapterResponse:
-        """Perform health check using AAPL as test symbol."""
+        """Perform lightweight health check without actual data fetching to avoid rate limits."""
         request_id = self.metrics_collector.record_request_start(
             provider_name=self.provider_name,
             operation="health_check"
         )
 
         start_time = time.time()
+        response = None
+        error_response = None
 
         try:
-            response = await self.fetch_prices("AAPL")
+            # Simple dependency check without making actual API calls
+            import yfinance as yf
 
-            if response.success:
-                return AdapterResponse.success_response(
-                    data={"status": "healthy", "test_symbol": "AAPL"},
-                    response_time_ms=(time.time() - start_time) * 1000
-                )
-            else:
-                return AdapterResponse.error_response(
-                    error_message=f"Health check failed: {response.error_message}",
-                    error_code="HEALTH_CHECK_FAILED",
-                    response_time_ms=(time.time() - start_time) * 1000
-                )
+            # Basic library test - just create a ticker instance without fetching data
+            ticker = yf.Ticker("AAPL")
 
+            # If we get here, the library is available and basic instantiation works
+            response = AdapterResponse.success_response(
+                data={"status": "healthy", "library": "yfinance", "check_type": "dependency"},
+                response_time_ms=(time.time() - start_time) * 1000
+            )
+
+        except ImportError:
+            error_response = AdapterResponse.error_response(
+                error_message="yfinance library not available",
+                error_code="MISSING_DEPENDENCY",
+                response_time_ms=(time.time() - start_time) * 1000
+            )
         except Exception as e:
             error_response = AdapterResponse.error_response(
                 error_message=f"Health check error: {str(e)}",
@@ -108,10 +122,10 @@ class YFinanceAdapter(MarketDataAdapter):
                 request_id=request_id,
                 provider_name=self.provider_name,
                 operation="health_check",
-                response=error_response if 'error_response' in locals() else response
+                response=error_response if error_response else response
             )
 
-        return error_response if 'error_response' in locals() else response
+        return error_response if error_response else response
 
     async def fetch_prices(self, symbols: Union[str, List[str]]) -> AdapterResponse:
         """
@@ -195,52 +209,130 @@ class YFinanceAdapter(MarketDataAdapter):
         return response
 
     async def _fetch_single_symbol(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetch data for a single symbol."""
-        if not self._session or self._session.closed:
-            self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
-            )
-
-        url = f"{self.base_url}/{symbol}"
-
+        """Fetch data for a single symbol using yfinance library."""
         try:
-            async with self._session.get(url) as response:
-                if response.status == 429:
-                    raise RateLimitError("Yahoo Finance rate limit exceeded", self.provider_name, "RATE_LIMIT")
+            import yfinance as yf
+            import asyncio
 
-                if response.status != 200:
-                    raise AdapterError(f"HTTP {response.status}", self.provider_name, str(response.status))
+            # Run yfinance in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
 
-                data = await response.json()
-                return self._parse_yahoo_response(symbol, data)
+            def fetch_ticker_data():
+                # Handle ASX symbols - yfinance expects .AX suffix
+                yf_symbol = self._convert_symbol_for_yfinance(symbol)
+                ticker = yf.Ticker(yf_symbol)
 
-        except asyncio.TimeoutError:
-            raise ProviderTimeoutError(f"Timeout fetching {symbol}", self.provider_name, "TIMEOUT")
+                # Get current info and history
+                info = ticker.info
+                hist = ticker.history(period="1d", interval="1m")
+
+                if hist.empty:
+                    return None
+
+                latest = hist.iloc[-1]
+                return {
+                    "symbol": symbol,
+                    "price": float(latest['Close']),
+                    "open": float(latest['Open']),
+                    "high": float(latest['High']),
+                    "low": float(latest['Low']),
+                    "volume": int(latest['Volume']) if not pd.isna(latest['Volume']) else 0,
+                    "change": 0.0,  # Will be calculated from previous close
+                    "change_percent": 0.0,
+                    "market_cap": info.get('marketCap', 0),
+                    "company_name": info.get('longName', symbol),
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "provider": "yfinance"
+                }
+
+            result = await loop.run_in_executor(None, fetch_ticker_data)
+            return {symbol: result} if result else None
+
+        except ImportError:
+            raise AdapterError("yfinance library not installed", self.provider_name, "MISSING_DEPENDENCY")
+        except Exception as e:
+            self.logger.error(f"Error fetching {symbol} from yfinance: {e}")
+            raise AdapterError(f"yfinance error: {str(e)}", self.provider_name, "YFINANCE_ERROR")
 
     async def _fetch_multiple_symbols(self, symbols: List[str]) -> Dict[str, Any]:
-        """Fetch data for multiple symbols using Yahoo's bulk API."""
-        if not self._session or self._session.closed:
-            self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
-            )
-
-        # Yahoo Finance bulk request - join symbols with commas
-        symbols_param = ','.join(symbols)
-        url = f"{self.base_url}/{symbols_param}"
-
+        """Fetch data for multiple symbols using yfinance bulk download."""
         try:
-            async with self._session.get(url) as response:
-                if response.status == 429:
-                    raise RateLimitError("Yahoo Finance rate limit exceeded", self.provider_name, "RATE_LIMIT")
+            import yfinance as yf
+            import asyncio
 
-                if response.status != 200:
-                    raise AdapterError(f"HTTP {response.status}", self.provider_name, str(response.status))
+            # Run yfinance bulk download in thread pool
+            loop = asyncio.get_event_loop()
 
-                data = await response.json()
-                return self._parse_yahoo_bulk_response(symbols, data)
+            def fetch_bulk_data():
+                # Convert symbols for yfinance
+                yf_symbols = [self._convert_symbol_for_yfinance(sym) for sym in symbols]
 
-        except asyncio.TimeoutError:
-            raise ProviderTimeoutError(f"Timeout fetching bulk symbols", self.provider_name, "TIMEOUT")
+                # Use yfinance Tickers approach like legacy service (works regardless of market hours)
+                tickers = yf.Tickers(' '.join(yf_symbols))
+
+                results = {}
+
+                for i, original_symbol in enumerate(symbols):
+                    yf_symbol = yf_symbols[i]
+
+                    try:
+                        # Get ticker instance
+                        ticker = tickers.tickers.get(yf_symbol)
+                        if ticker is None:
+                            # Fallback: create individual ticker
+                            ticker = yf.Ticker(yf_symbol)
+
+                        # Get current price info (works even when markets closed)
+                        info = ticker.info
+
+                        # Get price data from info
+                        reg_price = info.get('regularMarketPrice')
+                        curr_price = info.get('currentPrice')
+                        prev_close = info.get('previousClose')
+
+                        # Try to get price from info (most reliable)
+                        price = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose')
+
+                        if price and price > 0:
+                            results[original_symbol] = {
+                                "symbol": original_symbol,
+                                "price": float(price),
+                                "open": info.get('regularMarketOpen', info.get('open', price)),
+                                "high": info.get('regularMarketDayHigh', info.get('dayHigh', price)),
+                                "low": info.get('regularMarketDayLow', info.get('dayLow', price)),
+                                "volume": info.get('regularMarketVolume', info.get('volume', 0)),
+                                "change": info.get('regularMarketChange', 0.0),
+                                "change_percent": info.get('regularMarketChangePercent', 0.0),
+                                "market_cap": info.get('marketCap', 0),
+                                "company_name": info.get('longName', info.get('shortName', original_symbol)),
+                                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                                "provider": "yfinance"
+                            }
+                        else:
+                            self.logger.warning(f"No data available for {original_symbol}")
+
+                    except Exception as e:
+                        self.logger.error(f"Error processing {original_symbol}: {e}")
+                        continue
+
+                return results
+
+            result = await loop.run_in_executor(None, fetch_bulk_data)
+            return result
+
+        except ImportError:
+            raise AdapterError("yfinance library not installed", self.provider_name, "MISSING_DEPENDENCY")
+        except Exception as e:
+            self.logger.error(f"Error in bulk yfinance fetch: {e}")
+            raise AdapterError(f"yfinance bulk error: {str(e)}", self.provider_name, "YFINANCE_BULK_ERROR")
+
+    def _convert_symbol_for_yfinance(self, symbol: str) -> str:
+        """Convert symbol to yfinance format (e.g., ASX symbols need .AX suffix)."""
+        # Handle ASX symbols - yfinance expects .AX suffix for ASX stocks
+        if len(symbol) <= 3 and symbol.isalpha() and symbol.isupper():
+            # Likely an ASX symbol, add .AX suffix
+            return f"{symbol}.AX"
+        return symbol
 
     def _parse_yahoo_response(self, symbol: str, data: Dict) -> Optional[Dict[str, Any]]:
         """Parse Yahoo Finance API response for a single symbol."""

@@ -86,21 +86,18 @@ async def periodic_price_updates():
                 # Use adapter system with standard bulk limit
                 provider_bulk_limit = 50  # Standard bulk limit for adapter system
 
-                # Get actively monitored symbols from portfolios and recent requests
+                # Get actively monitored symbols (includes portfolios, recent requests, and all existing symbols)
                 symbols_to_fetch = service.get_actively_monitored_symbols(
                     provider_bulk_limit=provider_bulk_limit,
                     minutes_lookback=60
                 )
 
-                # If no symbols found from dynamic discovery, fall back to a small sample
-                if not symbols_to_fetch:
-                    fallback_symbols = ["CBA", "BHP", "WBC", "CSL"]
-                    symbols_to_fetch = fallback_symbols[:provider_bulk_limit]
-                    logger.info(f"No actively monitored symbols found, using fallback: {symbols_to_fetch}")
-                else:
-                    logger.info(f"Dynamic symbol discovery found {len(symbols_to_fetch)} symbols: {symbols_to_fetch}")
-
                 logger.info(f"Selected symbols for cycle {cycle_count + 1} (limit {provider_bulk_limit}): {symbols_to_fetch}")
+
+                # If no symbols to process, skip this cycle (no fallback logic)
+                if not symbols_to_fetch:
+                    logger.info("No symbols to process in this cycle, skipping fetch")
+                    continue
 
                 # Occasionally add some variety with system-level activities
                 if cycle_count % 3 == 0:  # Every 3rd cycle
@@ -285,11 +282,30 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize portfolio update queue: {e}")
         # Don't raise - let the app start but queue will be unavailable
 
+    # Start health check service for adapter monitoring
+    logger.info("Starting health check service...")
+    try:
+        from src.services.health_checker import start_health_check_service
+        await start_health_check_service(check_interval=300)  # 5 minute intervals
+        logger.info("Health check service started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start health check service: {e}")
+        # Don't raise - let the app start but alerts will be unavailable
+
     # Start background task
     logger.info("Starting background tasks...")
     background_task = asyncio.create_task(periodic_price_updates())
 
     yield
+
+    # Shutdown health check service
+    logger.info("Shutting down health check service...")
+    try:
+        from src.services.health_checker import stop_health_check_service
+        await stop_health_check_service()
+        logger.info("Health check service shut down successfully")
+    except Exception as e:
+        logger.error(f"Failed to shutdown health check service: {e}")
 
     # Shutdown portfolio update queue
     logger.info("Shutting down portfolio update queue...")

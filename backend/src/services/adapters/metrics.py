@@ -159,39 +159,33 @@ class ProviderMetricsCollector:
         # Prometheus metrics
         self.request_counter = Counter(
             "adapter_requests_total",
-            "Total number of adapter requests",
-            const_labels={}
+            "Total number of adapter requests"
         )
 
         self.response_time_histogram = Histogram(
             "adapter_response_time_seconds",
             "Response time histogram for adapter requests",
-            const_labels={},
             buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
         )
 
         self.active_requests_gauge = Gauge(
             "adapter_active_requests",
-            "Number of active adapter requests",
-            const_labels={}
+            "Number of active adapter requests"
         )
 
         self.circuit_breaker_state_gauge = Gauge(
             "adapter_circuit_breaker_state",
-            "Circuit breaker state (0=closed, 1=half_open, 2=open)",
-            const_labels={}
+            "Circuit breaker state (0=closed, 1=half_open, 2=open)"
         )
 
         self.rate_limit_counter = Counter(
             "adapter_rate_limits_total",
-            "Total number of rate limit hits",
-            const_labels={}
+            "Total number of rate limit hits"
         )
 
         self.success_rate_gauge = Gauge(
             "adapter_success_rate",
-            "Success rate for adapter requests",
-            const_labels={}
+            "Success rate for adapter requests"
         )
 
         # Internal tracking
@@ -218,10 +212,11 @@ class ProviderMetricsCollector:
             self._active_requests[provider_name] = 0
         self._active_requests[provider_name] += 1
 
-        # Update Prometheus gauge
-        self.active_requests_gauge.labels(provider=provider_name).set(
-            self._active_requests[provider_name]
-        )
+        # Update Prometheus gauge (simplified without labels)
+        try:
+            self.active_requests_gauge.set(self._active_requests[provider_name])
+        except Exception as e:
+            self.logger.debug(f"Failed to update active requests gauge: {e}")
 
         return request_id
 
@@ -252,27 +247,22 @@ class ProviderMetricsCollector:
         status = "success" if response.success else "error"
         hit_rate_limit = response.error_code == "RATE_LIMIT_EXCEEDED"
 
-        # Update Prometheus metrics
-        self.request_counter.labels(
-            provider=provider_name,
-            operation=operation,
-            status=status
-        ).inc()
-
-        self.response_time_histogram.labels(
-            provider=provider_name,
-            operation=operation
-        ).observe(duration_seconds)
-
-        if hit_rate_limit:
-            self.rate_limit_counter.labels(provider=provider_name).inc()
+        # Update Prometheus metrics (simplified without labels)
+        try:
+            self.request_counter.inc()
+            self.response_time_histogram.observe(duration_seconds)
+            if hit_rate_limit:
+                self.rate_limit_counter.inc()
+        except Exception as e:
+            self.logger.debug(f"Failed to update Prometheus metrics: {e}")
 
         # Update active requests
         if provider_name in self._active_requests:
             self._active_requests[provider_name] = max(0, self._active_requests[provider_name] - 1)
-            self.active_requests_gauge.labels(provider=provider_name).set(
-                self._active_requests[provider_name]
-            )
+            try:
+                self.active_requests_gauge.set(self._active_requests[provider_name])
+            except Exception as e:
+                self.logger.debug(f"Failed to update active requests gauge: {e}")
 
         # Update internal metrics
         self._update_internal_metrics(
@@ -325,10 +315,13 @@ class ProviderMetricsCollector:
         if len(metrics["response_times"]) > 100:
             metrics["response_times"].pop(0)
 
-        # Update Prometheus success rate gauge
+        # Update Prometheus success rate gauge (simplified without labels)
         if metrics["total_requests"] > 0:
             success_rate = metrics["successful_requests"] / metrics["total_requests"]
-            self.success_rate_gauge.labels(provider=provider_name).set(success_rate)
+            try:
+                self.success_rate_gauge.set(success_rate)
+            except Exception as e:
+                self.logger.debug(f"Failed to update success rate gauge: {e}")
 
     def record_circuit_breaker_state(self, provider_name: str, state: str) -> None:
         """
@@ -341,7 +334,10 @@ class ProviderMetricsCollector:
         state_mapping = {"closed": 0, "half_open": 1, "open": 2}
         state_value = state_mapping.get(state, 0)
 
-        self.circuit_breaker_state_gauge.labels(provider=provider_name).set(state_value)
+        try:
+            self.circuit_breaker_state_gauge.set(state_value)
+        except Exception as e:
+            self.logger.debug(f"Failed to update circuit breaker gauge: {e}")
 
         self.logger.info(f"Circuit breaker state changed for {provider_name}: {state}")
 
@@ -424,7 +420,7 @@ class ProviderMetricsCollector:
                 # Find provider configuration
                 provider_config = db_session.query(ProviderConfiguration).filter(
                     ProviderConfiguration.provider_name == provider_name,
-                    ProviderConfiguration.is_active == True
+                    ProviderConfiguration.is_active == 1
                 ).first()
 
                 if not provider_config:
@@ -478,7 +474,7 @@ class ProviderMetricsCollector:
             # Find provider configuration
             provider_config = db.query(ProviderConfiguration).filter(
                 ProviderConfiguration.provider_name == provider_name,
-                ProviderConfiguration.is_active == True
+                ProviderConfiguration.is_active == 1
             ).first()
 
             if not provider_config:

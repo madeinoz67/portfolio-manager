@@ -60,7 +60,7 @@ class PortfolioUpdateQueue(LoggerMixin):
 
         # Queue metrics tracking
         self._last_metrics_time: float = 0
-        self._metrics_interval: float = 30.0  # Record metrics every 30 seconds
+        self._metrics_interval: float = 300.0  # Record metrics every 5 minutes
         self._processing_times: deque = deque(maxlen=100)  # Track recent processing times
 
         self.log_info("Portfolio Update Queue initialized", extra={

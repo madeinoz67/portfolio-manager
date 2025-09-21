@@ -91,6 +91,8 @@ const AdapterList: React.FC<AdapterListProps> = ({
         try {
           setMetricsLoading(prev => ({ ...prev, [adapter.id]: true }));
           const metrics = await adaptersApi.getAdapterMetrics(adapter.id);
+          console.log(`Metrics received for adapter ${adapter.id}:`, metrics);
+          console.log(`requests_today for ${adapter.id}:`, metrics.requests_today);
           setAdapterMetrics(prev => ({ ...prev, [adapter.id]: metrics }));
         } catch (error) {
           console.error(`Failed to fetch metrics for adapter ${adapter.id}:`, error);
@@ -171,6 +173,7 @@ const AdapterList: React.FC<AdapterListProps> = ({
 
     const metrics = adapterMetrics[adapterId];
     if (!metrics) {
+      console.log(`No metrics found for adapter ${adapterId}`);
       return { used: 0, limit: 0, percentage: 0 };
     }
 
@@ -180,6 +183,9 @@ const AdapterList: React.FC<AdapterListProps> = ({
 
     const used = metrics.requests_today || 0;
     const percentage = dailyLimit > 0 ? (used / dailyLimit) * 100 : 0;
+
+    console.log(`Usage data for ${adapterId}: used=${used}, dailyLimit=${dailyLimit}, percentage=${percentage}`);
+    console.log(`Full metrics object:`, metrics);
 
     return { used, limit: dailyLimit, percentage: Math.min(percentage, 100) };
   };
