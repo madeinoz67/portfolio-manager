@@ -191,14 +191,17 @@ class AdapterMarketDataService:
                         try:
                             response = await adapter.fetch_prices([symbol])
                             if response.success and response.data:
-                                # Convert adapter response to legacy format
-                                price_data = self._convert_adapter_response(
-                                    response.data, symbol, provider_name
-                                )
-                                if price_data:
-                                    results[symbol] = price_data
-                                    # Store to database
-                                    self._store_price_to_master(symbol, price_data, provider_name)
+                                # Extract the actual data for this symbol from response.data dict
+                                if symbol in response.data:
+                                    symbol_data = response.data[symbol]
+                                    # Convert adapter response to legacy format
+                                    price_data = self._convert_adapter_response(
+                                        symbol_data, symbol, provider_name
+                                    )
+                                    if price_data:
+                                        results[symbol] = price_data
+                                        # Store to database
+                                        self._store_price_to_master(symbol, price_data, provider_name)
 
                         except Exception as e:
                             logger.error(f"Failed to fetch {symbol} from {provider_name}: {e}")
@@ -214,6 +217,9 @@ class AdapterMarketDataService:
         # Log usage metrics for successful fetches
         if results:
             self._log_usage_metrics(results, active_configs[0].provider_name)
+
+            # Queue portfolio updates for all symbols that were updated
+            self._queue_portfolio_updates(list(results.keys()))
 
         return results
 
@@ -235,31 +241,43 @@ class AdapterMarketDataService:
             Price data in legacy format
         """
         try:
+            # Debug logging to trace data format
+            logger.info(f"Converting adapter data for {symbol}: {list(adapter_data.keys()) if adapter_data else 'None'}")
+
             # Handle different adapter response formats
             if 'price' in adapter_data:
                 price = adapter_data['price']
+                logger.info(f"Found 'price' field for {symbol}: {price}")
             elif 'regularMarketPrice' in adapter_data:
                 price = adapter_data['regularMarketPrice']
+                logger.info(f"Found 'regularMarketPrice' field for {symbol}: {price}")
             elif 'last' in adapter_data:
                 price = adapter_data['last']
+                logger.info(f"Found 'last' field for {symbol}: {price}")
             else:
-                logger.warning(f"No price field found in adapter data for {symbol}")
+                logger.warning(f"No price field found in adapter data for {symbol}. Available fields: {list(adapter_data.keys()) if adapter_data else 'None'}")
                 return None
 
-            # Build legacy format response
-            return {
+            # Build comprehensive legacy format response with all market data
+            response = {
                 'symbol': symbol,
                 'price': float(price),
                 'open': adapter_data.get('open', adapter_data.get('regularMarketOpen')),
                 'high': adapter_data.get('high', adapter_data.get('regularMarketDayHigh')),
                 'low': adapter_data.get('low', adapter_data.get('regularMarketDayLow')),
                 'volume': adapter_data.get('volume', adapter_data.get('regularMarketVolume')),
-                'market_cap': adapter_data.get('marketCap'),
-                'company_name': adapter_data.get('longName', adapter_data.get('shortName')),
+                'market_cap': adapter_data.get('market_cap', adapter_data.get('marketCap')),
+                'company_name': adapter_data.get('company_name', adapter_data.get('longName', adapter_data.get('shortName'))),
                 'currency': adapter_data.get('currency', 'USD'),
+                'exchange': adapter_data.get('exchange'),
+                'change': adapter_data.get('change', 0.0),
+                'change_percent': adapter_data.get('change_percent', 0.0),
                 'source_timestamp': utc_now().replace(tzinfo=None),
                 'provider': provider_name
             }
+
+            logger.info(f"Built response for {symbol}: price={response['price']}, company={response['company_name']}, exchange={response['exchange']}")
+            return response
 
         except Exception as e:
             logger.error(f"Failed to convert adapter response for {symbol}: {e}")
@@ -464,6 +482,53 @@ class AdapterMarketDataService:
         except Exception as e:
             logger.error(f"Failed to log invalid data metrics: {e}")
 
+    def _queue_portfolio_updates(self, symbols: List[str]):
+        """
+        Queue portfolio updates for symbols that have been updated with fresh market data.
+
+        Args:
+            symbols: List of stock symbols that were just updated
+        """
+        try:
+            from src.services.portfolio_update_queue import get_portfolio_update_queue
+
+            # Get the portfolio update queue instance
+            queue = get_portfolio_update_queue()
+
+            # Find all unique portfolios that contain any of these symbols
+            from src.models.portfolio import Portfolio
+            from src.models.holding import Holding
+            from src.models.stock import Stock
+            from sqlalchemy import and_
+
+            affected_portfolios = self.db.query(Portfolio.id).join(Holding).join(Stock).filter(
+                and_(
+                    Stock.symbol.in_(symbols),
+                    Holding.quantity > 0,  # Only active holdings
+                    Portfolio.is_active.is_(True)  # Only active portfolios
+                )
+            ).distinct().all()
+
+            # Queue updates for each affected portfolio
+            queued_count = 0
+            for portfolio_row in affected_portfolios:
+                portfolio_id = str(portfolio_row.id)
+                success = queue.queue_portfolio_update(
+                    portfolio_id=portfolio_id,
+                    symbols=symbols,
+                    priority=1  # Normal priority for automatic updates
+                )
+                if success:
+                    queued_count += 1
+
+            if queued_count > 0:
+                logger.info(f"Queued portfolio updates for {queued_count} portfolios affected by symbols: {symbols}")
+            else:
+                logger.debug(f"No portfolios found to update for symbols: {symbols}")
+
+        except Exception as e:
+            logger.error(f"Failed to queue portfolio updates for symbols {symbols}: {e}")
+
     def get_current_price_from_master(self, symbol: str) -> Optional[Dict]:
         """
         Get current price for symbol from master realtime_symbols table.
@@ -480,7 +545,7 @@ class AdapterMarketDataService:
             return {
                 "symbol": symbol,
                 "price": float(master_record.current_price),
-                "source_timestamp": master_record.last_updated,
+                "fetched_at": master_record.last_updated,
                 "volume": master_record.volume,
                 "market_cap": master_record.market_cap,
                 "company_name": master_record.company_name
@@ -489,6 +554,18 @@ class AdapterMarketDataService:
         except Exception as e:
             logger.error(f"Failed to get current price for {symbol}: {e}")
             return None
+
+    def get_enabled_providers(self) -> List:
+        """Get list of enabled provider configurations."""
+        try:
+            return (
+                self.db.query(ProviderConfiguration)
+                .filter(ProviderConfiguration.is_active == 1)  # SQLite stores boolean as 1/0
+                .all()
+            )
+        except Exception as e:
+            logger.error(f"Failed to get enabled providers: {e}")
+            return []
 
     async def fetch_price(self, symbol: str) -> Optional[Dict]:
         """
@@ -513,3 +590,4 @@ class AdapterMarketDataService:
         except Exception as e:
             logger.error(f"Failed to fetch price for {symbol}: {e}")
             return None
+

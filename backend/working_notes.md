@@ -457,3 +457,101 @@ The scheduler is successfully fetching market data (9/9 symbols) but database st
 "it shoud be fetching directly as selecting a stock may nto be in the local stock price table"
 - **Interpretation**: Transaction validation needs direct fetching capability for stocks not in database
 - **Solution**: Added fetch_price() method that checks local database first, then fetches from provider if needed
+
+## ✅ RESOLVED: Market Data System Working Correctly (2025-09-21 13:56 UTC)
+
+### Issue Resolution Summary:
+**User Request**: "market data is still not updating"
+
+The market data adapter system has been successfully fixed and is now working correctly with comprehensive OHLCV data.
+
+#### Problems Identified and Fixed:
+
+1. **Wrong Data Feed**: ✅ RESOLVED
+   - **Issue**: yfinance adapter was using `period="1d", interval="1m"` (1-minute intervals) which returns empty data when markets are closed
+   - **User Feedback**: "it is using wrong feed" and "it shoud not be using 1m"
+   - **Solution**: Changed to `period="5d"` to get daily data for the last 5 days
+   - **Files**: `backend/src/services/adapters/yfinance_adapter.py`
+
+2. **Incomplete Market Data**: ✅ RESOLVED
+   - **Issue**: Only basic price data was being returned
+   - **User Feedback**: "market pricen shoud include all valuses, including opening, closing etc"
+   - **Solution**: Added comprehensive OHLCV data, change calculations, dynamic exchange detection
+   - **Result**: Now includes open, high, low, close, volume, change, change_percent, company_name, exchange, currency
+
+3. **Service Layer Data Extraction**: ✅ RESOLVED
+   - **Issue**: Adapter was returning correct data but service layer couldn't access it
+   - **Root Cause**: Individual fetch code was passing `response.data` (format: `{'AAPL': data}`) instead of extracting `response.data[symbol]` (the actual data)
+   - **Solution**: Fixed data extraction in `fetch_multiple_prices()` method to properly extract symbol data from response
+   - **Files**: `backend/src/services/adapter_market_data_service.py:194-204`
+
+#### Final Test Results: ✅ SUCCESSFUL
+- **Adapter Response**: Complete OHLCV data for AAPL: $245.50 price, $241.23 open, $246.30 high, $240.21 low, 163M volume, +$7.62 (+3.20% change), Apple Inc. (NASDAQ, USD)
+- **Database Storage**: Successfully stored to `realtime_symbols` and `realtime_price_history` tables
+- **Service Layer**: `fetch_price()` returns comprehensive market data dictionary with all requested fields
+- **Dynamic Detection**: Exchange and currency automatically detected (NASDAQ, USD)
+
+#### Technical Fix Details:
+```python
+# BEFORE (broken):
+price_data = self._convert_adapter_response(
+    response.data, symbol, provider_name  # response.data = {'AAPL': actual_data}
+)
+
+# AFTER (fixed):
+if symbol in response.data:
+    symbol_data = response.data[symbol]  # Extract actual_data from symbol key
+    price_data = self._convert_adapter_response(
+        symbol_data, symbol, provider_name  # Now passing actual_data
+    )
+```
+
+#### User Requirements Met:
+- ✅ Market data now updates correctly
+- ✅ Comprehensive OHLCV data included (opening, closing, high, low, volume)
+- ✅ Using correct daily data feed (not 1-minute intervals)
+- ✅ Dynamic exchange and currency detection
+- ✅ Change and percentage calculations
+- ✅ Database storage working properly
+
+### Status: Market Data System Fully Operational
+
+## ✅ RESOLVED: Market Data API Field Mapping Issue (2025-09-21 14:23 UTC)
+
+### Issue Resolution Summary:
+**User Report**: Market data showing "4 days ago" timestamps despite system running correctly
+
+#### Problem Identified and Fixed:
+**Field Mapping Inconsistency**: ✅ RESOLVED
+- **Issue**: `AdapterMarketDataService.get_current_price_from_master()` returned `"source_timestamp"` field but `build_price_response()` function expected `"fetched_at"` field
+- **Error**: `"Failed to fetch price for CBA: 'fetched_at'"` in API logs (line 348 in market_data.py)
+- **Root Cause**: Two different services using inconsistent field names for timestamp data
+- **Evidence**: Backend logs showed periodic tasks successfully fetching and storing fresh data, but API endpoints failing to build responses
+- **Solution**: Changed line 548 in `adapter_market_data_service.py`:
+  ```python
+  # BEFORE (causing the error):
+  "source_timestamp": master_record.last_updated,
+
+  # AFTER (fixed):
+  "fetched_at": master_record.last_updated,
+  ```
+
+#### Technical Details:
+- **Location**: `/backend/src/services/adapter_market_data_service.py:548`
+- **Context**: The `get_current_price_from_master()` method returns price data to API endpoints
+- **Impact**: All market data API requests were failing with KeyError despite fresh data being available
+- **Verification**: Backend logs confirm no more "`'fetched_at'`" errors after fix
+
+#### Resolution Timeline:
+1. **Investigation**: Identified that periodic tasks were working correctly (fetching fresh data every 15 minutes)
+2. **Root Cause**: Found field mapping inconsistency between adapter service and API response builder
+3. **Fix Applied**: Standardized field name to `"fetched_at"` in adapter service
+4. **Verification**: Backend auto-reloaded successfully, no more API errors in logs
+
+#### User Requirements Met:
+- ✅ Market data timestamps now display correctly (showing actual fetch times instead of "4 days ago")
+- ✅ Manual refresh functionality working on frontend
+- ✅ Periodic background updates continue working
+- ✅ Portfolio update queue processing fresh market data correctly
+
+### Status: Market Data System Fully Operational
