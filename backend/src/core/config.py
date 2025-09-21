@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
 
     # Database
-    database_url: str = "sqlite:///./portfolio_manager.db"
+    database_url: str = "sqlite:///./portfolio.db"
     database_echo: bool = False
     database_pool_size: int = 20
     database_max_overflow: int = 30

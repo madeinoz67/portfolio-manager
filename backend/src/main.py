@@ -41,7 +41,7 @@ from src.core.exceptions import (
 )
 from src.core.logging import setup_logging, set_request_id, get_logger
 from src.database import engine, Base, get_db
-from src.services.market_data_service import MarketDataService
+from src.services.adapter_market_data_service import AdapterMarketDataService
 from src.services.activity_service import log_provider_activity
 from src.services.scheduler_service import get_scheduler_service
 
@@ -79,21 +79,12 @@ async def periodic_price_updates():
                 scheduler_service = get_scheduler_service(db)
                 scheduler_service.record_execution_start()
 
-                # Create market data service
-                service = MarketDataService(db)
+                # Create market data service (using new adapter system)
+                service = AdapterMarketDataService(db)
 
                 # Get symbols dynamically based on actual usage
-                # Check what providers are available and their bulk limits
-                enabled_providers = service.get_enabled_providers()
-                provider_bulk_limit = 10  # Conservative default
-
-                for provider in enabled_providers:
-                    if provider.name == "yfinance":
-                        provider_bulk_limit = 50  # yfinance bulk limit
-                        break
-                    elif provider.name == "alpha_vantage" and provider.api_key:
-                        provider_bulk_limit = 100  # Alpha Vantage bulk limit
-                        break
+                # Use adapter system with standard bulk limit
+                provider_bulk_limit = 50  # Standard bulk limit for adapter system
 
                 # Get actively monitored symbols from portfolios and recent requests
                 symbols_to_fetch = service.get_actively_monitored_symbols(
@@ -121,7 +112,7 @@ async def periodic_price_updates():
                         status="success",
                         metadata={
                             "uptime_minutes": cycle_count * 15,
-                            "providers_available": len(service.get_enabled_providers()),
+                            "providers_available": len(service.registry.list_providers()),
                             "system_status": "healthy"
                         }
                     )
@@ -275,6 +266,9 @@ async def lifespan(app: FastAPI):
     # Initialize adapter registry
     logger.info("Initializing adapter registry...")
     try:
+        from src.services.adapters.registry_init import initialize_adapter_registry
+        initialize_adapter_registry()
+
         from src.services.adapters.registry import get_provider_registry
         provider_registry = get_provider_registry()
         logger.info(f"Adapter registry initialized with {len(provider_registry.list_providers())} providers")
@@ -423,7 +417,7 @@ app.include_router(metrics_router)
 
 
 @app.get("/")
-async def root() -> dict[str, str]:
+async def root() -> dict[str, str | list[str]]:
     """Root endpoint returning API information."""
     return {
         "message": "Portfolio Management API",

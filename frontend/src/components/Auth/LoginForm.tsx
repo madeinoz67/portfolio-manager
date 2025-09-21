@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import Button from '@/components/ui/Button'
+import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { ErrorBanner } from '@/components/ui/ErrorBanner'
 

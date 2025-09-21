@@ -71,10 +71,10 @@ export interface ProviderRegistry {
 }
 
 class AdaptersApiClient {
-  private baseUrl = '/api/v1/admin/adapters';
+  private baseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/v1/admin/adapters`;
 
   private async getAuthHeaders(): Promise<HeadersInit> {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('No authentication token found');
     }
@@ -109,12 +109,22 @@ class AdaptersApiClient {
   /**
    * Fetch all adapter configurations
    */
-  async getAdapters(): Promise<AdapterConfiguration[]> {
+  async getAdapters(): Promise<{
+    items: AdapterConfiguration[];
+    total: number;
+    page: number;
+    page_size: number;
+  }> {
     const response = await fetch(this.baseUrl, {
       headers: await this.getAuthHeaders(),
     });
 
-    return this.handleResponse<AdapterConfiguration[]>(response);
+    return this.handleResponse<{
+      items: AdapterConfiguration[];
+      total: number;
+      page: number;
+      page_size: number;
+    }>(response);
   }
 
   /**
@@ -347,7 +357,7 @@ class AdaptersApiClient {
     formData.append('file', file);
     formData.append('overwrite', overwrite.toString());
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('No authentication token found');
     }

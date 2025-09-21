@@ -159,7 +159,8 @@ export default function AdminDashboard() {
       if (!user || !token) return
 
       try {
-        const response = await fetch('http://localhost:8001/api/v1/admin/system/metrics', {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+        const response = await fetch(`${API_BASE_URL}/api/v1/admin/system/metrics`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

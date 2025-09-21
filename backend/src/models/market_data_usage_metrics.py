@@ -9,8 +9,7 @@ from src.utils.datetime_utils import now
 from typing import Optional
 import uuid
 
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, DECIMAL
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, DECIMAL, Uuid
 
 from src.database import Base
 
@@ -20,11 +19,11 @@ class MarketDataUsageMetrics(Base):
 
     __tablename__ = "market_data_usage_metrics"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     metric_id = Column(String(100), nullable=False)
-    provider_id = Column(String(50), nullable=False)  # 'alpha_vantage', 'yfinance'
-    user_id = Column(UUID(as_uuid=True), nullable=True)
-    portfolio_id = Column(UUID(as_uuid=True), nullable=True)
+    provider_name = Column(String(50), nullable=False)  # 'alpha_vantage', 'yfinance'
+    user_id = Column(Uuid, nullable=True)
+    portfolio_id = Column(Uuid, nullable=True)
     request_type = Column(String(50), nullable=False)
     requests_count = Column(Integer, nullable=True)
     data_points_fetched = Column(Integer, nullable=True)
@@ -36,4 +35,4 @@ class MarketDataUsageMetrics(Base):
     avg_response_time_ms = Column(Integer, nullable=True)  # Average response time in milliseconds
 
     def __repr__(self) -> str:
-        return f"<ApiUsageMetrics(provider={self.provider_id}, requests={self.requests_count}, errors={self.error_count})>"
+        return f"<ApiUsageMetrics(provider={self.provider_name}, requests={self.requests_count}, errors={self.error_count})>"

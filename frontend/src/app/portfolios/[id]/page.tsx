@@ -108,7 +108,8 @@ export default function PortfolioDetail() {
       }
 
       // Fetch portfolio details
-      const portfolioResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const portfolioResponse = await fetch(`${API_BASE_URL}/api/v1/portfolios/${portfolioId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ export default function PortfolioDetail() {
 
       // Fetch portfolio holdings
       try {
-        const holdingsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/holdings`, {
+        const holdingsResponse = await fetch(`${API_BASE_URL}/api/v1/portfolios/${portfolioId}/holdings`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

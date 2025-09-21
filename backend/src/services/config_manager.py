@@ -6,7 +6,8 @@ validation, encryption of sensitive data, and dynamic configuration updates.
 """
 
 import logging
-from typing import Dict, List, Optional, Any, Type
+from typing import Dict, List, Optional, Any, Type, Union
+from uuid import UUID
 from sqlalchemy.orm import Session
 from dependency_injector import containers, providers
 import json
@@ -171,8 +172,11 @@ class ConfigurationManager:
 
         return config
 
-    def get_provider_configuration(self, config_id: str) -> Optional[ProviderConfiguration]:
+    def get_provider_configuration(self, config_id: Union[str, UUID]) -> Optional[ProviderConfiguration]:
         """Get provider configuration by ID."""
+        # Convert UUID to string for SQLite compatibility
+        if isinstance(config_id, UUID):
+            config_id = str(config_id)
         return self.db_session.query(ProviderConfiguration).filter(
             ProviderConfiguration.id == config_id
         ).first()
@@ -189,7 +193,7 @@ class ConfigurationManager:
             ProviderConfiguration.provider_name == provider_name
         ).all()
 
-    async def get_adapter_instance(self, config_id: str) -> Optional[MarketDataAdapter]:
+    async def get_adapter_instance(self, config_id: Union[str, UUID]) -> Optional[MarketDataAdapter]:
         """
         Get or create adapter instance for configuration.
 
@@ -199,9 +203,12 @@ class ConfigurationManager:
         Returns:
             Initialized adapter instance or None if not found/invalid
         """
+        # Convert UUID to string for consistent cache keys
+        cache_key = str(config_id) if isinstance(config_id, UUID) else config_id
+
         # Check cache first
-        if config_id in self._adapter_cache:
-            return self._adapter_cache[config_id]
+        if cache_key in self._adapter_cache:
+            return self._adapter_cache[cache_key]
 
         config = self.get_provider_configuration(config_id)
         if not config or not config.is_active:
@@ -218,7 +225,7 @@ class ConfigurationManager:
 
         if adapter:
             # Cache the instance
-            self._adapter_cache[config_id] = adapter
+            self._adapter_cache[cache_key] = adapter
             self.logger.info(f"Created adapter instance for {config.provider_name}")
 
         return adapter

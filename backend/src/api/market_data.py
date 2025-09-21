@@ -26,7 +26,7 @@ from src.models.holding import Holding
 from src.models.sse_connection import SSEConnection
 from src.models.market_data_usage_metrics import MarketDataUsageMetrics
 from src.models.market_data_provider import ProviderActivity
-from src.services.market_data_service import MarketDataService
+from src.services.adapter_market_data_service import AdapterMarketDataService
 from src.services.trend_calculation_service import TrendCalculationService
 from src.services.activity_service import log_provider_activity
 from src.core.logging import get_logger
@@ -226,7 +226,7 @@ async def get_price(
     """Get current price for a specific symbol with comprehensive market data and trend information."""
 
     symbol = symbol.upper()
-    service = MarketDataService(db)
+    service = AdapterMarketDataService(db)
     trend_service = TrendCalculationService(db)
 
     try:
@@ -286,7 +286,7 @@ async def get_bulk_prices(
         )
 
     symbols = [s.upper() for s in symbols]
-    service = MarketDataService(db)
+    service = AdapterMarketDataService(db)
     trend_service = TrendCalculationService(db)
 
     try:
@@ -350,7 +350,7 @@ async def get_service_status(
 ):
     """Get market data service status and provider health."""
 
-    service = MarketDataService(db)
+    service = AdapterMarketDataService(db)
     providers = service.get_enabled_providers()
 
     providers_status = {}
@@ -396,7 +396,7 @@ async def refresh_prices(
     # Rate limiting: max 1 request per minute per user
     # This would be implemented with proper rate limiting logic
 
-    service = MarketDataService(db)
+    service = AdapterMarketDataService(db)
 
     try:
         if request.symbols:
@@ -484,7 +484,7 @@ async def stream_market_data(
 
                     # Send price updates from master table
                     if symbols:
-                        service = MarketDataService(db)
+                        service = AdapterMarketDataService(db)
                         try:
                             price_updates = {}
                             for symbol in symbols[:10]:  # Limit to avoid overload
@@ -565,7 +565,7 @@ async def get_scheduler_status(
         avg_response_time = int(sum(response_times) / len(response_times)) if response_times else None
 
         # Get enabled providers for provider stats
-        service = MarketDataService(db)
+        service = AdapterMarketDataService(db)
         enabled_providers = service.get_enabled_providers()
 
         # Build provider stats

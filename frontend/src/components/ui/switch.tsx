@@ -17,7 +17,7 @@ const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
       <label className="relative inline-flex items-center cursor-pointer">
         <input
           type="checkbox"
-          className="sr-only"
+          className="sr-only peer"
           ref={ref}
           {...props}
           onChange={handleChange}

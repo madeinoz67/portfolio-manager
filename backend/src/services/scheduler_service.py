@@ -16,7 +16,7 @@ from src.utils.datetime_utils import utc_now
 from src.models.scheduler_execution import SchedulerExecution
 from src.models.holding import Holding
 from src.models.stock import Stock
-from src.services.market_data_service import MarketDataService
+from src.services.adapter_market_data_service import AdapterMarketDataService
 
 logger = get_logger(__name__)
 
@@ -520,7 +520,7 @@ class MarketDataSchedulerService:
             self._current_execution = execution
 
             # Use actively monitored symbols (includes both portfolio holdings and recent price requests)
-            market_service = MarketDataService(self.db)
+            market_service = AdapterMarketDataService(self.db)
             symbols_to_fetch = market_service.get_actively_monitored_symbols(
                 provider_bulk_limit=50,  # Allow more symbols for bulk operations
                 minutes_lookback=60      # Consider symbols requested in last hour

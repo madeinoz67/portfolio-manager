@@ -90,7 +90,8 @@ export default function HoldingDetail() {
         }
 
         // Fetch holding details
-        const holdingResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/holdings/${holdingId}`, {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+        const holdingResponse = await fetch(`${API_BASE_URL}/api/v1/portfolios/${portfolioId}/holdings/${holdingId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -110,7 +111,7 @@ export default function HoldingDetail() {
 
         // Fetch news and notices
         try {
-          const newsResponse = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolioId}/holdings/${holdingId}/news`, {
+          const newsResponse = await fetch(`${API_BASE_URL}/api/v1/portfolios/${portfolioId}/holdings/${holdingId}/news`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',

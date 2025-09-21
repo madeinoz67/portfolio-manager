@@ -12,7 +12,7 @@ from src.database import get_db
 from src.models import Stock
 from src.models.stock import StockStatus
 from src.schemas.stock import StockResponse, StockDetailResponse, PricePointResponse, StockCreateRequest
-from src.services.market_data_service import MarketDataService
+from src.services.adapter_market_data_service import AdapterMarketDataService
 
 router = APIRouter(prefix="/api/v1/stocks", tags=["Stocks"])
 
@@ -97,7 +97,7 @@ async def search_stocks_frontend(
 
     # No results found in database, try to validate as a stock symbol via yfinance
     if len(query) <= 5 and query.isalpha():  # Likely a stock symbol
-        service = MarketDataService(db)
+        service = AdapterMarketDataService(db)
         try:
             price_data = await service.fetch_price(query.upper())
 
@@ -161,7 +161,7 @@ async def search_or_create_stock(
         return StockResponse.model_validate(existing_stock)
 
     # Stock doesn't exist, try to fetch from yfinance to validate and get company info
-    service = MarketDataService(db)
+    service = AdapterMarketDataService(db)
     try:
         price_data = await service.fetch_price(symbol)
 

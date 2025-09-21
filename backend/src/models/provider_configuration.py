@@ -11,10 +11,41 @@ import uuid
 
 from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.types import TypeDecorator, String as SQLString
 from sqlalchemy.orm import relationship
 
 from src.database import Base
 from src.utils.datetime_utils import now
+
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type when available, otherwise uses String(36).
+    """
+    impl = SQLString
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(UUID())
+        else:
+            return dialect.type_descriptor(SQLString(32))  # 32 chars without hyphens for SQLite
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return str(value)
+        else:
+            # For SQLite, store as 32-char string without hyphens
+            return str(value).replace('-', '')
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        else:
+            return str(value)
 
 
 class ProviderConfiguration(Base):
@@ -22,14 +53,14 @@ class ProviderConfiguration(Base):
 
     __tablename__ = "provider_configurations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     provider_name = Column(String(50), nullable=False)  # Reference to adapter type
     display_name = Column(String(100), nullable=False)  # Human-readable name for admin UI
     config_data = Column(JSON, nullable=False)  # Provider-specific settings (encrypted credentials)
     is_active = Column(Boolean, default=False, nullable=False)  # Enable/disable provider
     created_at = Column(DateTime, default=now, nullable=False)
     updated_at = Column(DateTime, default=now, onupdate=now, nullable=False)
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_by_user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
 
     # Relationships
     created_by = relationship("User")

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Controller } from "react-hook-form"
 import { cn } from "@/lib/utils"
 
 const Form = React.forwardRef<
@@ -13,16 +14,21 @@ const Form = React.forwardRef<
 ))
 Form.displayName = "Form"
 
-const FormField = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("space-y-2", className)}
-    {...props}
-  />
-))
+interface FormFieldProps {
+  control: any;
+  name: string;
+  render: (props: { field: any; fieldState: any; formState: any }) => React.ReactNode;
+}
+
+const FormField: React.FC<FormFieldProps> = ({ control, name, render }) => {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={render}
+    />
+  );
+}
 FormField.displayName = "FormField"
 
 const FormItem = React.forwardRef<

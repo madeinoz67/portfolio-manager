@@ -92,7 +92,8 @@ export default function Settings() {
         return
       }
 
-      const response = await fetch('http://localhost:8001/api/v1/auth/me', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -133,7 +134,8 @@ export default function Settings() {
         return
       }
 
-      const response = await fetch('http://localhost:8001/api/v1/auth/me', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -176,7 +178,8 @@ export default function Settings() {
       const token = localStorage.getItem('auth_token')
       if (!token) return
 
-      const response = await fetch('http://localhost:8001/api/v1/api-keys', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -213,7 +216,8 @@ export default function Settings() {
         expires_at: expiryDateTime.toISOString()
       }
 
-      const response = await fetch('http://localhost:8001/api/v1/api-keys', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -250,7 +254,8 @@ export default function Settings() {
       const token = localStorage.getItem('auth_token')
       if (!token) return
 
-      const response = await fetch(`http://localhost:8001/api/v1/api-keys/${keyId}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/api-keys/${keyId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

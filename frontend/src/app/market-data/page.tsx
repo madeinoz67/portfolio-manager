@@ -102,7 +102,8 @@ export default function MarketDataPage() {
       const params = new URLSearchParams()
       symbolsToFetch.forEach(symbol => params.append('symbols', symbol))
 
-      const response = await fetch(`http://localhost:8001/api/v1/market-data/prices?${params}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/market-data/prices?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

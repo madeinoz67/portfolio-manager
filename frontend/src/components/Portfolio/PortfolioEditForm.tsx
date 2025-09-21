@@ -51,7 +51,8 @@ export default function PortfolioEditForm({ portfolio, onUpdate, onCancel }: Por
     setError(null)
 
     try {
-      const response = await fetch(`http://localhost:8001/api/v1/portfolios/${portfolio.id}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/portfolios/${portfolio.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

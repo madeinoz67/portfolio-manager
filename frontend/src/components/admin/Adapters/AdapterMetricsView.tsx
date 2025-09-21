@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Card,
   CardContent,
@@ -28,30 +29,58 @@ import {
   BarChart3,
   DollarSign,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { getRelativeTime } from '@/utils/timezone';
 
-interface AdapterMetrics {
+interface CurrentMetrics {
   adapter_id: string;
   provider_name: string;
-  display_name: string;
+  is_healthy: boolean;
+  is_active: boolean;
+  last_check: string;
   total_requests: number;
   successful_requests: number;
   failed_requests: number;
   success_rate: number;
-  average_response_time_ms: number;
-  total_cost: number;
-  requests_today: number;
-  requests_this_hour: number;
-  last_request_at?: string;
-  last_success_at?: string;
-  last_failure_at?: string;
-  current_status: 'healthy' | 'degraded' | 'down';
-  uptime_percentage: number;
-  rate_limit_hits: number;
-  error_rate_24h: number;
-  p95_response_time_ms: number;
+  avg_latency_ms: number;
+  min_latency_ms: number;
+  max_latency_ms: number;
+  p95_latency_ms: number;
+  requests_per_minute: number;
+  rate_limit_remaining?: number;
+  rate_limit_reset_time?: string;
+  error_count_24h: number;
+  last_error?: string;
+  last_error_time?: string;
+  circuit_breaker_state: string;
+  circuit_breaker_failure_count: number;
+  circuit_breaker_next_attempt?: string;
+}
+
+interface CostMetrics {
   daily_cost: number;
-  monthly_cost_estimate: number;
+  daily_budget?: number;
+  daily_budget_used_percent: number;
+  monthly_cost: number;
+  monthly_budget?: number;
+  monthly_budget_used_percent: number;
+  cost_per_request: number;
+  cost_per_successful_request: number;
+  budget_status: string;
+  budget_remaining_daily?: number;
+  budget_remaining_monthly?: number;
+  cost_alerts: string[];
+  projected_daily_cost?: number;
+  projected_monthly_cost?: number;
+}
+
+interface AdapterMetrics {
+  adapter_id: string;
+  provider_name: string;
+  current_metrics: CurrentMetrics;
+  cost_metrics?: CostMetrics;
+  historical_data?: any[];
+  active_alerts: any[];
+  last_updated: string;
 }
 
 interface AdapterMetricsViewProps {
@@ -63,7 +92,8 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
   adapterId,
   onClose,
 }) => {
-  const [metrics, setMetrics] = useState<AdapterMetrics | null>(null);
+  const { token, isAdmin } = useAuth();
+  const [metricsData, setMetricsData] = useState<AdapterMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>('24h');
@@ -74,9 +104,15 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
+      if (!isAdmin()) {
+        throw new Error('Admin access required');
+      }
       const response = await fetch(
-        `/api/v1/admin/adapters/${adapterId}/metrics?timeRange=${timeRange}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/v1/admin/adapters/${adapterId}/metrics?timeRange=${timeRange}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -90,7 +126,7 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
       }
 
       const data = await response.json();
-      setMetrics(data);
+      setMetricsData(data);
     } catch (err) {
       console.error('Error fetching adapter metrics:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
@@ -115,20 +151,19 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
     };
   }, [autoRefresh, adapterId, timeRange]);
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      healthy: { variant: 'default' as const, icon: CheckCircle, color: 'text-green-600' },
-      degraded: { variant: 'secondary' as const, icon: AlertTriangle, color: 'text-yellow-600' },
-      down: { variant: 'destructive' as const, icon: AlertTriangle, color: 'text-red-600' },
-    };
-
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.down;
-    const Icon = config.icon;
-
+  const getStatusBadge = (isHealthy: boolean) => {
+    if (isHealthy) {
+      return (
+        <Badge variant="default" className="flex items-center gap-1">
+          <CheckCircle className="w-3 h-3 text-green-600" />
+          Healthy
+        </Badge>
+      );
+    }
     return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
-        <Icon className={`w-3 h-3 ${config.color}`} />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <Badge variant="destructive" className="flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3 text-red-600" />
+        Unhealthy
       </Badge>
     );
   };
@@ -182,7 +217,7 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
     );
   }
 
-  if (!metrics) {
+  if (!metricsData) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -204,10 +239,10 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5" />
-                {metrics.display_name} Metrics
+                {metricsData.provider_name} Metrics
               </CardTitle>
               <CardDescription>
-                Performance and usage metrics for {metrics.provider_name}
+                Performance and usage metrics for adapter {metricsData.adapter_id}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -228,9 +263,10 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
                 size="sm"
                 onClick={() => setAutoRefresh(!autoRefresh)}
                 className={autoRefresh ? 'bg-blue-50 border-blue-200' : ''}
+                title={autoRefresh ? 'Auto refresh enabled (30s intervals) - click to disable' : 'Click to enable auto refresh every 30 seconds'}
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
-                Auto Refresh
+                {autoRefresh ? 'Auto ON' : 'Auto Refresh'}
               </Button>
 
               <Button onClick={fetchMetrics} variant="outline" size="sm">
@@ -255,13 +291,13 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Status</p>
-                {getStatusBadge(metrics.current_status)}
+                {getStatusBadge(metricsData.current_metrics.is_healthy)}
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatPercentage(metrics.uptime_percentage)}
+                  {metricsData.current_metrics.is_healthy ? '100%' : '0%'}
                 </p>
-                <p className="text-xs text-gray-500">Uptime</p>
+                <p className="text-xs text-gray-500">Health</p>
               </div>
             </div>
           </CardContent>
@@ -273,22 +309,22 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
               <div>
                 <p className="text-sm font-medium text-gray-600">Success Rate</p>
                 <div className="flex items-center gap-1 mt-1">
-                  {metrics.success_rate >= 95 ? (
+                  {metricsData.current_metrics.success_rate >= 0.95 ? (
                     <TrendingUp className="w-4 h-4 text-green-600" />
                   ) : (
                     <TrendingDown className="w-4 h-4 text-red-600" />
                   )}
-                  <span className={`text-sm ${metrics.success_rate >= 95 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatPercentage(metrics.success_rate)}
+                  <span className={`text-sm ${metricsData.current_metrics.success_rate >= 0.95 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatPercentage(metricsData.current_metrics.success_rate * 100)}
                   </span>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
-                  {metrics.successful_requests}
+                  {metricsData.current_metrics.successful_requests}
                 </p>
                 <p className="text-xs text-gray-500">
-                  of {metrics.total_requests} requests
+                  of {metricsData.current_metrics.total_requests} requests
                 </p>
               </div>
             </div>
@@ -302,16 +338,19 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
                 <p className="text-sm font-medium text-gray-600">Response Time</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm text-blue-600">
-                    P95: {formatResponseTime(metrics.p95_response_time_ms)}
+                  <span className={`text-sm ${metricsData.current_metrics.p95_latency_ms === 0 ? 'text-amber-600' : 'text-blue-600'}`}>
+                    P95: {formatResponseTime(metricsData.current_metrics.p95_latency_ms)}
+                    {metricsData.current_metrics.p95_latency_ms === 0 && ' (no data)'}
                   </span>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatResponseTime(metrics.average_response_time_ms)}
+                <p className={`text-2xl font-bold ${metricsData.current_metrics.avg_latency_ms === 0 ? 'text-amber-600' : 'text-gray-900'}`}>
+                  {formatResponseTime(metricsData.current_metrics.avg_latency_ms)}
                 </p>
-                <p className="text-xs text-gray-500">Average</p>
+                <p className="text-xs text-gray-500">
+                  {metricsData.current_metrics.avg_latency_ms === 0 ? 'No data' : 'Average'}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -325,13 +364,13 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
                 <div className="flex items-center gap-1 mt-1">
                   <DollarSign className="w-4 h-4 text-green-600" />
                   <span className="text-sm text-gray-500">
-                    Est. Monthly: {formatCurrency(metrics.monthly_cost_estimate)}
+                    Est. Monthly: {formatCurrency(metricsData.cost_metrics?.projected_monthly_cost || 0)}
                   </span>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(metrics.daily_cost)}
+                  {formatCurrency(metricsData.cost_metrics?.daily_cost || 0)}
                 </p>
                 <p className="text-xs text-gray-500">Today</p>
               </div>
@@ -350,33 +389,33 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Requests Today</span>
-              <span className="text-lg font-semibold">{metrics.requests_today}</span>
+              <span className="text-sm font-medium">Requests per Minute</span>
+              <span className="text-lg font-semibold">{metricsData.current_metrics.requests_per_minute || 0}</span>
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Requests This Hour</span>
-              <span className="text-lg font-semibold">{metrics.requests_this_hour}</span>
+              <span className="text-sm font-medium">Circuit Breaker Failures</span>
+              <span className="text-lg font-semibold">{metricsData.current_metrics.circuit_breaker_failure_count || 0}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Failed Requests</span>
               <span className="text-lg font-semibold text-red-600">
-                {metrics.failed_requests}
+                {metricsData.current_metrics.failed_requests}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Rate Limit Hits</span>
+              <span className="text-sm font-medium">Rate Limit Remaining</span>
               <span className="text-lg font-semibold text-yellow-600">
-                {metrics.rate_limit_hits}
+                {metricsData.current_metrics.rate_limit_remaining || 'N/A'}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">24h Error Rate</span>
-              <span className={`text-lg font-semibold ${metrics.error_rate_24h > 5 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatPercentage(metrics.error_rate_24h)}
+              <span className="text-sm font-medium">24h Error Count</span>
+              <span className={`text-lg font-semibold ${metricsData.current_metrics.error_count_24h > 5 ? 'text-red-600' : 'text-green-600'}`}>
+                {metricsData.current_metrics.error_count_24h}
               </span>
             </div>
           </CardContent>
@@ -390,29 +429,26 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Total Cost</span>
-              <span className="text-lg font-semibold">{formatCurrency(metrics.total_cost)}</span>
+              <span className="text-sm font-medium">Monthly Cost</span>
+              <span className="text-lg font-semibold">{formatCurrency(metricsData.cost_metrics?.monthly_cost || 0)}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Daily Cost</span>
-              <span className="text-lg font-semibold">{formatCurrency(metrics.daily_cost)}</span>
+              <span className="text-lg font-semibold">{formatCurrency(metricsData.cost_metrics?.daily_cost || 0)}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Monthly Estimate</span>
               <span className="text-lg font-semibold text-blue-600">
-                {formatCurrency(metrics.monthly_cost_estimate)}
+                {formatCurrency(metricsData.cost_metrics?.projected_monthly_cost || metricsData.cost_metrics?.monthly_cost || 0)}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Cost per Request</span>
               <span className="text-lg font-semibold">
-                {metrics.total_requests > 0
-                  ? formatCurrency(metrics.total_cost / metrics.total_requests)
-                  : formatCurrency(0)
-                }
+                {formatCurrency(metricsData.cost_metrics?.cost_per_request || 0)}
               </span>
             </div>
           </CardContent>
@@ -426,34 +462,34 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
           <CardDescription>Latest request timestamps</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {metrics.last_request_at && (
+          {metricsData.last_updated && (
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Last Request</span>
+              <span className="text-sm font-medium">Last Updated</span>
               <span className="text-sm text-gray-600">
-                {formatDistanceToNow(new Date(metrics.last_request_at), { addSuffix: true })}
+                {getRelativeTime(metricsData.last_updated)}
               </span>
             </div>
           )}
 
-          {metrics.last_success_at && (
+          {metricsData.current_metrics.last_error_time && (
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Last Success</span>
-              <span className="text-sm text-green-600">
-                {formatDistanceToNow(new Date(metrics.last_success_at), { addSuffix: true })}
-              </span>
-            </div>
-          )}
-
-          {metrics.last_failure_at && (
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Last Failure</span>
+              <span className="text-sm font-medium">Last Error</span>
               <span className="text-sm text-red-600">
-                {formatDistanceToNow(new Date(metrics.last_failure_at), { addSuffix: true })}
+                {getRelativeTime(metricsData.current_metrics.last_error_time)}
               </span>
             </div>
           )}
 
-          {!metrics.last_request_at && !metrics.last_success_at && !metrics.last_failure_at && (
+          {metricsData.current_metrics.circuit_breaker_state !== 'closed' && (
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Circuit Breaker</span>
+              <span className="text-sm text-yellow-600">
+                {metricsData.current_metrics.circuit_breaker_state}
+              </span>
+            </div>
+          )}
+
+          {!metricsData.last_updated && !metricsData.current_metrics.last_error_time && (
             <div className="text-center text-gray-500 py-4">
               No recent activity recorded
             </div>

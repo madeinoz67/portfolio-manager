@@ -11,11 +11,11 @@ from src.schemas.adapter_schemas import (
     AdapterConfigurationResponse,
     AdapterConfigurationCreate,
     AdapterConfigurationUpdate,
-    AdapterMetricsResponse,
     AdapterHealthResponse,
     ProviderRegistryResponse,
     ErrorResponse,
 )
+from src.schemas.metrics_schemas import AdapterMetricsResponse
 
 
 def custom_openapi(app: FastAPI) -> Dict[str, Any]:

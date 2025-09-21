@@ -105,6 +105,7 @@ const AdminAdaptersPage: React.FC = () => {
             onEditAdapter={handleEditAdapter}
             onDeleteAdapter={handleDeleteAdapter}
             onViewMetrics={handleViewMetrics}
+            onViewHealth={handleViewHealth}
           />
         );
     }
@@ -136,7 +137,7 @@ const AdminAdaptersPage: React.FC = () => {
             {viewMode !== 'list' && (
               <>
                 <button
-                  onClick={() => setViewMode('list')}
+                  onClick={() => router.push('/admin')}
                   className="hover:text-gray-700 transition-colors"
                 >
                   Adapters

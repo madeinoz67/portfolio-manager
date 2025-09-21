@@ -73,7 +73,7 @@ export const useAdapters = (): UseAdaptersResult => {
       setLoading(true);
       setError(null);
       const data = await adaptersApi.getAdapters();
-      setAdapters(data);
+      setAdapters(data.items || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch adapters';
       setError(errorMessage);

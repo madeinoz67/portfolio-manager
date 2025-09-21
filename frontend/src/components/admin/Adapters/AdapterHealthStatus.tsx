@@ -70,9 +70,10 @@ const AdapterHealthStatus: React.FC<AdapterHealthStatusProps> = ({
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
       const response = await fetch(
-        `/api/v1/admin/adapters/${adapterId}/health`,
+        `${baseUrl}/api/v1/admin/adapters/${adapterId}/health`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -99,9 +100,10 @@ const AdapterHealthStatus: React.FC<AdapterHealthStatusProps> = ({
     try {
       setTriggeringCheck(true);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
       const response = await fetch(
-        `/api/v1/admin/adapters/${adapterId}/health`,
+        `${baseUrl}/api/v1/admin/adapters/${adapterId}/health`,
         {
           method: 'POST',
           headers: {

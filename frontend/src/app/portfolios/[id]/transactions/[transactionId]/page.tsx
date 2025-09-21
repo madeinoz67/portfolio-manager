@@ -52,8 +52,9 @@ export default function TransactionDetail() {
       setLoading(true)
       setError(null)
 
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
       const response = await fetch(
-        `http://localhost:8001/api/v1/portfolios/${portfolioId}/transactions/${transactionId}`,
+        `${API_BASE_URL}/api/v1/portfolios/${portfolioId}/transactions/${transactionId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

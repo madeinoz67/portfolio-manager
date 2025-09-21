@@ -236,7 +236,8 @@ export default function AdminUsersPage() {
       if (searchParams.active !== undefined) urlParams.set('active', searchParams.active.toString())
 
       const queryString = urlParams.toString()
-      const endpoint = `http://localhost:8001/api/v1/admin/users${queryString ? `?${queryString}` : ''}`
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const endpoint = `${API_BASE_URL}/api/v1/admin/users${queryString ? `?${queryString}` : ''}`
 
       const response = await fetch(endpoint, {
         headers: {

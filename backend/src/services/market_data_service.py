@@ -99,14 +99,16 @@ class MarketDataService:
                     # Record successful fetch time
                     self._recent_fetches[symbol] = now
 
+                    # Calculate response time for logging
+                    response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+
                     # Store in database using new single master table approach
                     self.store_price_to_master(symbol, price_data, provider)
 
-                    # Log successful API usage
-                    self._log_api_usage(provider, symbol, 200, True)
+                    # Log successful API usage with response time
+                    self._log_api_usage(provider, symbol, 200, True, response_time_ms=response_time_ms)
 
                     # Log successful activity for admin dashboard
-                    response_time_ms = int((end_time - start_time).total_seconds() * 1000)
                     log_provider_activity(
                         db_session=self.db,
                         provider_id=provider.name,
@@ -230,6 +232,9 @@ class MarketDataService:
                 if (provider.name == "yfinance" and len(remaining_symbols) > 1) or \
                    (provider.name == "alpha_vantage" and len(remaining_symbols) > 1 and provider.api_key):
 
+                    # Track bulk operation timing
+                    bulk_start_time = datetime.utcnow()
+
                     # Initialize bulk_results
                     bulk_results = {}
 
@@ -241,6 +246,8 @@ class MarketDataService:
                         logger.info(f"Using bulk Alpha Vantage fetch for {len(remaining_symbols)} symbols")
                         bulk_results = await self._bulk_fetch_from_alpha_vantage(remaining_symbols, provider.api_key)
 
+                    bulk_end_time = datetime.utcnow()
+
                     successful_symbols = []
 
                     for symbol, result in bulk_results.items():
@@ -250,8 +257,15 @@ class MarketDataService:
                             successful_symbols.append(symbol)
                             # Store in database using new single master table approach
                             self.store_price_to_master(symbol, result, provider)
-                            # Log API usage
-                            self._log_api_usage(provider, symbol, 200, True)
+
+                    # Calculate average response time per symbol for bulk operation
+                    if successful_symbols:
+                        total_bulk_time = int((bulk_end_time - bulk_start_time).total_seconds() * 1000)
+                        avg_response_time_per_symbol = total_bulk_time // len(successful_symbols)
+
+                        # Log API usage for each successful symbol with calculated response time
+                        for symbol in successful_symbols:
+                            self._log_api_usage(provider, symbol, 200, True, response_time_ms=avg_response_time_per_symbol)
 
                     # Remove successfully fetched symbols from remaining
                     remaining_symbols = [s for s in remaining_symbols if s not in successful_symbols]
@@ -731,14 +745,16 @@ class MarketDataService:
             end_time = datetime.utcnow()
 
             if price_data:
+                # Calculate response time for logging
+                response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+
                 # Store in database using new single master table approach
                 self.store_price_to_master(symbol, price_data, provider)
 
-                # Log successful API usage
-                self._log_api_usage(provider, symbol, 200, True)
+                # Log successful API usage with response time
+                self._log_api_usage(provider, symbol, 200, True, response_time_ms=response_time_ms)
 
                 # Log successful activity for admin dashboard
-                response_time_ms = int((end_time - start_time).total_seconds() * 1000)
                 log_provider_activity(
                     db_session=self.db,
                     provider_id=provider.name,
@@ -1082,7 +1098,7 @@ class MarketDataService:
         return record.price if record else None
 
     def _log_api_usage(self, provider: MarketDataProvider, symbol: str, status_code: int,
-                      success: bool, error_message: Optional[str] = None):
+                      success: bool, error_message: Optional[str] = None, response_time_ms: Optional[int] = None):
         """Log API usage for monitoring and rate limiting."""
         try:
             # Use local time for consistency with recorded_at field
@@ -1100,7 +1116,7 @@ class MarketDataService:
                 time_bucket="hourly",  # Use string value as required by database constraint
                 rate_limit_hit=False,
                 error_count=1 if not success else 0,
-                avg_response_time_ms=None  # Would be calculated in real implementation
+                avg_response_time_ms=response_time_ms  # Real response time from API calls
             )
 
             self.db.add(usage_record)

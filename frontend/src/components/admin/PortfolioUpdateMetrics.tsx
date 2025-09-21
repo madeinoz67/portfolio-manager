@@ -192,8 +192,9 @@ export default function PortfolioUpdateMetrics() {
         '/admin/portfolio-updates/queue/live'
       ]
 
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
       const requests = endpoints.map(endpoint =>
-        fetch(`http://localhost:8001/api/v1${endpoint}`, {
+        fetch(`${API_BASE_URL}/api/v1${endpoint}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

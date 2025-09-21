@@ -251,21 +251,22 @@ export default function AdminMarketDataPage() {
       if (!user || !token) return
 
       try {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
         // Fetch provider status, API usage data, and scheduler status in parallel
         const [statusResponse, usageResponse, schedulerResponse] = await Promise.all([
-          fetch('http://localhost:8001/api/v1/admin/market-data/status', {
+          fetch(`${API_BASE_URL}/api/v1/admin/market-data/status`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
           }),
-          fetch('http://localhost:8001/api/v1/admin/api-usage', {
+          fetch(`${API_BASE_URL}/api/v1/admin/api-usage`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
           }),
-          fetch('http://localhost:8001/api/v1/admin/scheduler/status', {
+          fetch(`${API_BASE_URL}/api/v1/admin/scheduler/status`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
@@ -326,20 +327,21 @@ export default function AdminMarketDataPage() {
     if (currentToken) {
       const fetchData = async () => {
         try {
+          const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
           const [statusResponse, usageResponse, schedulerResponse] = await Promise.all([
-            fetch('http://localhost:8001/api/v1/admin/market-data/status', {
+            fetch(`${API_BASE_URL}/api/v1/admin/market-data/status`, {
               headers: {
                 'Authorization': `Bearer ${currentToken}`,
                 'Content-Type': 'application/json',
               },
             }),
-            fetch('http://localhost:8001/api/v1/admin/api-usage', {
+            fetch(`${API_BASE_URL}/api/v1/admin/api-usage`, {
               headers: {
                 'Authorization': `Bearer ${currentToken}`,
                 'Content-Type': 'application/json',
               },
             }),
-            fetch('http://localhost:8001/api/v1/admin/scheduler/status', {
+            fetch(`${API_BASE_URL}/api/v1/admin/scheduler/status`, {
               headers: {
                 'Authorization': `Bearer ${currentToken}`,
                 'Content-Type': 'application/json',
@@ -388,7 +390,8 @@ export default function AdminMarketDataPage() {
     if (!token) return
 
     try {
-      const response = await fetch('http://localhost:8001/api/v1/admin/scheduler/control', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${API_BASE_URL}/api/v1/admin/scheduler/control`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

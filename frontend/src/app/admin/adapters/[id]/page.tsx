@@ -46,8 +46,9 @@ const AdapterDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/v1/admin/adapters/${adapterId}`, {
+      const token = localStorage.getItem('auth_token');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const response = await fetch(`${baseUrl}/api/v1/admin/adapters/${adapterId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -81,8 +82,9 @@ const AdapterDetailPage: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/v1/admin/adapters/${adapterId}`, {
+      const token = localStorage.getItem('auth_token');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const response = await fetch(`${baseUrl}/api/v1/admin/adapters/${adapterId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

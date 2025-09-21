@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Table,
   TableBody,
@@ -13,6 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -28,17 +31,21 @@ import {
   Search,
   Plus,
   RefreshCw,
-  Filter
+  Filter,
+  BarChart3,
+  Zap
 } from 'lucide-react';
-import { useAdapters } from '@/hooks/useAdapters';
+import { useAdapters, useProviderRegistry } from '@/hooks/useAdapters';
 import { AdapterConfiguration } from '@/types/adapters';
-import { formatDistanceToNow } from 'date-fns';
+import { adaptersApi, AdapterMetrics } from '@/services/adapters-api';
+import { formatDistanceToNow, format } from 'date-fns';
 
 interface AdapterListProps {
   onCreateAdapter?: () => void;
   onEditAdapter?: (adapter: AdapterConfiguration) => void;
   onDeleteAdapter?: (adapterId: string) => void;
   onViewMetrics?: (adapterId: string) => void;
+  onViewHealth?: (adapterId: string) => void;
 }
 
 const AdapterList: React.FC<AdapterListProps> = ({
@@ -46,6 +53,7 @@ const AdapterList: React.FC<AdapterListProps> = ({
   onEditAdapter,
   onDeleteAdapter,
   onViewMetrics,
+  onViewHealth,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -57,11 +65,45 @@ const AdapterList: React.FC<AdapterListProps> = ({
     error,
     fetchAdapters,
     deleteAdapter,
+    updateAdapter,
   } = useAdapters();
+
+  const {
+    registry,
+    loading: registryLoading,
+    error: registryError,
+  } = useProviderRegistry();
+
+  const router = useRouter();
+
+  // State for adapter metrics
+  const [adapterMetrics, setAdapterMetrics] = useState<Record<string, AdapterMetrics>>({});
+  const [metricsLoading, setMetricsLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchAdapters();
   }, []);
+
+  // Fetch metrics for all adapters
+  useEffect(() => {
+    const fetchAllMetrics = async () => {
+      for (const adapter of adapters) {
+        try {
+          setMetricsLoading(prev => ({ ...prev, [adapter.id]: true }));
+          const metrics = await adaptersApi.getAdapterMetrics(adapter.id);
+          setAdapterMetrics(prev => ({ ...prev, [adapter.id]: metrics }));
+        } catch (error) {
+          console.error(`Failed to fetch metrics for adapter ${adapter.id}:`, error);
+        } finally {
+          setMetricsLoading(prev => ({ ...prev, [adapter.id]: false }));
+        }
+      }
+    };
+
+    if (adapters.length > 0) {
+      fetchAllMetrics();
+    }
+  }, [adapters]);
 
   const handleRefresh = () => {
     fetchAdapters();
@@ -112,12 +154,89 @@ const AdapterList: React.FC<AdapterListProps> = ({
   const getProviderDisplayName = (providerName: string) => {
     const displayNames: Record<string, string> = {
       'alpha_vantage': 'Alpha Vantage',
+      'yfinance': 'Yahoo Finance',
       'yahoo_finance': 'Yahoo Finance',
       'iex_cloud': 'IEX Cloud',
       'polygon': 'Polygon',
       'finnhub': 'Finnhub'
     };
     return displayNames[providerName] || providerName;
+  };
+
+  // Get real usage data from metrics and registry
+  const getUsageData = (adapterId: string, isActive: boolean, providerName: string) => {
+    if (!isActive) {
+      return { used: 0, limit: 0, percentage: 0 };
+    }
+
+    const metrics = adapterMetrics[adapterId];
+    if (!metrics) {
+      return { used: 0, limit: 0, percentage: 0 };
+    }
+
+    // Get daily limit from provider registry
+    const provider = registry?.providers?.[providerName];
+    const dailyLimit = provider?.rate_limits?.requests_per_day || 0;
+
+    const used = metrics.requests_today || 0;
+    const percentage = dailyLimit > 0 ? (used / dailyLimit) * 100 : 0;
+
+    return { used, limit: dailyLimit, percentage: Math.min(percentage, 100) };
+  };
+
+  // Get real cost data from metrics
+  const getCostData = (adapterId: string) => {
+    const metrics = adapterMetrics[adapterId];
+    if (!metrics) {
+      return { perCall: 0.0000, monthly: 0.00 };
+    }
+
+    // Use real cost data from metrics
+    const perCall = metrics.total_requests > 0 ? metrics.total_cost / metrics.total_requests : 0;
+    const monthly = metrics.monthly_cost_estimate || 0;
+
+    return { perCall, monthly };
+  };
+
+  // Check if provider supports bulk operations from registry
+  const supportsBulk = (providerName: string) => {
+    if (!registry?.providers) return false;
+    const provider = registry.providers[providerName];
+    return provider?.supports_bulk || false;
+  };
+
+  // Get provider capabilities from registry
+  const getProviderCapabilities = (providerName: string) => {
+    if (!registry?.providers) return [];
+    const provider = registry.providers[providerName];
+    if (!provider) return [];
+
+    const capabilities = [];
+    if (provider.supports_bulk) capabilities.push('Bulk Queries');
+    if (provider.rate_limits?.requests_per_day && provider.rate_limits.requests_per_day > 1000) {
+      capabilities.push('High Volume');
+    }
+    capabilities.push('Real-time Data');
+
+    return capabilities;
+  };
+
+  const handleToggleStatus = async (adapterId: string, currentStatus: boolean) => {
+    console.log('handleToggleStatus called:', { adapterId, currentStatus, newStatus: !currentStatus });
+    try {
+      console.log('Calling updateAdapter...');
+      await updateAdapter(adapterId, { is_active: !currentStatus });
+      console.log('updateAdapter completed successfully');
+      // The updateAdapter hook already updates the state, no need to fetch again
+    } catch (error) {
+      console.error('Failed to toggle adapter status:', error);
+      // On error, refresh to get the current state
+      await fetchAdapters();
+    }
+  };
+
+  const handleAdapterClick = (adapterId: string) => {
+    router.push(`/admin/adapters/${adapterId}`);
   };
 
   if (error) {
@@ -141,9 +260,9 @@ const AdapterList: React.FC<AdapterListProps> = ({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Market Data Adapters</CardTitle>
+            <CardTitle className="text-xl font-semibold text-gray-900">Data Providers</CardTitle>
             <CardDescription>
-              Manage market data provider configurations and monitoring
+              Manage your market data provider configurations and usage
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -226,83 +345,160 @@ const AdapterList: React.FC<AdapterListProps> = ({
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Updated</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="border-b border-gray-200">
+                  <TableHead className="text-xs font-medium text-gray-500 uppercase tracking-wider py-3">
+                    Provider
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 uppercase tracking-wider py-3">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 uppercase tracking-wider py-3">
+                    Monthly API Calls
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 uppercase tracking-wider py-3">
+                    Last Update
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 uppercase tracking-wider py-3">
+                    Cost
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 uppercase tracking-wider py-3">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAdapters.map((adapter) => (
-                  <TableRow key={adapter.id}>
-                    <TableCell className="font-medium">
-                      {adapter.display_name}
-                    </TableCell>
-                    <TableCell>
-                      {getProviderDisplayName(adapter.provider_name)}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(adapter.is_active)}
-                    </TableCell>
-                    <TableCell className="text-gray-600">
-                      {formatDistanceToNow(new Date(adapter.created_at), {
-                        addSuffix: true
-                      })}
-                    </TableCell>
-                    <TableCell className="text-gray-600">
-                      {formatDistanceToNow(new Date(adapter.updated_at), {
-                        addSuffix: true
-                      })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-2">
-                        {onViewMetrics && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onViewMetrics(adapter.id)}
-                            title="View Metrics"
+                {filteredAdapters.map((adapter) => {
+                  const usageData = getUsageData(adapter.id, adapter.is_active, adapter.provider_name);
+                  const costData = getCostData(adapter.id);
+                  const hasBulk = supportsBulk(adapter.provider_name);
+                  const capabilities = getProviderCapabilities(adapter.provider_name);
+                  const metrics = adapterMetrics[adapter.id];
+                  const isMetricsLoading = metricsLoading[adapter.id];
+
+                  return (
+                    <TableRow
+                      key={adapter.id}
+                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleAdapterClick(adapter.id)}
+                    >
+                      {/* Provider Column */}
+                      <TableCell className="py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <BarChart3 className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {getProviderDisplayName(adapter.provider_name)}
+                            </div>
+                            <div className="text-sm text-gray-500 space-y-1">
+                              <div>
+                                {adapter.provider_name}
+                                {hasBulk && (
+                                  <Badge variant="secondary" className="ml-2 text-xs">
+                                    <Zap className="w-3 h-3 mr-1" />
+                                    Bulk Enabled
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {capabilities.slice(0, 2).map((capability, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs px-1 py-0">
+                                    {capability}
+                                  </Badge>
+                                ))}
+                                {capabilities.length > 2 && (
+                                  <Badge variant="outline" className="text-xs px-1 py-0">
+                                    +{capabilities.length - 2} more
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Status Column */}
+                      <TableCell className="py-4">
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant={adapter.is_active ? 'default' : 'secondary'}
+                            className={adapter.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}
                           >
-                            <Activity className="w-4 h-4" />
-                          </Button>
-                        )}
+                            {adapter.is_active ? 'active' : 'inactive'}
+                          </Badge>
+                          {adapter.is_active && (
+                            <span className="text-sm text-gray-500">
+                              {adapter.provider_name === 'alpha_vantage' ? 'Disabled' : ''}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {/* View details */}}
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                      {/* Usage Column */}
+                      <TableCell className="py-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium">
+                              {isMetricsLoading ? 'Loading...' : `${usageData.used.toLocaleString()} / ${usageData.limit > 0 ? usageData.limit.toLocaleString() : 'Unlimited'}`}
+                            </span>
+                            <span className="text-gray-500">
+                              {isMetricsLoading ? '—' : usageData.limit > 0 ? `${usageData.percentage.toFixed(1)}% used` : 'No limit'}
+                            </span>
+                          </div>
+                          <Progress
+                            value={usageData.percentage}
+                            className="h-2 bg-gray-200"
+                          />
+                        </div>
+                      </TableCell>
 
-                        {onEditAdapter && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onEditAdapter(adapter)}
-                            title="Edit Adapter"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        )}
+                      {/* Last Update Column */}
+                      <TableCell className="py-4">
+                        <div className="text-sm">
+                          <div className="text-gray-900">
+                            {metrics?.last_success_at
+                              ? format(new Date(metrics.last_success_at), 'dd/MM/yyyy, h:mm:ss a')
+                              : '—'
+                            }
+                          </div>
+                          <div className="text-gray-500">
+                            {isMetricsLoading
+                              ? 'Loading...'
+                              : `Calls today: ${usageData.used}`
+                            }
+                          </div>
+                        </div>
+                      </TableCell>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(adapter.id)}
-                          className="text-red-600 hover:text-red-700"
-                          title="Delete Adapter"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      {/* Cost Column */}
+                      <TableCell className="py-4">
+                        <div className="text-sm">
+                          <div className="text-gray-900 font-medium">
+                            ${costData.perCall.toFixed(4)}/call
+                          </div>
+                          <div className="text-gray-500">
+                            Monthly: ${costData.monthly.toFixed(2)}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Actions Column */}
+                      <TableCell className="py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={adapter.is_active}
+                            onCheckedChange={() => handleToggleStatus(adapter.id, adapter.is_active)}
+                            className="data-[state=checked]:bg-green-600"
+                          />
+                          <span className="text-sm font-medium text-gray-700">
+                            {adapter.is_active ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

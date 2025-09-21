@@ -59,7 +59,8 @@ export default function UserDetailsPage({ params }: UserDetailsPageProps) {
       if (!currentUser || !token || !id) return
 
       try {
-        const response = await fetch(`http://localhost:8001/api/v1/admin/users/${id}`, {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+        const response = await fetch(`${API_BASE_URL}/api/v1/admin/users/${id}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

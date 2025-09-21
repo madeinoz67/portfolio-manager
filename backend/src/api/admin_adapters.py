@@ -6,9 +6,9 @@ including health checks, metrics, and registry management.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from uuid import UUID
-from datetime import datetime, date
+from datetime import datetime, timedelta, date
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
@@ -17,9 +17,13 @@ from pydantic import BaseModel, Field
 from src.database import get_db
 from src.core.dependencies import get_current_admin_user
 from src.models.user import User
-from src.services.config_manager import ConfigurationManager
+from src.models.provider_configuration import ProviderConfiguration
+from src.services.config_manager import ConfigurationManager, get_config_manager
 from src.services.provider_manager import get_provider_manager, ProviderManager
 from src.services.adapters.registry import get_provider_registry, ProviderRegistry
+from src.services.adapter_metrics_service import AdapterMetricsService
+from src.schemas.metrics_schemas import AdapterMetricsResponse
+from src.schemas.adapter_schemas import AdapterHealthResponse, ProviderType, AdapterHealthStatus
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
@@ -70,24 +74,7 @@ class AdapterListResponse(BaseModel):
     page_size: int
 
 
-class AdapterMetricsResponse(BaseModel):
-    """Response schema for adapter metrics."""
-    adapter_id: str
-    provider_name: str
-    current_metrics: Dict[str, Any]
-    historical_data: Optional[List[Dict[str, Any]]] = None
 
-
-class AdapterHealthResponse(BaseModel):
-    """Response schema for adapter health status."""
-    adapter_id: str
-    provider_name: str
-    status: str
-    last_check: datetime
-    success_rate: float
-    avg_latency_ms: float
-    error_count: int
-    circuit_breaker_state: str
 
 
 class ProviderRegistryResponse(BaseModel):
@@ -120,13 +107,12 @@ async def list_adapters(
         # Create config manager instance with the database session
         config_manager = ConfigurationManager(db)
 
-        # Get configurations based on filters
+        # Get ALL configurations (both active and inactive)
         if provider_name:
             configs = config_manager.get_configurations_by_provider(provider_name)
         else:
-            # For now, get all active configurations
-            # In a real implementation, we'd support full pagination
-            configs = config_manager.get_active_configurations()
+            # Get ALL provider configurations, not just active ones
+            configs = db.query(ProviderConfiguration).all()
 
         # Apply active status filter if specified
         if is_active is not None:
@@ -242,6 +228,106 @@ async def create_adapter(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# T038: GET /api/v1/admin/adapters/registry
+@router.get("/registry", response_model=ProviderRegistryResponse)
+async def get_provider_registry_endpoint(
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """
+    Get information about all available adapter types.
+
+    Returns registry of supported providers with their capabilities
+    and configuration schemas.
+    """
+    def ensure_serializable(obj):
+        """Recursively ensure all objects are JSON-serializable."""
+        import json
+        if hasattr(obj, '__dict__'):
+            # Convert objects to their dict representation
+            return {key: ensure_serializable(value) for key, value in obj.__dict__.items()}
+        elif isinstance(obj, dict):
+            return {key: ensure_serializable(value) for key, value in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [ensure_serializable(item) for item in obj]
+        else:
+            # Convert to string for safety
+            return str(obj) if obj is not None else None
+
+    try:
+        # Get provider registry instance
+        provider_registry = get_provider_registry()
+
+        # Get all registered providers
+        available_providers = []
+
+        for provider_info in provider_registry.list_providers():
+            # provider_info is already a RegisteredProvider object
+
+            if provider_info:
+                # Get capabilities from adapter class
+                try:
+                    temp_adapter = provider_info.adapter_class(provider_info.provider_name, {})
+                    # Ensure all values are JSON-serializable
+                    supported_data_types = getattr(temp_adapter.capabilities, 'supported_data_types', [])
+                    # Convert any objects to strings
+                    if isinstance(supported_data_types, (list, tuple)):
+                        supported_data_types = [str(item) for item in supported_data_types]
+                    else:
+                        supported_data_types = []
+
+                    capabilities = {
+                        "supports_bulk_quotes": bool(getattr(temp_adapter.capabilities, 'supports_bulk_quotes', False)),
+                        "rate_limit_per_minute": getattr(temp_adapter.capabilities, 'rate_limit_per_minute', None),
+                        "supported_data_types": supported_data_types,
+                        "requires_api_key": bool(getattr(temp_adapter.capabilities, 'requires_api_key', True))
+                    }
+                except Exception:
+                    capabilities = {}
+
+                provider_data = {
+                    "name": str(provider_info.provider_name),
+                    "display_name": str(provider_info.display_name),
+                    "description": str(provider_info.description),
+                    "capabilities": capabilities,
+                    "is_available": True
+                }
+
+                # Add configuration schema if available
+                try:
+                    temp_adapter = provider_info.adapter_class(provider_info.provider_name, {})
+                    schema = temp_adapter.get_configuration_schema()
+                    if schema:
+                        # Ensure schema is JSON-serializable
+                        provider_data["configuration_schema"] = ensure_serializable(schema)
+
+                    example = temp_adapter.get_example_configuration()
+                    if example:
+                        # Ensure example is JSON-serializable
+                        provider_data["example_configuration"] = ensure_serializable(example)
+
+                except Exception:
+                    pass
+
+                # Ensure the entire provider_data is serializable
+                provider_data = ensure_serializable(provider_data)
+                available_providers.append(provider_data)
+
+        # Final serialization check on the entire response
+        response_data = {
+            "available_adapters": ensure_serializable(available_providers),
+            "total_adapters": len(available_providers)
+        }
+
+        # Return as plain JSON to avoid Pydantic serialization issues
+        from fastapi.responses import JSONResponse
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        import traceback
+        logger.error(f"Error getting provider registry: {e}\nTraceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 # T033: GET /api/v1/admin/adapters/{id}
 @router.get("/{adapter_id}", response_model=AdapterConfigurationResponse)
 async def get_adapter(
@@ -259,7 +345,7 @@ async def get_adapter(
         # Create config manager instance with the database session
         config_manager = ConfigurationManager(db)
 
-        config = config_manager.get_provider_configuration(str(adapter_id))
+        config = config_manager.get_provider_configuration(adapter_id)
 
         if not config:
             raise HTTPException(status_code=404, detail="Adapter configuration not found")
@@ -300,7 +386,7 @@ async def update_adapter(
         config_manager = ConfigurationManager(db)
 
         # Check if configuration exists
-        existing_config = config_manager.get_provider_configuration(str(adapter_id))
+        existing_config = config_manager.get_provider_configuration(adapter_id)
         if not existing_config:
             raise HTTPException(status_code=404, detail="Adapter configuration not found")
 
@@ -380,86 +466,93 @@ async def delete_adapter(
 @router.get("/{adapter_id}/metrics", response_model=AdapterMetricsResponse)
 async def get_adapter_metrics(
     adapter_id: UUID = Path(..., description="Adapter configuration ID"),
-    start_date: Optional[date] = Query(None, description="Start date for historical data"),
-    end_date: Optional[date] = Query(None, description="End date for historical data"),
+    time_range: str = Query("24h", description="Time range for metrics (1h, 24h, 7d, 30d)"),
     include_cost_data: Optional[bool] = Query(False, description="Include cost information"),
     include_projections: Optional[bool] = Query(False, description="Include cost projections"),
-    forecast_period: Optional[str] = Query("monthly", description="Forecast period (daily, monthly)"),
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get real-time metrics for a specific adapter.
+    Get real-time metrics for a specific adapter using the adapter-based metrics system.
 
-    Includes current performance metrics and optional historical data.
+    This endpoint uses the new adapter architecture where each adapter is responsible
+    for collecting and providing its own metrics.
     """
     try:
-        # Get manager instances
-        config_manager = get_config_manager()
-        provider_manager = get_provider_manager()
+        # Use the new adapter metrics service
+        metrics_service = AdapterMetricsService(db)
 
-        # Check if configuration exists
-        config = config_manager.get_provider_configuration(str(adapter_id))
-        if not config:
+        # Get comprehensive adapter metrics (pass UUID object directly)
+        adapter_metrics = await metrics_service.get_adapter_metrics(adapter_id, time_range)
+
+        if not adapter_metrics:
             raise HTTPException(status_code=404, detail="Adapter configuration not found")
 
-        # Get adapter instance to check if it's operational
-        adapter = await config_manager.get_adapter_instance(str(adapter_id))
-
-        # Build current metrics
-        current_metrics = {
-            "is_healthy": adapter is not None and config.is_active,
-            "provider_name": config.provider_name,
-            "last_check": datetime.utcnow().isoformat(),
-            "request_count": 0,  # Would be populated from metrics collector
-            "success_rate": 0.0,
-            "avg_latency_ms": 0.0,
-            "error_count": 0
-        }
-
-        # Add cost data if requested
+        # Add additional cost data if requested
         if include_cost_data:
-            current_metrics.update({
-                "total_cost": 0.0,
-                "daily_cost": 0.0,
-                "cost_per_call": 0.0,
-                "budget_used_percent": 0.0,
-                "daily_budget_used_percent": 0.0,
-                "monthly_budget_used_percent": 0.0,
-                "budget_remaining_usd": 0.0,
-                "budget_status": "ok"
+            total_requests = adapter_metrics.get("total_requests", 0)
+            total_cost = adapter_metrics.get("total_cost", 0.0)
+            cost_per_call = (total_cost / total_requests) if total_requests > 0 else 0.0
+
+            adapter_metrics.update({
+                "cost_per_call": round(cost_per_call, 6),
+                "budget_used_percent": 0.0,  # Would need budget configuration
+                "daily_budget_used_percent": 0.0,  # Would need budget configuration
+                "monthly_budget_used_percent": 0.0,  # Would need budget configuration
+                "budget_remaining_usd": 0.0,  # Would need budget configuration
+                "budget_status": "ok" if total_cost < 100.0 else "warning"  # Simple threshold
             })
 
-        # Build historical data if date range provided
-        historical_data = None
-        if start_date or end_date:
-            historical_data = []
-            # In a real implementation, would query metrics database
-            # For now, return empty array
-
         # Add cost projections if requested
-        cost_projections = None
         if include_projections:
+            daily_cost = adapter_metrics.get("daily_cost", 0.0)
             cost_projections = {
                 "monthly_projection": {
-                    "projected_cost": 0.0,
-                    "confidence_level": 0.8
+                    "projected_cost": daily_cost * 30,
+                    "confidence_level": 0.8 if daily_cost > 0 else 0.5
                 }
             }
+            adapter_metrics["cost_projections"] = cost_projections
 
-        response_data = {
+        # Transform flat adapter_metrics dict into nested AdapterMetricsResponse structure
+        from datetime import datetime
+        from src.schemas.metrics_schemas import CurrentMetrics, CostMetrics
+
+        # Extract core fields for CurrentMetrics
+        current_metrics = CurrentMetrics(
+            adapter_id=adapter_metrics.get("adapter_id", str(adapter_id)),
+            provider_name=adapter_metrics.get("provider_name", "unknown"),
+            is_healthy=adapter_metrics.get("current_status") in ["healthy", "active"],
+            is_active=adapter_metrics.get("is_active", True),
+            last_check=datetime.utcnow(),  # Use current time as fallback
+            total_requests=adapter_metrics.get("total_requests", 0),
+            successful_requests=adapter_metrics.get("successful_requests", 0),
+            failed_requests=adapter_metrics.get("failed_requests", 0),
+            success_rate=adapter_metrics.get("success_rate", 0.0),
+            avg_latency_ms=adapter_metrics.get("average_response_time_ms", 0.0)
+        )
+
+        # Create cost metrics if available
+        cost_metrics = None
+        if include_cost_data and adapter_metrics.get("total_cost") is not None:
+            cost_metrics = CostMetrics(
+                total_cost=adapter_metrics.get("total_cost", 0.0),
+                daily_cost=adapter_metrics.get("daily_cost", 0.0),
+                monthly_cost_estimate=adapter_metrics.get("monthly_cost_estimate", 0.0),
+                cost_per_call=adapter_metrics.get("cost_per_call", 0.0),
+                budget_used_percent=adapter_metrics.get("budget_used_percent", 0.0)
+            )
+
+        # Create the nested response structure matching AdapterMetricsResponse schema
+        response = {
             "adapter_id": str(adapter_id),
-            "provider_name": config.provider_name,
-            "current_metrics": current_metrics
+            "provider_name": adapter_metrics.get("provider_name", "unknown"),
+            "current_metrics": current_metrics.model_dump(),
+            "cost_metrics": cost_metrics.model_dump() if cost_metrics else None,
+            "last_updated": datetime.utcnow()
         }
 
-        if historical_data is not None:
-            response_data["historical_data"] = historical_data
-
-        if cost_projections:
-            response_data["cost_projections"] = cost_projections
-
-        return AdapterMetricsResponse(**response_data)
+        return response
 
     except HTTPException:
         raise
@@ -483,11 +576,11 @@ async def get_adapter_health(
     """
     try:
         # Get manager instances
-        config_manager = get_config_manager()
-        provider_manager = get_provider_manager()
+        config_manager = ConfigurationManager(db)
+        provider_manager = get_provider_manager(config_manager)
 
         # Check if configuration exists
-        config = config_manager.get_provider_configuration(str(adapter_id))
+        config = config_manager.get_provider_configuration(adapter_id)
         if not config:
             raise HTTPException(status_code=404, detail="Adapter configuration not found")
 
@@ -499,10 +592,16 @@ async def get_adapter_health(
             # Use cached health data or perform check if needed
             health = await provider_manager.check_provider_health(str(adapter_id))
 
+        # Convert provider name to enum
+        provider_type = ProviderType(config.provider_name) if config.provider_name else ProviderType.YAHOO_FINANCE
+
+        # Convert status to enum
+        status_enum = AdapterHealthStatus(health.status.value) if hasattr(health.status, 'value') else AdapterHealthStatus(str(health.status))
+
         return AdapterHealthResponse(
             adapter_id=str(adapter_id),
-            provider_name=config.provider_name,
-            status=health.status.value,
+            provider_name=provider_type,
+            status=status_enum,
             last_check=datetime.fromtimestamp(health.last_check),
             success_rate=health.success_rate,
             avg_latency_ms=health.avg_latency_ms,
@@ -517,69 +616,3 @@ async def get_adapter_health(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# T038: GET /api/v1/admin/adapters/registry
-@router.get("/registry", response_model=ProviderRegistryResponse)
-async def get_provider_registry(
-    current_admin: User = Depends(get_current_admin_user)
-):
-    """
-    Get information about all available adapter types.
-
-    Returns registry of supported providers with their capabilities
-    and configuration schemas.
-    """
-    try:
-        # Get provider registry instance
-        provider_registry = get_provider_registry()
-
-        # Get all registered providers
-        available_providers = []
-
-        for provider_name in provider_registry.list_providers():
-            provider_info = provider_registry.get_provider_info(provider_name)
-
-            if provider_info:
-                # Get capabilities from adapter class
-                try:
-                    temp_adapter = provider_info.adapter_class(provider_name, {})
-                    capabilities = {
-                        "supports_bulk_quotes": getattr(temp_adapter.capabilities, 'supports_bulk_quotes', False),
-                        "rate_limit_per_minute": getattr(temp_adapter.capabilities, 'rate_limit_per_minute', None),
-                        "supported_data_types": getattr(temp_adapter.capabilities, 'supported_data_types', []),
-                        "requires_api_key": getattr(temp_adapter.capabilities, 'requires_api_key', True)
-                    }
-                except Exception:
-                    capabilities = {}
-
-                provider_data = {
-                    "name": provider_name,
-                    "display_name": provider_info.display_name,
-                    "description": provider_info.description,
-                    "capabilities": capabilities,
-                    "is_available": True
-                }
-
-                # Add configuration schema if available
-                try:
-                    temp_adapter = provider_info.adapter_class(provider_name, {})
-                    schema = temp_adapter.get_configuration_schema()
-                    if schema:
-                        provider_data["configuration_schema"] = schema
-
-                    example = temp_adapter.get_example_configuration()
-                    if example:
-                        provider_data["example_configuration"] = example
-
-                except Exception:
-                    pass
-
-                available_providers.append(provider_data)
-
-        return ProviderRegistryResponse(
-            available_adapters=available_providers,
-            total_adapters=len(available_providers)
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting provider registry: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
