@@ -73,14 +73,30 @@ interface CostMetrics {
   projected_monthly_cost?: number;
 }
 
+// Use the flat interface from the API service
 interface AdapterMetrics {
   adapter_id: string;
   provider_name: string;
-  current_metrics: CurrentMetrics;
-  cost_metrics?: CostMetrics;
-  historical_data?: any[];
-  active_alerts: any[];
-  last_updated: string;
+  display_name: string;
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  success_rate: number;
+  average_response_time_ms: number;
+  total_cost: number;
+  requests_today: number;
+  requests_this_hour: number;
+  last_request_at?: string;
+  last_success_at?: string;
+  last_failure_at?: string;
+  current_status: 'healthy' | 'degraded' | 'down';
+  uptime_percentage: number;
+  rate_limit_hits: number;
+  error_rate_24h: number;
+  p95_response_time_ms: number;
+  daily_cost: number;
+  monthly_cost_estimate: number;
+  last_updated?: string;
 }
 
 interface AdapterMetricsViewProps {
@@ -151,7 +167,7 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
     };
   }, [autoRefresh, adapterId, timeRange]);
 
-  const getStatusBadge = (isHealthy: boolean) => {
+  const getStatusBadge = (isHealthy: boolean, errorMessage?: string) => {
     if (isHealthy) {
       return (
         <Badge variant="default" className="flex items-center gap-1">
@@ -161,10 +177,17 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
       );
     }
     return (
-      <Badge variant="destructive" className="flex items-center gap-1">
-        <AlertTriangle className="w-3 h-3 text-red-600" />
-        Unhealthy
-      </Badge>
+      <div className="space-y-1">
+        <Badge variant="destructive" className="flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3 text-red-600" />
+          Unhealthy
+        </Badge>
+        {errorMessage && (
+          <p className="text-xs text-red-600 mt-1 max-w-xs break-words">
+            {errorMessage}
+          </p>
+        )}
+      </div>
     );
   };
 
@@ -291,11 +314,11 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Status</p>
-                {getStatusBadge(metricsData.current_metrics.is_healthy)}
+                {getStatusBadge(metricsData.current_status === 'healthy', metricsData.last_failure_at)}
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
-                  {metricsData.current_metrics.is_healthy ? '100%' : '0%'}
+                  {metricsData.current_status === 'healthy' ? '100%' : metricsData.current_status === 'degraded' ? '50%' : '0%'}
                 </p>
                 <p className="text-xs text-gray-500">Health</p>
               </div>
@@ -309,22 +332,22 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
               <div>
                 <p className="text-sm font-medium text-gray-600">Success Rate</p>
                 <div className="flex items-center gap-1 mt-1">
-                  {metricsData.current_metrics.success_rate >= 0.95 ? (
+                  {metricsData.success_rate >= 0.95 ? (
                     <TrendingUp className="w-4 h-4 text-green-600" />
                   ) : (
                     <TrendingDown className="w-4 h-4 text-red-600" />
                   )}
-                  <span className={`text-sm ${metricsData.current_metrics.success_rate >= 0.95 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatPercentage(metricsData.current_metrics.success_rate * 100)}
+                  <span className={`text-sm ${metricsData.success_rate >= 0.95 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatPercentage(metricsData.success_rate * 100)}
                   </span>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
-                  {metricsData.current_metrics.successful_requests}
+                  {metricsData.successful_requests}
                 </p>
                 <p className="text-xs text-gray-500">
-                  of {metricsData.current_metrics.total_requests} requests
+                  of {metricsData.total_requests} requests
                 </p>
               </div>
             </div>
@@ -338,18 +361,18 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
                 <p className="text-sm font-medium text-gray-600">Response Time</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="w-4 h-4 text-blue-600" />
-                  <span className={`text-sm ${metricsData.current_metrics.p95_latency_ms === 0 ? 'text-amber-600' : 'text-blue-600'}`}>
-                    P95: {formatResponseTime(metricsData.current_metrics.p95_latency_ms)}
-                    {metricsData.current_metrics.p95_latency_ms === 0 && ' (no data)'}
+                  <span className={`text-sm ${metricsData.p95_response_time_ms === 0 ? 'text-amber-600' : 'text-blue-600'}`}>
+                    P95: {formatResponseTime(metricsData.p95_response_time_ms)}
+                    {metricsData.p95_response_time_ms === 0 && ' (no data)'}
                   </span>
                 </div>
               </div>
               <div className="text-right">
-                <p className={`text-2xl font-bold ${metricsData.current_metrics.avg_latency_ms === 0 ? 'text-amber-600' : 'text-gray-900'}`}>
-                  {formatResponseTime(metricsData.current_metrics.avg_latency_ms)}
+                <p className={`text-2xl font-bold ${metricsData.average_response_time_ms === 0 ? 'text-amber-600' : 'text-gray-900'}`}>
+                  {formatResponseTime(metricsData.average_response_time_ms)}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {metricsData.current_metrics.avg_latency_ms === 0 ? 'No data' : 'Average'}
+                  {metricsData.average_response_time_ms === 0 ? 'No data' : 'Average'}
                 </p>
               </div>
             </div>
@@ -364,13 +387,13 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
                 <div className="flex items-center gap-1 mt-1">
                   <DollarSign className="w-4 h-4 text-green-600" />
                   <span className="text-sm text-gray-500">
-                    Est. Monthly: {formatCurrency(metricsData.cost_metrics?.projected_monthly_cost || 0)}
+                    Est. Monthly: {formatCurrency(metricsData.monthly_cost_estimate || 0)}
                   </span>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(metricsData.cost_metrics?.daily_cost || 0)}
+                  {formatCurrency(metricsData.daily_cost || 0)}
                 </p>
                 <p className="text-xs text-gray-500">Today</p>
               </div>
@@ -390,32 +413,32 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Requests per Minute</span>
-              <span className="text-lg font-semibold">{metricsData.current_metrics.requests_per_minute || 0}</span>
+              <span className="text-lg font-semibold">{metricsData.requests_this_hour || 0}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Circuit Breaker Failures</span>
-              <span className="text-lg font-semibold">{metricsData.current_metrics.circuit_breaker_failure_count || 0}</span>
+              <span className="text-lg font-semibold">{0}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Failed Requests</span>
               <span className="text-lg font-semibold text-red-600">
-                {metricsData.current_metrics.failed_requests}
+                {metricsData.failed_requests}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Rate Limit Remaining</span>
               <span className="text-lg font-semibold text-yellow-600">
-                {metricsData.current_metrics.rate_limit_remaining || 'N/A'}
+                {'N/A'}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">24h Error Count</span>
-              <span className={`text-lg font-semibold ${metricsData.current_metrics.error_count_24h > 5 ? 'text-red-600' : 'text-green-600'}`}>
-                {metricsData.current_metrics.error_count_24h}
+              <span className={`text-lg font-semibold ${metricsData.failed_requests > 5 ? 'text-red-600' : 'text-green-600'}`}>
+                {metricsData.failed_requests}
               </span>
             </div>
           </CardContent>
@@ -430,25 +453,25 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Monthly Cost</span>
-              <span className="text-lg font-semibold">{formatCurrency(metricsData.cost_metrics?.monthly_cost || 0)}</span>
+              <span className="text-lg font-semibold">{formatCurrency(metricsData.monthly_cost_estimate || 0)}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Daily Cost</span>
-              <span className="text-lg font-semibold">{formatCurrency(metricsData.cost_metrics?.daily_cost || 0)}</span>
+              <span className="text-lg font-semibold">{formatCurrency(metricsData.daily_cost || 0)}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Monthly Estimate</span>
               <span className="text-lg font-semibold text-blue-600">
-                {formatCurrency(metricsData.cost_metrics?.projected_monthly_cost || metricsData.cost_metrics?.monthly_cost || 0)}
+                {formatCurrency(metricsData.monthly_cost_estimate || 0)}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Cost per Request</span>
               <span className="text-lg font-semibold">
-                {formatCurrency(metricsData.cost_metrics?.cost_per_request || 0)}
+                {formatCurrency(metricsData.total_requests > 0 ? metricsData.total_cost / metricsData.total_requests : 0)}
               </span>
             </div>
           </CardContent>
@@ -471,25 +494,32 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
             </div>
           )}
 
-          {metricsData.current_metrics.last_error_time && (
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Last Error</span>
-              <span className="text-sm text-red-600">
-                {getRelativeTime(metricsData.current_metrics.last_error_time)}
-              </span>
+          {metricsData.last_failure_at && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Last Error</span>
+                {metricsData.last_failure_at && (
+                  <span className="text-sm text-red-600">
+                    {getRelativeTime(metricsData.last_failure_at)}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200 break-words">
+                {'Connection error or API failure'}
+              </div>
             </div>
           )}
 
-          {metricsData.current_metrics.circuit_breaker_state !== 'closed' && (
+          {false && (
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Circuit Breaker</span>
               <span className="text-sm text-yellow-600">
-                {metricsData.current_metrics.circuit_breaker_state}
+                {'closed'}
               </span>
             </div>
           )}
 
-          {!metricsData.last_updated && !metricsData.current_metrics.last_error_time && (
+          {!metricsData.last_updated && !metricsData.last_failure_at && (
             <div className="text-center text-gray-500 py-4">
               No recent activity recorded
             </div>

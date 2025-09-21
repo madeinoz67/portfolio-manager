@@ -463,7 +463,7 @@ async def delete_adapter(
 
 
 # T036: GET /api/v1/admin/adapters/{id}/metrics
-@router.get("/{adapter_id}/metrics", response_model=AdapterMetricsResponse)
+@router.get("/{adapter_id}/metrics")
 async def get_adapter_metrics(
     adapter_id: UUID = Path(..., description="Adapter configuration ID"),
     time_range: str = Query("24h", description="Time range for metrics (1h, 24h, 7d, 30d)"),
@@ -514,45 +514,54 @@ async def get_adapter_metrics(
             }
             adapter_metrics["cost_projections"] = cost_projections
 
-        # Transform flat adapter_metrics dict into nested AdapterMetricsResponse structure
+        # Extract data from nested structure
+        current_metrics = adapter_metrics.get("current_metrics", {})
+        cost_metrics = adapter_metrics.get("cost_metrics", {})
+
+        # Return flat structure that frontend expects
         from datetime import datetime
-        from src.schemas.metrics_schemas import CurrentMetrics, CostMetrics
 
-        # Extract core fields for CurrentMetrics
-        current_metrics = CurrentMetrics(
-            adapter_id=adapter_metrics.get("adapter_id", str(adapter_id)),
-            provider_name=adapter_metrics.get("provider_name", "unknown"),
-            is_healthy=adapter_metrics.get("current_status") in ["healthy", "active"],
-            is_active=adapter_metrics.get("is_active", True),
-            last_check=datetime.utcnow(),  # Use current time as fallback
-            total_requests=adapter_metrics.get("total_requests", 0),
-            successful_requests=adapter_metrics.get("successful_requests", 0),
-            failed_requests=adapter_metrics.get("failed_requests", 0),
-            success_rate=adapter_metrics.get("success_rate", 0.0),
-            avg_latency_ms=adapter_metrics.get("average_response_time_ms", 0.0)
-        )
-
-        # Create cost metrics if available
-        cost_metrics = None
-        if include_cost_data and adapter_metrics.get("total_cost") is not None:
-            cost_metrics = CostMetrics(
-                total_cost=adapter_metrics.get("total_cost", 0.0),
-                daily_cost=adapter_metrics.get("daily_cost", 0.0),
-                monthly_cost_estimate=adapter_metrics.get("monthly_cost_estimate", 0.0),
-                cost_per_call=adapter_metrics.get("cost_per_call", 0.0),
-                budget_used_percent=adapter_metrics.get("budget_used_percent", 0.0)
-            )
-
-        # Create the nested response structure matching AdapterMetricsResponse schema
-        response = {
+        # Build flat response structure matching AdapterMetrics interface
+        flat_response = {
+            # Core identifiers
             "adapter_id": str(adapter_id),
             "provider_name": adapter_metrics.get("provider_name", "unknown"),
-            "current_metrics": current_metrics.model_dump(),
-            "cost_metrics": cost_metrics.model_dump() if cost_metrics else None,
-            "last_updated": datetime.utcnow()
+            "display_name": adapter_metrics.get("provider_name", "unknown"),
+
+            # Request metrics - extract from current_metrics
+            "total_requests": current_metrics.get("total_requests", 0),
+            "successful_requests": current_metrics.get("successful_requests", 0),
+            "failed_requests": current_metrics.get("failed_requests", 0),
+            "success_rate": current_metrics.get("success_rate", 0.0),
+            "average_response_time_ms": current_metrics.get("avg_latency_ms", 0.0),
+
+            # Cost metrics - extract from cost_metrics
+            "total_cost": float(cost_metrics.get("daily_cost", 0.0)),
+            "daily_cost": float(cost_metrics.get("daily_cost", 0.0)),
+            "monthly_cost_estimate": float(cost_metrics.get("monthly_cost", 0.0)),
+
+            # Usage metrics - use total as approximation
+            "requests_today": current_metrics.get("total_requests", 0),
+            "requests_this_hour": 0,  # Not available in current structure
+
+            # Status and timestamps
+            "current_status": "healthy" if current_metrics.get("success_rate", 0) > 0.8 else "degraded" if current_metrics.get("total_requests", 0) > 0 else "down",
+            "uptime_percentage": 100.0 if current_metrics.get("is_healthy") else 50.0,
+            "last_request_at": None,  # Not available in current structure
+            "last_success_at": None,  # Not available in current structure
+            "last_failure_at": current_metrics.get("last_error_time"),
+
+            # Additional metrics
+            "rate_limit_hits": 0,  # Not available in current structure
+            "error_rate_24h": current_metrics.get("error_count_24h", 0),
+            "p95_response_time_ms": current_metrics.get("p95_latency_ms", 0.0),
+
+            # Add missing fields that backend validation expects
+            "current_metrics": current_metrics,  # Include the nested structure for validation
+            "last_updated": datetime.utcnow().isoformat() + "Z",  # Add timestamp
         }
 
-        return response
+        return flat_response
 
     except HTTPException:
         raise
@@ -592,8 +601,20 @@ async def get_adapter_health(
             # Use cached health data or perform check if needed
             health = await provider_manager.check_provider_health(str(adapter_id))
 
-        # Convert provider name to enum
-        provider_type = ProviderType(config.provider_name) if config.provider_name else ProviderType.YAHOO_FINANCE
+        # Convert provider name to enum with mapping for adapter registry names
+        def map_provider_name_to_enum(provider_name: str) -> ProviderType:
+            """Map adapter registry provider names to ProviderType enum values."""
+            mapping = {
+                "yfinance": ProviderType.YAHOO_FINANCE,
+                "alpha_vantage": ProviderType.ALPHA_VANTAGE,
+                "yahoo_finance": ProviderType.YAHOO_FINANCE,
+                "iex_cloud": ProviderType.IEX_CLOUD,
+                "polygon": ProviderType.POLYGON,
+                "finnhub": ProviderType.FINNHUB,
+            }
+            return mapping.get(provider_name, ProviderType.YAHOO_FINANCE)
+
+        provider_type = map_provider_name_to_enum(config.provider_name) if config.provider_name else ProviderType.YAHOO_FINANCE
 
         # Convert status to enum
         status_enum = AdapterHealthStatus(health.status.value) if hasattr(health.status, 'value') else AdapterHealthStatus(str(health.status))
