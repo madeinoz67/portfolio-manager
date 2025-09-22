@@ -284,6 +284,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize adapter registry: {e}")
 
+    # Initialize default providers
+    logger.info("Initializing default market data providers...")
+    try:
+        from src.services.default_providers_init import create_default_providers
+        create_default_providers()
+        logger.info("Default providers initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize default providers: {e}")
+
     # Initialize portfolio update queue
     logger.info("Initializing portfolio update queue...")
     try:

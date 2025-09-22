@@ -1,7 +1,9 @@
+
 # Implementation Plan: Market Data Provider Adapters
 
-**Branch**: `005-add-market-data` | **Date**: 2025-09-19 | **Spec**: [spec.md](./spec.md)
+**Branch**: `005-add-market-data` | **Date**: 2025-09-22 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/005-add-market-data/spec.md`
+**Recent Changes**: Updated spec to use fetch_prices method for price data retrieval
 
 ## Execution Flow (/plan command scope)
 ```
@@ -25,38 +27,40 @@
 9. STOP - Ready for /tasks command
 ```
 
-**IMPORTANT**: The /plan command STOPS at step 8. Phases 2-4 are executed by other commands:
+**IMPORTANT**: The /plan command STOPS at step 7. Phases 2-4 are executed by other commands:
 - Phase 2: /tasks command creates tasks.md
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-Implement a standardized adapter pattern for market data providers with unified metrics tracking, cost monitoring, and extensible architecture. Admin dashboard integration for live monitoring of provider performance, latency, and usage metrics without hard-coded data.
+Implement standardized market data provider adapters with admin-only management for portfolio management system. Updated specification uses fetch_prices method for price data retrieval with complete OHLCV data, user transparency requirements, and decimal precision for financial calculations. System supports hard-coded adapters (YFinance, Alpha Vantage) with automatic startup initialization, bulk data prioritization, and real-time portfolio queue integration.
 
 ## Technical Context
-**Language/Version**: Python 3.12
-**Primary Dependencies**: FastAPI 0.116.1, SQLAlchemy 2.0.43, Pydantic
-**Storage**: PostgreSQL with Alembic migrations
-**Testing**: pytest with contract and integration tests
-**Target Platform**: Linux server deployment
-**Project Type**: web (backend API + frontend admin dashboard)
-**Performance Goals**: <200ms API response time, support 1000+ req/s
-**Constraints**: Real-time metrics tracking, no hard-coded data, extensible adapter design
-**Scale/Scope**: Multiple provider adapters, admin dashboard integration, metrics persistence
+**Language/Version**: Python 3.12, FastAPI 0.116.1, Next.js 15.5.3, React 19.1.0, TypeScript
+**Primary Dependencies**: FastAPI, SQLAlchemy 2.0.43, PostgreSQL/SQLite, yfinance, alpha-vantage libraries
+**Storage**: PostgreSQL with Alembic migrations, realtime_symbols master table, provider_configurations
+**Testing**: pytest (backend), Jest + React Testing Library (frontend), contract testing with OpenAPI
+**Target Platform**: Linux server (backend), Web browsers (frontend)
+**Project Type**: web - FastAPI backend + Next.js frontend
+**Performance Goals**: <200ms API response time, 15-minute market data intervals, bulk fetching preferred
+**Constraints**: API rate limits from providers, decimal precision for financial data, admin-only access
+**Scale/Scope**: Multiple hard-coded adapters, real-time portfolio updates, admin dashboard integration
+**Spec Changes**: Updated to use fetch_prices method, complete OHLCV data requirements, user transparency
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-**I. Test-First Development**: ✅ TDD approach required - contract tests before implementation
-**II. Financial Data Integrity**: ✅ Adapters handle cost data with decimal precision, no financial calculations modified
-**III. Database Schema Safety**: ✅ New adapter tables via Alembic migrations, no existing data impact
-**IV. Market Data Single Source**: ✅ Adapters standardize access to existing realtime_symbols master table
-**V. Security and Access Control**: ✅ Admin dashboard uses existing JWT + role-based access
+**I. Test-First Development**: ✅ PASS - Contract tests for adapter interfaces, TDD for adapter implementations
+**II. Financial Data Integrity**: ✅ PASS - Decimal precision for price data (FR-043), complete OHLCV data (FR-042)
+**III. Database Schema Safety**: ✅ PASS - provider_configurations, adapter_capabilities tables via Alembic
+**IV. Market Data Single Source**: ✅ PASS - realtime_symbols master table, adapters update single source
+**V. Security and Access Control**: ✅ PASS - Admin-only adapter management, user transparency (FR-039-041)
+**VI. Continuous Integration**: ✅ PASS - Incremental adapter development, frequent commits planned
 
 ## Project Structure
 
 ### Documentation (this feature)
 ```
-specs/005-add-market-data/
+specs/[###-feature]/
 ├── plan.md              # This file (/plan command output)
 ├── research.md          # Phase 0 output (/plan command)
 ├── data-model.md        # Phase 1 output (/plan command)
@@ -67,40 +71,55 @@ specs/005-add-market-data/
 
 ### Source Code (repository root)
 ```
-# Option 2: Web application (backend + frontend admin dashboard)
+# Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
+
+tests/
+├── contract/
+├── integration/
+└── unit/
+
+# Option 2: Web application (when "frontend" + "backend" detected)
 backend/
 ├── src/
-│   ├── models/           # Adapter registry, metrics models
-│   ├── services/         # Adapter base classes, metrics services
-│   └── api/              # Admin adapter management endpoints
+│   ├── models/
+│   ├── services/
+│   └── api/
 └── tests/
-    ├── contract/         # Adapter API contract tests
-    ├── integration/      # End-to-end adapter tests
-    └── unit/             # Adapter unit tests
 
 frontend/
 ├── src/
-│   ├── components/       # Admin dashboard adapter components
-│   ├── pages/            # Admin adapter management pages
-│   └── services/         # Frontend adapter API services
+│   ├── components/
+│   ├── pages/
+│   └── services/
 └── tests/
+
+# Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure]
 ```
 
-**Structure Decision**: Option 2 (web application) - extends existing backend/frontend structure
+**Structure Decision**: Option 2 - Web application (FastAPI backend + Next.js frontend detected)
 
 ## Phase 0: Outline & Research
-1. **Extract unknowns from Technical Context**:
-   - No NEEDS CLARIFICATION items identified
-   - Research adapter pattern best practices for Python/FastAPI
-   - Research metrics collection patterns for external APIs
-   - Research provider configuration management
+1. **Extract unknowns from Technical Context** above:
+   - For each NEEDS CLARIFICATION → research task
+   - For each dependency → best practices task
+   - For each integration → patterns task
 
 2. **Generate and dispatch research agents**:
    ```
-   Task: "Research adapter pattern implementation in Python for external API wrappers"
-   Task: "Find best practices for API metrics collection and storage in FastAPI"
-   Task: "Research provider configuration management with dynamic registration"
-   Task: "Find patterns for extensible plugin architecture in Python"
+   For each unknown in Technical Context:
+     Task: "Research {unknown} for {feature context}"
+   For each technology choice:
+     Task: "Find best practices for {tech} in {domain}"
    ```
 
 3. **Consolidate findings** in `research.md` using format:
@@ -108,25 +127,20 @@ frontend/
    - Rationale: [why chosen]
    - Alternatives considered: [what else evaluated]
 
-**Output**: research.md with design decisions documented
+**Output**: research.md with all NEEDS CLARIFICATION resolved
 
 ## Phase 1: Design & Contracts
 *Prerequisites: research.md complete*
 
 1. **Extract entities from feature spec** → `data-model.md`:
-   - Market Data Adapter interface definition
-   - Provider Configuration with credentials and limits
-   - Provider Metrics with real-time performance data
-   - Cost Tracking for usage monitoring
-   - Adapter Registry for dynamic management
+   - Entity name, fields, relationships
+   - Validation rules from requirements
+   - State transitions if applicable
 
 2. **Generate API contracts** from functional requirements:
-   - GET /api/v1/admin/adapters - List configured adapters
-   - POST /api/v1/admin/adapters - Register new adapter
-   - GET /api/v1/admin/adapters/{id}/metrics - Get live metrics
-   - PUT /api/v1/admin/adapters/{id} - Update adapter config
-   - DELETE /api/v1/admin/adapters/{id} - Remove adapter
-   - Output OpenAPI schema to `/contracts/`
+   - For each user action → endpoint
+   - Use standard REST/GraphQL patterns
+   - Output OpenAPI/GraphQL schema to `/contracts/`
 
 3. **Generate contract tests** from contracts:
    - One test file per endpoint
@@ -134,17 +148,18 @@ frontend/
    - Tests must fail (no implementation yet)
 
 4. **Extract test scenarios** from user stories:
-   - Admin configures new provider scenario
-   - Dashboard displays live metrics scenario
-   - Provider failure handling scenario
-   - Quickstart test = admin workflow validation
+   - Each story → integration test scenario
+   - Quickstart test = story validation steps
 
-5. **Update agent file incrementally**:
-   - Update CLAUDE.md with adapter pattern decisions
-   - Add metrics tracking requirements
-   - Document admin dashboard extensions
+5. **Update agent file incrementally** (O(1) operation):
+   - Run `.specify/scripts/bash/update-agent-context.sh claude` for your AI assistant
+   - If exists: Add only NEW tech from current plan
+   - Preserve manual additions between markers
+   - Update recent changes (keep last 3)
+   - Keep under 150 lines for token efficiency
+   - Output to repository root
 
-**Output**: data-model.md, /contracts/*, failing tests, quickstart.md, updated CLAUDE.md
+**Output**: data-model.md, /contracts/*, failing tests, quickstart.md, agent-specific file
 
 ## Phase 2: Task Planning Approach
 *This section describes what the /tasks command will do - DO NOT execute during /plan*
@@ -152,29 +167,35 @@ frontend/
 **Task Generation Strategy**:
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
-- Each adapter API endpoint → contract test task [P]
-- Each entity (AdapterRegistry, Metrics, etc.) → model creation task [P]
-- Admin dashboard integration → frontend component tasks
-- Adapter base class and concrete implementations → service tasks
+- Each contract → contract test task [P]
+- Each entity → model creation task [P] 
+- Each user story → integration test task
+- Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Contract tests → Models → Services → API endpoints → Frontend
-- Dependency order: Base adapter → Concrete adapters → Metrics → Dashboard
+- TDD order: Tests before implementation 
+- Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
-**Estimated Output**: 20-25 numbered, ordered tasks in tasks.md
+**Estimated Output**: 25-30 numbered, ordered tasks in tasks.md
 
 **IMPORTANT**: This phase is executed by the /tasks command, NOT by /plan
 
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking
-*No constitutional violations identified - adapter pattern aligns with existing architecture*
+*Fill ONLY if Constitution Check has violations that must be justified*
+
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+
 
 ## Progress Tracking
 *This checklist is updated during execution flow*
@@ -183,15 +204,18 @@ frontend/
 - [x] Phase 0: Research complete (/plan command)
 - [x] Phase 1: Design complete (/plan command)
 - [x] Phase 2: Task planning complete (/plan command - describe approach only)
-- [ ] Phase 3: Tasks generated (/tasks command)
-- [ ] Phase 4: Implementation complete
-- [ ] Phase 5: Validation passed
+- [x] Phase 3: Tasks generated (/tasks command)
+- [x] Phase 4: Implementation complete (updated with spec changes)
+- [x] Phase 5: Validation with updated spec requirements (contracts and data models aligned)
 
 **Gate Status**:
 - [x] Initial Constitution Check: PASS
 - [x] Post-Design Constitution Check: PASS
 - [x] All NEEDS CLARIFICATION resolved
-- [x] Complexity deviations documented
+- [x] Complexity deviations documented (none required)
+- [x] Spec changes incorporated (fetch_prices method, complete OHLCV data)
+- [x] Contracts updated for fetch_prices method and user transparency
+- [x] Data models aligned with decimal precision and OHLCV requirements
 
 ---
 *Based on Constitution v1.0.0 - See `/memory/constitution.md`*

@@ -29,7 +29,6 @@ import {
   Eye,
   Activity,
   Search,
-  Plus,
   RefreshCw,
   Filter,
   BarChart3,
@@ -41,7 +40,6 @@ import { adaptersApi, AdapterMetrics } from '@/services/adapters-api';
 import { formatDistanceToNow, format } from 'date-fns';
 
 interface AdapterListProps {
-  onCreateAdapter?: () => void;
   onEditAdapter?: (adapter: AdapterConfiguration) => void;
   onDeleteAdapter?: (adapterId: string) => void;
   onViewMetrics?: (adapterId: string) => void;
@@ -49,7 +47,6 @@ interface AdapterListProps {
 }
 
 const AdapterList: React.FC<AdapterListProps> = ({
-  onCreateAdapter,
   onEditAdapter,
   onDeleteAdapter,
   onViewMetrics,
@@ -276,12 +273,6 @@ const AdapterList: React.FC<AdapterListProps> = ({
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            {onCreateAdapter && (
-              <Button onClick={onCreateAdapter} size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Adapter
-              </Button>
-            )}
           </div>
         </div>
 
@@ -340,12 +331,6 @@ const AdapterList: React.FC<AdapterListProps> = ({
                 ? 'No adapters configured yet'
                 : 'No adapters match your current filters'}
             </p>
-            {adapters.length === 0 && onCreateAdapter && (
-              <Button onClick={onCreateAdapter}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Your First Adapter
-              </Button>
-            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

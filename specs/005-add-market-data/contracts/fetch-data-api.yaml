@@ -1,0 +1,525 @@
+openapi: 3.0.3
+info:
+  title: Market Data Fetch API
+  description: Standardized fetch_data interface for all market data adapters
+  version: 1.0.0
+  contact:
+    name: Portfolio Manager Team
+    email: admin@portfolio-manager.local
+
+servers:
+  - url: http://localhost:8001/api/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /market-data/prices:
+    post:
+      summary: Fetch stock prices using standardized fetch_prices interface
+      description: Price data endpoint that routes to appropriate adapters using fetch_prices method
+      operationId: fetchStockPrices
+      tags:
+        - Market Data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FetchDataRequest'
+      responses:
+        '200':
+          description: Market data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FetchDataResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: All providers unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /market-data/adapters/{adapter_id}/fetch:
+    post:
+      summary: Fetch data from specific adapter
+      description: Direct fetch from a specific configured adapter (admin only)
+      operationId: fetchFromAdapter
+      tags:
+        - Market Data
+      parameters:
+        - name: adapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FetchDataRequest'
+      responses:
+        '200':
+          description: Market data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FetchDataResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Provider unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /market-data/capabilities:
+    get:
+      summary: Get available data capabilities
+      description: List all data types available from configured adapters
+      operationId: getDataCapabilities
+      tags:
+        - Market Data
+      responses:
+        '200':
+          description: Available data capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilitiesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    FetchDataRequest:
+      type: object
+      required:
+        - symbols
+        - data_type
+      properties:
+        symbols:
+          oneOf:
+            - type: string
+              description: Single symbol
+              example: "AAPL"
+            - type: array
+              items:
+                type: string
+              description: Multiple symbols for bulk fetch
+              example: ["AAPL", "GOOGL", "MSFT"]
+        data_type:
+          type: string
+          enum: [stock_prices, historical_data, fundamentals, news]
+          default: stock_prices
+        parameters:
+          type: object
+          description: Additional parameters specific to data type
+          properties:
+            period:
+              type: string
+              enum: [1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max]
+              description: Time period for historical data
+            interval:
+              type: string
+              enum: [1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo]
+              description: Data interval for historical data
+            force_refresh:
+              type: boolean
+              default: false
+              description: Force fresh data fetch bypassing cache
+        provider_preference:
+          type: array
+          items:
+            type: string
+          description: Preferred adapter order for failover (admin only)
+
+    FetchDataResponse:
+      type: object
+      required:
+        - success
+        - data_type
+        - timestamp
+      properties:
+        success:
+          type: boolean
+        data_type:
+          type: string
+          enum: [stock_prices, historical_data, fundamentals, news]
+        timestamp:
+          type: string
+          format: date-time
+          description: When data was fetched
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/StockPriceData'
+            - $ref: '#/components/schemas/HistoricalData'
+            - $ref: '#/components/schemas/FundamentalData'
+            - $ref: '#/components/schemas/NewsData'
+        source_info:
+          $ref: '#/components/schemas/SourceInfo'
+          description: Provider details (ADMIN ONLY - not included in regular user responses)
+        cache_info:
+          $ref: '#/components/schemas/CacheInfo'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FetchError'
+          description: Non-fatal errors or warnings (generic messages for regular users)
+
+    StockPriceData:
+      type: object
+      properties:
+        prices:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/StockPrice'
+          description: Map of symbol to price data
+
+    StockPrice:
+      type: object
+      required:
+        - symbol
+        - current_price
+        - currency
+        - last_updated
+        - open_price
+        - high_price
+        - low_price
+        - previous_close
+        - volume
+      properties:
+        symbol:
+          type: string
+        current_price:
+          type: number
+          format: decimal
+        currency:
+          type: string
+          example: "USD"
+        last_updated:
+          type: string
+          format: date-time
+        open_price:
+          type: number
+          format: decimal
+        high_price:
+          type: number
+          format: decimal
+        low_price:
+          type: number
+          format: decimal
+        previous_close:
+          type: number
+          format: decimal
+        volume:
+          type: integer
+          format: int64
+        market_cap:
+          type: number
+          format: decimal
+        change_amount:
+          type: number
+          format: decimal
+        change_percent:
+          type: number
+          format: decimal
+
+    HistoricalData:
+      type: object
+      properties:
+        symbol:
+          type: string
+        period:
+          type: string
+        interval:
+          type: string
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricalDataPoint'
+
+    HistoricalDataPoint:
+      type: object
+      required:
+        - timestamp
+        - open
+        - high
+        - low
+        - close
+        - volume
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        open:
+          type: number
+          format: decimal
+        high:
+          type: number
+          format: decimal
+        low:
+          type: number
+          format: decimal
+        close:
+          type: number
+          format: decimal
+        volume:
+          type: integer
+          format: int64
+        adjusted_close:
+          type: number
+          format: decimal
+
+    FundamentalData:
+      type: object
+      properties:
+        symbol:
+          type: string
+        company_info:
+          $ref: '#/components/schemas/CompanyInfo'
+        financial_metrics:
+          $ref: '#/components/schemas/FinancialMetrics'
+
+    CompanyInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        employees:
+          type: integer
+        description:
+          type: string
+
+    FinancialMetrics:
+      type: object
+      properties:
+        market_cap:
+          type: number
+          format: decimal
+        pe_ratio:
+          type: number
+          format: decimal
+        eps:
+          type: number
+          format: decimal
+        dividend_yield:
+          type: number
+          format: decimal
+        book_value:
+          type: number
+          format: decimal
+
+    NewsData:
+      type: object
+      properties:
+        symbol:
+          type: string
+        articles:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsArticle'
+
+    NewsArticle:
+      type: object
+      required:
+        - title
+        - url
+        - published_at
+        - source
+      properties:
+        title:
+          type: string
+        summary:
+          type: string
+        url:
+          type: string
+          format: uri
+        published_at:
+          type: string
+          format: date-time
+        source:
+          type: string
+        sentiment:
+          type: string
+          enum: [positive, negative, neutral]
+
+    SourceInfo:
+      type: object
+      description: "ADMIN-ONLY: Provider details not included in regular user responses to maintain transparency"
+      required:
+        - provider_name
+        - adapter_type
+        - response_time_ms
+      properties:
+        provider_name:
+          type: string
+          description: Name of the provider configuration used (admin only)
+        adapter_type:
+          type: string
+          enum: [yfinance, alpha_vantage]
+          description: Type of adapter used (admin only)
+        response_time_ms:
+          type: number
+          minimum: 0
+          description: Adapter response time metrics (admin only)
+        rate_limit_remaining:
+          type: integer
+          minimum: 0
+          description: Remaining rate limit quota (admin only)
+        cost_units_consumed:
+          type: number
+          minimum: 0
+          description: Cost units consumed for this request (admin only)
+        fallback_used:
+          type: boolean
+          description: Whether fallback provider was used (admin only)
+
+    CacheInfo:
+      type: object
+      properties:
+        cache_hit:
+          type: boolean
+        cache_age_seconds:
+          type: integer
+          minimum: 0
+        cache_expires_at:
+          type: string
+          format: date-time
+
+    FetchError:
+      type: object
+      required:
+        - error_type
+        - message
+      properties:
+        error_type:
+          type: string
+          enum: [rate_limit, timeout, invalid_symbol, provider_error, network_error]
+        message:
+          type: string
+        provider_name:
+          type: string
+        retry_after_seconds:
+          type: integer
+          minimum: 0
+
+    CapabilitiesResponse:
+      type: object
+      required:
+        - available_data_types
+        - providers
+      properties:
+        available_data_types:
+          type: array
+          items:
+            type: string
+            enum: [stock_prices, historical_data, fundamentals, news]
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderCapabilities'
+
+    ProviderCapabilities:
+      type: object
+      required:
+        - provider_name
+        - adapter_type
+        - is_active
+        - supported_data_types
+      properties:
+        provider_name:
+          type: string
+        adapter_type:
+          type: string
+          enum: [yfinance, alpha_vantage]
+        is_active:
+          type: boolean
+        supported_data_types:
+          type: array
+          items:
+            type: string
+        rate_limits:
+          type: object
+          properties:
+            requests_per_minute:
+              type: integer
+            requests_per_day:
+              type: integer
+        cost_model:
+          type: object
+          properties:
+            is_free:
+              type: boolean
+            cost_per_request:
+              type: number
+              format: decimal
+            currency:
+              type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Admin role required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

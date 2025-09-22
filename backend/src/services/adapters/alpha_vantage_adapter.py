@@ -311,21 +311,29 @@ class AlphaVantageAdapter(MarketDataAdapter):
             if not current_price:
                 return None
 
+            # Extract OHLCV data for top-level compliance with specification
+            open_price = quote.get("02. open")
+            high_price = quote.get("03. high")
+            low_price = quote.get("04. low")
+            previous_close = quote.get("08. previous close")
+            change = quote.get("09. change")
+            change_percent = quote.get("10. change percent")
+
             return {
                 'symbol': symbol,
-                'price': Decimal(current_price),
+                'price': Decimal(current_price),  # Current price (Close equivalent)
+                'open': Decimal(open_price) if open_price else None,  # Open price
+                'high': Decimal(high_price) if high_price else None,  # High price
+                'low': Decimal(low_price) if low_price else None,    # Low price
+                'volume': int(quote.get("06. volume", 0)) if quote.get("06. volume") else 0,
+                'previous_close': Decimal(previous_close) if previous_close else None,
+                'change': Decimal(change) if change else None,
+                'change_percent': change_percent,  # Keep as string (includes % symbol)
                 'currency': 'USD',  # Alpha Vantage default
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'volume': int(quote.get("06. volume", 0)) if quote.get("06. volume") else None,
                 'market_cap': None,  # Not provided by Global Quote
                 'source': self.provider_name,
                 'provider_metadata': {
-                    'open': quote.get("02. open"),
-                    'high': quote.get("03. high"),
-                    'low': quote.get("04. low"),
-                    'previous_close': quote.get("08. previous close"),
-                    'change': quote.get("09. change"),
-                    'change_percent': quote.get("10. change percent"),
                     'latest_trading_day': quote.get("07. latest trading day")
                 }
             }

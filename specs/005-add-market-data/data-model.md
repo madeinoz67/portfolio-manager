@@ -14,11 +14,15 @@ Data entities and relationships for the market data provider adapter system.
 - `circuit_breaker`: Failure resilience state
 
 **Interface Design**:
-- `fetch_prices(symbols: Union[str, List[str]])`: Single method for all price requests
+- `fetch_prices(symbols: Union[str, List[str]], parameters: Optional[Dict])`: **ONLY** method for price data requests
+  - Accepts either single symbol string or list of symbols for bulk operations
+  - Optional parameters dict for force_refresh and other price-specific options
+  - Returns standardized response format with NO adapter-specific information
+  - **Price responses MUST include complete OHLCV data**: current_price, open_price, high_price, low_price, previous_close, volume, market_cap, change_amount, change_percent
+  - All price data MUST use decimal precision for financial accuracy with currency information
+  - Response must not expose provider names, adapter types, or technical details
   - Adapter internally determines optimal strategy (single vs bulk API calls)
-  - Accepts either single symbol string or list of symbols
-  - Returns standardized response format regardless of input type
-  - Enables provider-specific optimization without exposing complexity
+  - Enables provider-specific optimization without exposing complexity to users
 
 **Service Capabilities**:
 - `supported_services`: Enum of services the adapter can provide
@@ -42,6 +46,11 @@ Data entities and relationships for the market data provider adapter system.
 - config must contain required fields per provider type
 - metrics must be updated on every API call
 - fetch_prices must handle both single symbols and symbol lists uniformly
+- fetch_prices is the ONLY method for retrieving price data (no bypass allowed)
+- responses must not contain adapter-specific metadata for regular users
+- admin-only interfaces may expose adapter details for management purposes
+- all price data must maintain decimal precision throughout calculations
+- complete OHLCV datasets required even when underlying providers offer partial data
 
 ### 2. ProviderConfiguration
 **Purpose**: Stores configuration and credentials for each market data provider
@@ -235,6 +244,45 @@ RealtimeSymbol (existing master table)
 - **Active configs**: Keep indefinitely
 - **Deleted configs**: Soft delete with 90-day retention
 - **Audit trail**: All configuration changes logged permanently
+
+## User Interface Transparency Requirements
+
+### Regular User Responses
+All market data responses to regular users MUST follow transparency requirements:
+- **No Adapter Information**: Provider names, adapter types, technical details hidden
+- **Unified Format**: Consistent data formatting regardless of source adapter
+- **Error Abstraction**: Generic error messages without adapter-specific details
+- **Seamless Failover**: Adapter switching transparent to users
+
+### Admin-Only Metadata
+Adapter-specific information only available through admin interfaces:
+- **Provider Identification**: Adapter names and types visible to admins
+- **Technical Metrics**: Latency, error rates, cost tracking for admin dashboard
+- **Configuration Details**: API keys, rate limits, provider settings
+- **Health Status**: Circuit breaker states, connection status
+
+### API Response Structure
+```json
+// Regular user response (NO adapter metadata)
+{
+  "data": { "AAPL": { "price": 150.25, "currency": "USD" } },
+  "timestamp": "2025-09-22T10:30:00Z",
+  "success": true
+}
+
+// Admin response (adapter metadata included)
+{
+  "data": { "AAPL": { "price": 150.25, "currency": "USD" } },
+  "timestamp": "2025-09-22T10:30:00Z",
+  "success": true,
+  "source_info": {
+    "provider_name": "yfinance_default",
+    "adapter_type": "yfinance",
+    "response_time_ms": 245,
+    "fallback_used": false
+  }
+}
+```
 
 ## Security Considerations
 

@@ -163,7 +163,46 @@ This quickstart guide demonstrates the complete workflow for configuring and mon
 - Metrics show traffic moved to fallback provider
 - Logging indicates fallover occurred
 
-## Scenario 5: Cost Monitoring and Alerting
+## Scenario 5: Verify User Transparency Requirements
+
+### Step 1: Test Regular User Experience
+1. Log out from admin account
+2. Log in as regular (non-admin) user
+3. Navigate to portfolio dashboard
+4. Refresh portfolio data to trigger market data requests
+5. Check browser developer tools for API responses
+
+**Expected Result**:
+- No adapter-specific information visible in UI
+- API responses contain only market data without provider details
+- No adapter names, types, or technical metadata exposed
+- Consistent data formatting regardless of adapter source
+
+### Step 2: Verify Failover Transparency
+1. As admin, temporarily disable primary adapter
+2. As regular user, continue using portfolio features
+3. Observe user experience during failover
+4. Check for any adapter-specific error messages
+
+**Expected Result**:
+- User experience unchanged during adapter failover
+- No error messages mentioning specific adapters
+- Market data continues loading seamlessly
+- No visible indication of backend provider changes
+
+### Step 3: Validate API Response Structure
+1. Monitor network requests from regular user sessions
+2. Compare with admin API responses
+3. Verify source_info field is absent for regular users
+4. Confirm error messages are generic
+
+**Expected Result**:
+- Regular user responses exclude source_info field
+- Admin responses include source_info field
+- Error messages are generic for regular users
+- No provider branding or technical details visible
+
+## Scenario 6: Cost Monitoring and Alerting
 
 ### Step 1: Configure Cost Tracking
 1. Navigate to adapter configuration
@@ -216,6 +255,9 @@ This quickstart guide demonstrates the complete workflow for configuring and mon
 - [ ] FR-010: No hard-coded metrics or data values
 - [ ] FR-011: Graceful handling of provider errors and rate limits
 - [ ] FR-012: New providers can be added without system restart
+- [ ] FR-039: Regular users unaware of which adapter is being used
+- [ ] FR-040: Transparent unified interface with automatic adapter selection
+- [ ] FR-041: No adapter-specific information exposed to regular users
 
 ### Technical Validation
 - [ ] TDD approach followed (tests written first)

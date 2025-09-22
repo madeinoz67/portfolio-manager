@@ -1,0 +1,548 @@
+openapi: 3.0.3
+info:
+  title: Market Data Provider Adapters API
+  description: Admin-only API for managing market data provider adapters
+  version: 1.0.0
+  contact:
+    name: Portfolio Manager Team
+    email: admin@portfolio-manager.local
+
+servers:
+  - url: http://localhost:8001/api/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /admin/adapters:
+    get:
+      summary: List all configured adapters
+      description: Retrieve all provider configurations with current status and metrics
+      operationId: listAdapters
+      tags:
+        - Admin Adapters
+      responses:
+        '200':
+          description: List of configured adapters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  adapters:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdapterConfiguration'
+                  total_count:
+                    type: integer
+                    minimum: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Create new adapter configuration
+      description: Configure a new market data provider adapter
+      operationId: createAdapter
+      tags:
+        - Admin Adapters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdapterRequest'
+      responses:
+        '201':
+          description: Adapter configuration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterConfiguration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Adapter with same name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/adapters/{adapter_id}:
+    get:
+      summary: Get adapter configuration details
+      description: Retrieve detailed information about a specific adapter
+      operationId: getAdapter
+      tags:
+        - Admin Adapters
+      parameters:
+        - name: adapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Adapter configuration details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterConfigurationDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update adapter configuration
+      description: Update settings for an existing adapter
+      operationId: updateAdapter
+      tags:
+        - Admin Adapters
+      parameters:
+        - name: adapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdapterRequest'
+      responses:
+        '200':
+          description: Adapter configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterConfiguration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete adapter configuration
+      description: Remove an adapter configuration (soft delete)
+      operationId: deleteAdapter
+      tags:
+        - Admin Adapters
+      parameters:
+        - name: adapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Adapter configuration deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/adapters/{adapter_id}/metrics:
+    get:
+      summary: Get adapter performance metrics
+      description: Retrieve real-time and historical metrics for a specific adapter
+      operationId: getAdapterMetrics
+      tags:
+        - Admin Adapters
+      parameters:
+        - name: adapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: time_range
+          in: query
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+            default: 24h
+      responses:
+        '200':
+          description: Adapter performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/adapters/{adapter_id}/test:
+    post:
+      summary: Test adapter connection
+      description: Perform a test API call to verify adapter functionality
+      operationId: testAdapter
+      tags:
+        - Admin Adapters
+      parameters:
+        - name: adapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Adapter test successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterTestResult'
+        '400':
+          description: Adapter test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterTestResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/adapters/registry:
+    get:
+      summary: Get available adapter types
+      description: List all hard-coded adapter types available for configuration
+      operationId: getAdapterRegistry
+      tags:
+        - Admin Adapters
+      responses:
+        '200':
+          description: Available adapter types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  adapter_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdapterType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AdapterConfiguration:
+      type: object
+      required:
+        - id
+        - provider_name
+        - display_name
+        - is_active
+        - adapter_type
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider_name:
+          type: string
+          maxLength: 100
+        display_name:
+          type: string
+          maxLength: 200
+        is_active:
+          type: boolean
+        adapter_type:
+          type: string
+          enum: [yfinance, alpha_vantage]
+        config_data:
+          type: object
+          description: Provider-specific configuration (API keys masked)
+        health_status:
+          type: string
+          enum: [healthy, degraded, unhealthy, unknown]
+        last_health_check:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdapterConfigurationDetail:
+      allOf:
+        - $ref: '#/components/schemas/AdapterConfiguration'
+        - type: object
+          properties:
+            capabilities:
+              type: array
+              items:
+                type: string
+                enum: [stock_prices, bulk_quotes, historical_data]
+            recent_metrics:
+              $ref: '#/components/schemas/AdapterMetricsSummary'
+            cost_summary:
+              $ref: '#/components/schemas/CostSummary'
+
+    CreateAdapterRequest:
+      type: object
+      required:
+        - provider_name
+        - display_name
+        - adapter_type
+        - config_data
+      properties:
+        provider_name:
+          type: string
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9_-]+$'
+        display_name:
+          type: string
+          maxLength: 200
+        adapter_type:
+          type: string
+          enum: [yfinance, alpha_vantage]
+        is_active:
+          type: boolean
+          default: false
+        config_data:
+          type: object
+          description: Provider-specific configuration including API keys
+
+    UpdateAdapterRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          maxLength: 200
+        is_active:
+          type: boolean
+        config_data:
+          type: object
+          description: Provider-specific configuration including API keys
+
+    AdapterMetrics:
+      type: object
+      required:
+        - provider_id
+        - time_range
+        - current_metrics
+        - historical_data
+      properties:
+        provider_id:
+          type: string
+          format: uuid
+        time_range:
+          type: string
+          enum: [1h, 24h, 7d, 30d]
+        current_metrics:
+          $ref: '#/components/schemas/AdapterMetricsSummary'
+        historical_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsDataPoint'
+
+    AdapterMetricsSummary:
+      type: object
+      required:
+        - total_requests
+        - successful_requests
+        - failed_requests
+        - avg_response_time_ms
+        - success_rate
+      properties:
+        total_requests:
+          type: integer
+          minimum: 0
+        successful_requests:
+          type: integer
+          minimum: 0
+        failed_requests:
+          type: integer
+          minimum: 0
+        avg_response_time_ms:
+          type: number
+          minimum: 0
+        success_rate:
+          type: number
+          minimum: 0
+          maximum: 100
+        rate_limit_hits:
+          type: integer
+          minimum: 0
+        circuit_breaker_state:
+          type: string
+          enum: [closed, open, half_open]
+        last_error:
+          type: string
+          nullable: true
+
+    MetricsDataPoint:
+      type: object
+      required:
+        - timestamp
+        - request_count
+        - success_count
+        - avg_latency_ms
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        request_count:
+          type: integer
+          minimum: 0
+        success_count:
+          type: integer
+          minimum: 0
+        error_count:
+          type: integer
+          minimum: 0
+        avg_latency_ms:
+          type: number
+          minimum: 0
+        rate_limit_hits:
+          type: integer
+          minimum: 0
+
+    CostSummary:
+      type: object
+      properties:
+        daily_cost_usd:
+          type: number
+          format: decimal
+          minimum: 0
+        monthly_cost_usd:
+          type: number
+          format: decimal
+          minimum: 0
+        api_calls_today:
+          type: integer
+          minimum: 0
+        quota_remaining:
+          type: integer
+          minimum: 0
+        quota_limit:
+          type: integer
+          minimum: 0
+
+    AdapterTestResult:
+      type: object
+      required:
+        - success
+        - response_time_ms
+        - timestamp
+      properties:
+        success:
+          type: boolean
+        response_time_ms:
+          type: number
+          minimum: 0
+        timestamp:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+          nullable: true
+        test_data:
+          type: object
+          description: Sample data returned by test call
+
+    AdapterType:
+      type: object
+      required:
+        - adapter_name
+        - display_name
+        - description
+        - capabilities
+        - required_config
+      properties:
+        adapter_name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        required_config:
+          type: object
+          description: JSON schema for required configuration fields
+        default_config:
+          type: object
+          description: Default configuration values
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Admin role required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
