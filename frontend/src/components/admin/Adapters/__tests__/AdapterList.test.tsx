@@ -47,7 +47,6 @@ const mockAdapters: AdapterConfiguration[] = [
 
 describe('AdapterList', () => {
   const defaultProps = {
-    onCreateAdapter: jest.fn(),
     onEditAdapter: jest.fn(),
     onDeleteAdapter: jest.fn(),
     onViewMetrics: jest.fn(),
@@ -202,14 +201,6 @@ describe('AdapterList', () => {
   });
 
   describe('Actions', () => {
-    it('calls onCreateAdapter when add button is clicked', () => {
-      render(<AdapterList {...defaultProps} />);
-
-      const addButton = screen.getByText('Add Adapter');
-      fireEvent.click(addButton);
-
-      expect(defaultProps.onCreateAdapter).toHaveBeenCalledTimes(1);
-    });
 
     it('calls onEditAdapter when edit button is clicked', () => {
       render(<AdapterList {...defaultProps} />);

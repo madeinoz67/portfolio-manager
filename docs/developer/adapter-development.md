@@ -2,20 +2,19 @@
 
 ## Overview
 
-This guide provides comprehensive information for developers who want to create new market data provider adapters or extend the existing adapter system. The adapter framework is designed to be extensible, testable, and maintainable.
+This guide provides information for developers working with the market data adapter system. **Note: Adapters are now hard-coded into the system and new adapters cannot be dynamically created.** This documentation covers the existing adapter architecture and how to modify or extend the built-in adapters.
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
-2. [Adapter Interface](#adapter-interface)
-3. [Creating a New Adapter](#creating-a-new-adapter)
+2. [Built-in Adapters](#built-in-adapters)
+3. [Adapter Interface](#adapter-interface)
 4. [Configuration Management](#configuration-management)
 5. [Metrics and Monitoring](#metrics-and-monitoring)
 6. [Error Handling](#error-handling)
 7. [Testing](#testing)
-8. [Integration](#integration)
-9. [Best Practices](#best-practices)
-10. [Examples](#examples)
+8. [Best Practices](#best-practices)
+9. [Modifying Existing Adapters](#modifying-existing-adapters)
 
 ## Architecture Overview
 
@@ -46,11 +45,33 @@ The adapter system consists of several key components:
 
 ### Data Flow
 
-1. **Configuration**: Adapters are configured through the admin API
-2. **Registration**: Providers register their adapter classes with the registry
+1. **Hard-coded Registration**: Built-in adapters are automatically registered at startup
+2. **Configuration**: Adapters are configured through the admin API (enable/disable and config updates only)
 3. **Instantiation**: Provider manager creates adapter instances based on configuration
-4. **Execution**: Adapters fetch market data and report metrics
+4. **Execution**: Adapters use standardized `fetch_prices` method to fetch market data and report metrics
 5. **Monitoring**: Health checker monitors adapter status and performance
+
+## Built-in Adapters
+
+The system includes two hard-coded market data adapters that cannot be removed or replaced:
+
+### YFinanceAdapter (`yfinance`)
+- **Provider**: Yahoo Finance
+- **Cost Model**: Free service with rate limits
+- **Bulk Support**: Yes, up to 50 symbols per request
+- **API Key**: Not required
+- **Use Case**: Primary adapter for free market data
+- **File**: `backend/src/services/adapters/yfinance_adapter.py`
+
+### AlphaVantageAdapter (`alpha_vantage`)
+- **Provider**: Alpha Vantage
+- **Cost Model**: Freemium with usage tracking
+- **Bulk Support**: No, sequential requests only
+- **API Key**: Required for production use
+- **Use Case**: Professional-grade market data with additional features
+- **File**: `backend/src/services/adapters/alpha_vantage_adapter.py`
+
+Both adapters implement the standardized `fetch_prices` method and provide complete OHLCV (Open, High, Low, Close, Volume) data with decimal precision.
 
 ## Adapter Interface
 
@@ -125,321 +146,163 @@ class MyCustomAdapter(MarketDataAdapter):
 - **Returns**: `connect()` returns `bool` indicating success
 - **Usage**: Initialize sessions, authenticate, cleanup resources
 
-#### `get_current_price()`
-- **Purpose**: Fetch real-time price for a single symbol
-- **Parameters**: `symbol: str` - Stock symbol (e.g., "AAPL")
-- **Returns**: Dictionary with price data
+#### `fetch_prices()` (Standardized Method)
+- **Purpose**: Primary method for fetching market data (replaces `get_current_price` and `get_multiple_prices`)
+- **Parameters**: `symbols: Union[str, List[str]]` - Single symbol or list of symbols
+- **Returns**: Dictionary with standardized price data
 - **Required Fields**:
   ```python
   {
       "symbol": str,           # Stock symbol
-      "price": Decimal,        # Current price
+      "price": Decimal,        # Current price (close equivalent)
+      "open": Decimal,         # Opening price
+      "high": Decimal,         # Day's high price
+      "low": Decimal,          # Day's low price
       "volume": int,           # Trading volume
-      "market_cap": Decimal,   # Market capitalization
+      "market_cap": Decimal,   # Market capitalization (optional)
+      "change": Decimal,       # Price change from previous close
+      "change_percent": str,   # Percentage change as string
+      "currency": str,         # ISO 4217 currency code (e.g., "USD")
       "timestamp": str,        # ISO format timestamp
       "source": str            # Provider name
   }
   ```
 
-#### `get_multiple_prices()`
-- **Purpose**: Fetch real-time prices for multiple symbols
-- **Parameters**: `symbols: List[str]` - List of stock symbols
-- **Returns**: Dictionary mapping symbols to price data or None
-- **Example**:
-  ```python
-  {
-      "AAPL": {"symbol": "AAPL", "price": Decimal("150.25"), ...},
-      "MSFT": {"symbol": "MSFT", "price": Decimal("280.50"), ...},
-      "INVALID": None  # Failed to fetch
-  }
-  ```
+#### Legacy Methods (Deprecated)
+- `get_current_price()` and `get_multiple_prices()` are deprecated in favor of `fetch_prices()`
+- Existing implementations maintain backward compatibility
 
 #### `validate_config()`
 - **Purpose**: Validate adapter configuration
 - **Returns**: `bool` indicating if configuration is valid
 - **Should Check**: API keys, URLs, required fields, authentication
 
-## Creating a New Adapter
+## Modifying Existing Adapters
 
-### Step 1: Create Adapter Class
+Since adapters are hard-coded into the system, modifications to existing adapters require code changes. Here's how to modify the built-in adapters:
 
-Create a new file in `backend/src/services/adapters/providers/`:
+### YFinance Adapter Modifications
 
+The YFinance adapter is located at `backend/src/services/adapters/yfinance_adapter.py`. Common modifications include:
+
+#### Adding New Data Fields
 ```python
-# backend/src/services/adapters/providers/my_provider.py
+# In the _parse_single_symbol_response method
+def _parse_single_symbol_response(self, symbol: str, data: pd.DataFrame) -> Dict[str, Any]:
+    # Existing fields...
 
-import aiohttp
-from decimal import Decimal
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+    # Add new field (example: dividend yield)
+    dividend_yield = data.get('dividendYield', 0)
 
-from src.services.adapters.base_adapter import (
-    MarketDataAdapter,
-    ProviderCapabilities,
-    AdapterError,
-    AdapterConnectionError,
-    AdapterRateLimitError,
-    AdapterValidationError,
-)
-
-class MyProviderAdapter(MarketDataAdapter):
-    """Adapter for My Custom Provider."""
-
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.api_key = config.get('api_key')
-        self.base_url = config.get('base_url', 'https://api.myprovider.com/v1')
-        self.timeout = config.get('timeout', 30)
-        self.session: Optional[aiohttp.ClientSession] = None
-
-    @property
-    def provider_name(self) -> str:
-        return "my_provider"
-
-    @property
-    def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(
-            supports_real_time=True,
-            supports_historical=True,
-            supports_bulk=True,
-            max_symbols_per_request=50,
-            rate_limit_per_minute=100,
-            requires_api_key=True
-        )
-
-    async def connect(self) -> bool:
-        """Establish connection to My Provider API."""
-        try:
-            connector = aiohttp.TCPConnector(limit=10)
-            timeout = aiohttp.ClientTimeout(total=self.timeout)
-
-            self.session = aiohttp.ClientSession(
-                connector=connector,
-                timeout=timeout,
-                headers={
-                    'Authorization': f'Bearer {self.api_key}',
-                    'User-Agent': 'PortfolioManager/1.0'
-                }
-            )
-
-            # Test connection
-            async with self.session.get(f'{self.base_url}/status') as response:
-                if response.status == 200:
-                    return True
-                else:
-                    raise AdapterConnectionError(f"Connection test failed: {response.status}")
-
-        except Exception as e:
-            if self.session:
-                await self.session.close()
-                self.session = None
-            raise AdapterConnectionError(f"Failed to connect: {str(e)}")
-
-    async def disconnect(self) -> None:
-        """Close connection to My Provider API."""
-        if self.session:
-            await self.session.close()
-            self.session = None
-
-    async def get_current_price(self, symbol: str) -> Dict[str, Any]:
-        """Fetch current price for a symbol."""
-        if not self.session:
-            raise AdapterConnectionError("Not connected to provider")
-
-        try:
-            url = f"{self.base_url}/quote"
-            params = {"symbol": symbol}
-
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return self._parse_price_data(data)
-                elif response.status == 429:
-                    raise AdapterRateLimitError("Rate limit exceeded")
-                else:
-                    raise AdapterError(f"API error: {response.status}")
-
-        except aiohttp.ClientError as e:
-            raise AdapterConnectionError(f"Network error: {str(e)}")
-
-    async def get_multiple_prices(self, symbols: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
-        """Fetch current prices for multiple symbols."""
-        if not self.session:
-            raise AdapterConnectionError("Not connected to provider")
-
-        # Check bulk limit
-        if len(symbols) > self.capabilities.max_symbols_per_request:
-            raise AdapterValidationError(
-                f"Too many symbols: {len(symbols)} > {self.capabilities.max_symbols_per_request}"
-            )
-
-        try:
-            url = f"{self.base_url}/quotes"
-            data = {"symbols": symbols}
-
-            async with self.session.post(url, json=data) as response:
-                if response.status == 200:
-                    api_data = await response.json()
-                    return self._parse_multiple_price_data(api_data)
-                elif response.status == 429:
-                    raise AdapterRateLimitError("Rate limit exceeded")
-                else:
-                    raise AdapterError(f"Bulk API error: {response.status}")
-
-        except aiohttp.ClientError as e:
-            raise AdapterConnectionError(f"Network error: {str(e)}")
-
-    async def validate_config(self) -> bool:
-        """Validate adapter configuration."""
-        if not self.api_key:
-            raise AdapterValidationError("API key is required")
-
-        if not self.base_url.startswith(('http://', 'https://')):
-            raise AdapterValidationError("Invalid base URL format")
-
-        if self.timeout <= 0:
-            raise AdapterValidationError("Timeout must be positive")
-
-        return True
-
-    def _parse_price_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse API response into standard format."""
-        return {
-            "symbol": data["symbol"],
-            "price": Decimal(str(data["price"])),
-            "volume": int(data["volume"]),
-            "market_cap": Decimal(str(data.get("market_cap", 0))),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "source": self.provider_name
-        }
-
-    def _parse_multiple_price_data(self, data: Dict[str, Any]) -> Dict[str, Optional[Dict[str, Any]]]:
-        """Parse bulk API response into standard format."""
-        results = {}
-        for symbol_data in data.get("quotes", []):
-            try:
-                symbol = symbol_data["symbol"]
-                results[symbol] = self._parse_price_data(symbol_data)
-            except (KeyError, ValueError):
-                results[symbol_data.get("symbol", "UNKNOWN")] = None
-        return results
+    return {
+        # Existing fields...
+        'dividend_yield': Decimal(str(dividend_yield)) if dividend_yield else None,
+        # ... rest of fields
+    }
 ```
 
-### Step 2: Register the Adapter
-
-Add registration in `backend/src/services/adapters/registry.py`:
-
+#### Modifying Request Parameters
 ```python
-# Import your adapter
-from src.services.adapters.providers.my_provider import MyProviderAdapter
-
-def initialize_default_providers(registry: ProviderRegistry) -> None:
-    """Initialize default market data providers."""
-    try:
-        # Existing providers...
-
-        # Register your new adapter
-        registry.register_provider("my_provider", MyProviderAdapter)
-
-    except Exception as e:
-        logger.error(f"Failed to initialize providers: {e}")
+# In the fetch_prices method
+async def fetch_prices(self, symbols: Union[str, List[str]]) -> AdapterResponse:
+    # Add new parameters to yfinance download
+    data = yf.download(
+        symbols_str,
+        period="1d",
+        interval="1m",  # Changed from default
+        progress=False,
+        threads=True,
+        # Add new parameters here
+        auto_adjust=True,
+        prepost=True,  # Include pre/post market data
+    )
 ```
 
-### Step 3: Add Configuration Validation
+### Alpha Vantage Adapter Modifications
 
-Update `backend/src/services/config_manager.py`:
+The Alpha Vantage adapter is located at `backend/src/services/adapters/alpha_vantage_adapter.py`:
 
+#### Adding New API Endpoints
 ```python
-def _validate_my_provider_config(self, config: Dict[str, Any]) -> ValidationResult:
-    """Validate My Provider configuration."""
-    result = ValidationResult()
+async def fetch_fundamental_data(self, symbol: str) -> Dict[str, Any]:
+    """Fetch fundamental data using Alpha Vantage OVERVIEW function."""
+    url = f"{self.base_url}/query"
+    params = {
+        'function': 'OVERVIEW',
+        'symbol': symbol,
+        'apikey': self.api_key
+    }
 
-    # Required fields
-    required_fields = ["api_key"]
-    result.errors.extend(self._validate_required_fields(config, required_fields))
-
-    # API key format validation
-    api_key = config.get("api_key", "")
-    if api_key and len(api_key) < 20:
-        result.errors.append("API key appears to be too short")
-
-    # URL validation
-    base_url = config.get("base_url", "")
-    if base_url and not self._is_valid_url(base_url):
-        result.errors.append("Invalid base URL format")
-
-    # Timeout validation
-    timeout = config.get("timeout")
-    if timeout is not None:
-        if not isinstance(timeout, (int, float)) or timeout <= 0:
-            result.errors.append("Timeout must be a positive number")
-        elif timeout > 120:
-            result.warnings.append("Timeout is quite high (>120 seconds)")
-
-    result.is_valid = len(result.errors) == 0
-    return result
+    async with self.session.get(url, params=params) as response:
+        if response.status == 200:
+            data = await response.json()
+            return self._parse_fundamental_data(data)
+        else:
+            raise AdapterError(f"Fundamental data API error: {response.status}")
 ```
 
-### Step 4: Add Provider to Frontend
+#### Modifying Response Parsing
+```python
+def _parse_single_symbol_response(self, symbol: str, quote: Dict[str, Any]) -> Dict[str, Any]:
+    # Enhanced parsing with additional fields
+    current_price = quote.get("05. price")
+    open_price = quote.get("02. open")
+    high_price = quote.get("03. high")
+    low_price = quote.get("04. low")
+    previous_close = quote.get("08. previous close")
+    change = quote.get("09. change")
+    change_percent = quote.get("10. change percent")
 
-Update `frontend/src/components/Admin/Adapters/AdapterConfigForm.tsx`:
+    # Add calculated fields
+    day_range = f"{low_price} - {high_price}" if low_price and high_price else None
 
-```typescript
-const getProviderDisplayName = (providerName: string) => {
-  const displayNames: Record<string, string> = {
-    // Existing providers...
-    'my_provider': 'My Custom Provider',
-  };
-  return displayNames[providerName] || providerName;
-};
+    return {
+        'symbol': symbol,
+        'price': Decimal(current_price) if current_price else None,
+        'open': Decimal(open_price) if open_price else None,
+        'high': Decimal(high_price) if high_price else None,
+        'low': Decimal(low_price) if low_price else None,
+        'volume': int(quote.get("06. volume", 0)) if quote.get("06. volume") else 0,
+        'previous_close': Decimal(previous_close) if previous_close else None,
+        'change': Decimal(change) if change else None,
+        'change_percent': change_percent,
+        'day_range': day_range,  # New calculated field
+        'currency': 'USD',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'source': self.provider_name,
+    }
+```
 
-const getProviderConfigFields = (providerName: string) => {
-  switch (providerName) {
-    // Existing cases...
+### Testing Modified Adapters
 
-    case 'my_provider':
-      return (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="api_key">API Key *</Label>
-              <Input
-                id="api_key"
-                type="password"
-                {...register('config.api_key')}
-                placeholder="Enter your My Provider API key"
-              />
-              {errors.config?.api_key && (
-                <p className="text-sm text-red-600">{errors.config.api_key.message}</p>
-              )}
-            </div>
+When modifying adapters, ensure you update the corresponding tests:
 
-            <div>
-              <Label htmlFor="base_url">Base URL</Label>
-              <Input
-                id="base_url"
-                {...register('config.base_url')}
-                placeholder="https://api.myprovider.com/v1"
-              />
-            </div>
+#### Update Unit Tests
+```python
+# tests/unit/test_yfinance_adapter.py
+def test_new_field_parsing(self):
+    """Test that new fields are properly parsed."""
+    # Test data with new fields
+    test_data = pd.DataFrame({
+        'Close': [150.25],
+        'Volume': [1000000],
+        'dividendYield': [0.0125]  # New field
+    })
 
-            <div>
-              <Label htmlFor="timeout">Timeout (seconds)</Label>
-              <Input
-                id="timeout"
-                type="number"
-                {...register('config.timeout', { valueAsNumber: true })}
-                placeholder="30"
-              />
-            </div>
-          </div>
-        </>
-      );
+    adapter = YFinanceAdapter("test", {})
+    result = adapter._parse_single_symbol_response("AAPL", test_data)
 
-    default:
-      return <p>Select a provider to configure settings</p>;
-  }
-};
+    assert result['dividend_yield'] == Decimal('0.0125')
+```
+
+#### Update Integration Tests
+```python
+# tests/integration/test_adapter_compliance.py
+def test_modified_adapter_compliance(self):
+    """Test that modified adapters still meet compliance requirements."""
+    # Verify new fields don't break existing contracts
+    # Test that OHLCV data is still complete
+    # Verify decimal precision is maintained
 ```
 
 ## Configuration Management

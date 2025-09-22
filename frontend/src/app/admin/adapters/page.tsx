@@ -8,7 +8,7 @@ import AdapterMetricsView from '@/components/admin/Adapters/AdapterMetricsView';
 import AdapterHealthStatus from '@/components/admin/Adapters/AdapterHealthStatus';
 import { AdapterConfiguration } from '@/types/adapters';
 
-type ViewMode = 'list' | 'create' | 'edit' | 'metrics' | 'health';
+type ViewMode = 'list' | 'edit' | 'metrics' | 'health';
 
 const AdminAdaptersPage: React.FC = () => {
   const router = useRouter();
@@ -16,10 +16,6 @@ const AdminAdaptersPage: React.FC = () => {
   const [selectedAdapter, setSelectedAdapter] = useState<AdapterConfiguration | null>(null);
   const [selectedAdapterId, setSelectedAdapterId] = useState<string | null>(null);
 
-  const handleCreateAdapter = () => {
-    setSelectedAdapter(null);
-    setViewMode('create');
-  };
 
   const handleEditAdapter = (adapter: AdapterConfiguration) => {
     setSelectedAdapter(adapter);
@@ -62,15 +58,6 @@ const AdminAdaptersPage: React.FC = () => {
 
   const renderContent = () => {
     switch (viewMode) {
-      case 'create':
-        return (
-          <AdapterConfigForm
-            mode="create"
-            onSuccess={handleFormSuccess}
-            onCancel={handleFormCancel}
-          />
-        );
-
       case 'edit':
         return (
           <AdapterConfigForm
@@ -101,7 +88,6 @@ const AdminAdaptersPage: React.FC = () => {
       default:
         return (
           <AdapterList
-            onCreateAdapter={handleCreateAdapter}
             onEditAdapter={handleEditAdapter}
             onDeleteAdapter={handleDeleteAdapter}
             onViewMetrics={handleViewMetrics}
@@ -146,7 +132,6 @@ const AdminAdaptersPage: React.FC = () => {
               </>
             )}
             <span className="text-gray-900 font-medium">
-              {viewMode === 'create' && 'Create Adapter'}
               {viewMode === 'edit' && 'Edit Adapter'}
               {viewMode === 'metrics' && 'Adapter Metrics'}
               {viewMode === 'health' && 'Health Status'}
