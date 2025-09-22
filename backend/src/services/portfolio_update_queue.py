@@ -308,19 +308,36 @@ class PortfolioUpdateQueue(LoggerMixin):
             db = SessionLocal()
             portfolio_service = RealTimePortfolioService(db)
 
-            # Update the portfolio with all changed symbols
-            updated_portfolios = portfolio_service.bulk_update_portfolios_for_symbols(
-                list(request.symbols)
-            )
+            # Handle special "all" portfolio ID for bulk updates
+            if request.portfolio_id == "all":
+                # Update all portfolios that have holdings in the changed symbols
+                updated_portfolios = portfolio_service.bulk_update_portfolios_for_symbols(
+                    list(request.symbols)
+                )
 
-            if updated_portfolios:
-                self.log_info(f"Executed portfolio update for {request.portfolio_id}", extra={
-                    "symbols": list(request.symbols),
-                    "symbol_count": len(request.symbols),
-                    "priority": request.priority
-                })
+                if updated_portfolios:
+                    self.log_info(f"Executed bulk portfolio update for all portfolios", extra={
+                        "symbols": list(request.symbols),
+                        "symbol_count": len(request.symbols),
+                        "updated_portfolios": len(updated_portfolios),
+                        "priority": request.priority
+                    })
+                else:
+                    self.log_info(f"Bulk portfolio update: no portfolios found with holdings in symbols {list(request.symbols)}")
             else:
-                self.log_warning(f"Portfolio update found no portfolios for {request.portfolio_id}")
+                # Update specific portfolio by ID
+                updated_portfolios = portfolio_service.bulk_update_portfolios_for_symbols(
+                    list(request.symbols)
+                )
+
+                if updated_portfolios:
+                    self.log_info(f"Executed portfolio update for {request.portfolio_id}", extra={
+                        "symbols": list(request.symbols),
+                        "symbol_count": len(request.symbols),
+                        "priority": request.priority
+                    })
+                else:
+                    self.log_warning(f"Portfolio update found no portfolios for {request.portfolio_id}")
 
         finally:
             if 'db' in locals():

@@ -218,32 +218,79 @@ class YFinanceAdapter(MarketDataAdapter):
             loop = asyncio.get_event_loop()
 
             def fetch_ticker_data():
-                # Handle ASX symbols - yfinance expects .AX suffix
-                yf_symbol = self._convert_symbol_for_yfinance(symbol)
-                ticker = yf.Ticker(yf_symbol)
+                try:
+                    # Handle ASX symbols - yfinance expects .AX suffix
+                    yf_symbol = self._convert_symbol_for_yfinance(symbol)
+                    print(f"DEBUG: Fetching data for {symbol} -> {yf_symbol}")
+                    ticker = yf.Ticker(yf_symbol)
 
-                # Get current info and history
-                info = ticker.info
-                hist = ticker.history(period="1d", interval="1m")
+                    # Get current info and daily history (includes comprehensive data)
+                    print(f"DEBUG: Getting ticker info...")
+                    info = ticker.info
+                    print(f"DEBUG: Getting history...")
+                    # Get the latest 5 days to ensure we have data even if market is closed
+                    hist = ticker.history(period="5d")
+                    print(f"DEBUG: History shape: {hist.shape}, empty: {hist.empty}")
 
-                if hist.empty:
+                    if hist.empty:
+                        print(f"DEBUG: History is empty for {symbol}")
+                        return None
+
+                    print(f"DEBUG: Starting data conversion...")
+                    latest = hist.iloc[-1]
+                    print(f"DEBUG: Latest row: {latest.to_dict()}")
+
+                    # Calculate change from previous close if available
+                    change = 0.0
+                    change_percent = 0.0
+                    if len(hist) > 1:
+                        previous_close = hist.iloc[-2]['Close']
+                        current_close = latest['Close']
+                        change = float(current_close - previous_close)
+                        change_percent = float((change / previous_close) * 100) if previous_close != 0 else 0.0
+
+                    print(f"DEBUG: Change calculations complete: {change}, {change_percent}%")
+
+                    # Determine exchange and currency dynamically
+                    exchange = info.get('exchange', 'UNKNOWN')
+                    currency = info.get('currency', 'USD')
+
+                    # Map common exchanges for better display
+                    if yf_symbol.endswith('.AX'):
+                        exchange = 'ASX'
+                        currency = 'AUD'
+                    elif exchange in ['NMS', 'NYQ', 'NGS']:
+                        if exchange == 'NMS':
+                            exchange = 'NASDAQ'
+                        elif exchange == 'NYQ':
+                            exchange = 'NYSE'
+
+                    print(f"DEBUG: Exchange mapping complete: {exchange}, {currency}")
+
+                    result_data = {
+                        "symbol": symbol,
+                        "price": float(latest['Close']),
+                        "open": float(latest['Open']),
+                        "high": float(latest['High']),
+                        "low": float(latest['Low']),
+                        "volume": int(latest['Volume']) if not pd.isna(latest['Volume']) else 0,
+                        "change": change,
+                        "change_percent": change_percent,
+                        "market_cap": info.get('marketCap', 0),
+                        "company_name": info.get('longName', info.get('shortName', symbol)),
+                        "exchange": exchange,
+                        "currency": currency,
+                        "fetched_at": datetime.now(timezone.utc).isoformat(),
+                        "provider": "yfinance"
+                    }
+                    print(f"DEBUG: Final result data: {result_data}")
+                    return result_data
+
+                except Exception as e:
+                    print(f"DEBUG: Exception in fetch_ticker_data: {e}")
+                    import traceback
+                    traceback.print_exc()
                     return None
-
-                latest = hist.iloc[-1]
-                return {
-                    "symbol": symbol,
-                    "price": float(latest['Close']),
-                    "open": float(latest['Open']),
-                    "high": float(latest['High']),
-                    "low": float(latest['Low']),
-                    "volume": int(latest['Volume']) if not pd.isna(latest['Volume']) else 0,
-                    "change": 0.0,  # Will be calculated from previous close
-                    "change_percent": 0.0,
-                    "market_cap": info.get('marketCap', 0),
-                    "company_name": info.get('longName', symbol),
-                    "fetched_at": datetime.now(timezone.utc).isoformat(),
-                    "provider": "yfinance"
-                }
 
             result = await loop.run_in_executor(None, fetch_ticker_data)
             return {symbol: result} if result else None

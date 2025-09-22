@@ -121,20 +121,32 @@ async def periodic_price_updates():
                     successful_fetches = len([result for result in results.values() if result is not None])
                     logger.info(f"Fetch completed: {successful_fetches}/{len(symbols_to_fetch)} successful")
 
-                    # After successful price updates, update portfolio calculations
+                    # After successful price updates, queue portfolio updates via update queue
                     if successful_fetches > 0:
-                        logger.info("Updating portfolio calculations with fresh market data")
+                        logger.info("Queuing portfolio updates for fresh market data")
                         try:
-                            from src.services.real_time_portfolio_service import RealTimePortfolioService
-                            portfolio_service = RealTimePortfolioService(db)
+                            from src.services.portfolio_update_queue import get_portfolio_update_queue
 
-                            # Update portfolios that have holdings in the fetched symbols
+                            # Queue portfolio updates for all successfully fetched symbols
                             successfully_fetched_symbols = [symbol for symbol, result in results.items() if result is not None]
-                            updated_portfolios = portfolio_service.bulk_update_portfolios_for_symbols(successfully_fetched_symbols)
-                            logger.info(f"Updated {len(updated_portfolios)} portfolios with fresh market data for symbols: {successfully_fetched_symbols}")
+
+                            # Get the portfolio update queue and queue updates for all portfolios
+                            queue = get_portfolio_update_queue()
+
+                            # Queue update with high priority for periodic market data updates
+                            queue_success = queue.queue_portfolio_update(
+                                portfolio_id="all",  # Special ID for all portfolios
+                                symbols=successfully_fetched_symbols,
+                                priority=3  # Higher priority for scheduled updates
+                            )
+
+                            if queue_success:
+                                logger.info(f"Queued portfolio updates for {len(successfully_fetched_symbols)} symbols: {successfully_fetched_symbols}")
+                            else:
+                                logger.warning("Portfolio update queue rejected the request (rate limited)")
 
                         except Exception as portfolio_error:
-                            logger.error(f"Error updating portfolio calculations: {portfolio_error}")
+                            logger.error(f"Error queuing portfolio updates: {portfolio_error}")
 
                     # Record successful execution in scheduler service
                     scheduler_service.record_execution_success(symbols_processed=successful_fetches)
@@ -179,7 +191,7 @@ async def periodic_price_updates():
 
         except Exception as e:
             logger.error(f"Fatal error in periodic task: {e}")
-            await asyncio.sleep(60)  # Wait before retrying
+            await asyncio.sleep(900)  # Wait 15 minutes before retrying to maintain consistent intervals
 
 
 async def pause_background_task() -> bool:

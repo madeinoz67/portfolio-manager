@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from src.database import get_db
 from src.core.dependencies import get_current_admin_user
@@ -514,51 +515,51 @@ async def get_adapter_metrics(
             }
             adapter_metrics["cost_projections"] = cost_projections
 
-        # Extract data from nested structure
-        current_metrics = adapter_metrics.get("current_metrics", {})
-        cost_metrics = adapter_metrics.get("cost_metrics", {})
-
-        # Return flat structure that frontend expects
+        # Service now returns flat structure, add missing frontend fields
         from datetime import datetime
+
+        # Get provider config for display name
+        config = db.query(ProviderConfiguration).filter(
+            text("provider_configurations.id = :id")
+        ).params(id=str(adapter_id).replace('-', '')).first()
+
+        provider_name = config.provider_name if config else "unknown"
+        display_name = config.display_name if config else provider_name
 
         # Build flat response structure matching AdapterMetrics interface
         flat_response = {
             # Core identifiers
             "adapter_id": str(adapter_id),
-            "provider_name": adapter_metrics.get("provider_name", "unknown"),
-            "display_name": adapter_metrics.get("provider_name", "unknown"),
+            "provider_name": provider_name,
+            "display_name": display_name,
 
-            # Request metrics - extract from current_metrics
-            "total_requests": current_metrics.get("total_requests", 0),
-            "successful_requests": current_metrics.get("successful_requests", 0),
-            "failed_requests": current_metrics.get("failed_requests", 0),
-            "success_rate": current_metrics.get("success_rate", 0.0),
-            "average_response_time_ms": current_metrics.get("avg_latency_ms", 0.0),
+            # Request metrics - use flat fields directly
+            "total_requests": adapter_metrics.get("total_requests", 0),
+            "successful_requests": adapter_metrics.get("successful_requests", 0),
+            "failed_requests": adapter_metrics.get("failed_requests", 0),
+            "success_rate": adapter_metrics.get("success_rate", 0.0),
+            "average_response_time_ms": adapter_metrics.get("average_response_time_ms", 0.0),
 
-            # Cost metrics - extract from cost_metrics
-            "total_cost": float(cost_metrics.get("daily_cost", 0.0)),
-            "daily_cost": float(cost_metrics.get("daily_cost", 0.0)),
-            "monthly_cost_estimate": float(cost_metrics.get("monthly_cost", 0.0)),
+            # Cost metrics - use flat fields directly
+            "total_cost": float(adapter_metrics.get("total_cost", 0.0)),
+            "daily_cost": float(adapter_metrics.get("daily_cost", 0.0)),
+            "monthly_cost_estimate": float(adapter_metrics.get("monthly_cost_estimate", 0.0)),
 
-            # Usage metrics - use total as approximation
-            "requests_today": current_metrics.get("total_requests", 0),
-            "requests_this_hour": 0,  # Not available in current structure
+            # Usage metrics - use flat fields directly
+            "requests_today": adapter_metrics.get("requests_today", 0),
+            "requests_this_hour": adapter_metrics.get("requests_this_hour", 0),
 
-            # Status and timestamps
-            "current_status": "healthy" if current_metrics.get("success_rate", 0) > 0.8 else "degraded" if current_metrics.get("total_requests", 0) > 0 else "down",
-            "uptime_percentage": 100.0 if current_metrics.get("is_healthy") else 50.0,
-            "last_request_at": None,  # Not available in current structure
-            "last_success_at": None,  # Not available in current structure
-            "last_failure_at": current_metrics.get("last_error_time"),
+            # Status and timestamps - use flat fields directly
+            "current_status": "healthy" if adapter_metrics.get("success_rate", 0) > 80.0 else "degraded" if adapter_metrics.get("total_requests", 0) > 0 else "down",
+            "uptime_percentage": adapter_metrics.get("uptime_percentage", 0.0),
+            "last_request_at": adapter_metrics.get("last_request_at"),
+            "last_success_at": adapter_metrics.get("last_success_at"),
+            "last_failure_at": adapter_metrics.get("last_failure_at"),
 
-            # Additional metrics
-            "rate_limit_hits": 0,  # Not available in current structure
-            "error_rate_24h": current_metrics.get("error_count_24h", 0),
-            "p95_response_time_ms": current_metrics.get("p95_latency_ms", 0.0),
-
-            # Add missing fields that backend validation expects
-            "current_metrics": current_metrics,  # Include the nested structure for validation
-            "last_updated": datetime.utcnow().isoformat() + "Z",  # Add timestamp
+            # Additional metrics - use flat fields directly
+            "rate_limit_hits": adapter_metrics.get("rate_limit_hits", 0),
+            "error_rate_24h": adapter_metrics.get("error_rate_24h", 0.0),
+            "p95_response_time_ms": adapter_metrics.get("p95_response_time_ms", 0.0),
         }
 
         return flat_response
@@ -634,6 +635,43 @@ async def get_adapter_health(
         raise
     except Exception as e:
         logger.error(f"Error getting health for adapter {adapter_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post(
+    "/{adapter_id}/reset-metrics",
+    response_model=dict,
+    summary="Reset adapter metrics",
+    description="Reset accumulated metrics for the specified adapter to clear stale data"
+)
+async def reset_adapter_metrics(
+    adapter_id: str,
+    current_admin: User = Depends(get_current_admin_user)
+) -> dict:
+    """Reset metrics for a specific adapter."""
+    try:
+        from src.services.config_manager import get_config_manager
+        from src.services.adapters.metrics import get_metrics_collector
+
+        config_manager = get_config_manager()
+        metrics_collector = get_metrics_collector()
+
+        # Check if configuration exists
+        config = config_manager.get_provider_configuration(adapter_id)
+        if not config:
+            raise HTTPException(status_code=404, detail="Adapter configuration not found")
+
+        # Reset metrics for this provider
+        metrics_collector.reset_provider_metrics(config.provider_name)
+
+        logger.info(f"Admin {current_admin.id} reset metrics for adapter {adapter_id}")
+
+        return {"message": f"Metrics reset successfully for adapter {config.provider_name}"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resetting metrics for adapter {adapter_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

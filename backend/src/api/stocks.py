@@ -13,6 +13,17 @@ from src.models import Stock
 from src.models.stock import StockStatus
 from src.schemas.stock import StockResponse, StockDetailResponse, PricePointResponse, StockCreateRequest
 from src.services.adapter_market_data_service import AdapterMarketDataService
+from pydantic import BaseModel
+
+class StockValidationResponse(BaseModel):
+    """Response for stock validation."""
+    symbol: str
+    is_valid: bool
+    company_name: Optional[str] = None
+    current_price: Optional[float] = None
+    exchange: Optional[str] = None
+    currency: Optional[str] = None
+    error: Optional[str] = None
 
 router = APIRouter(prefix="/api/v1/stocks", tags=["Stocks"])
 
@@ -106,7 +117,7 @@ async def search_stocks_frontend(
                 new_stock = Stock(
                     symbol=query.upper(),
                     company_name=price_data["company_name"],
-                    exchange="ASX" if service._is_asx_symbol(query.upper()) else "NASDAQ",
+                    exchange=price_data.get("exchange", "UNKNOWN"),
                     status=StockStatus.ACTIVE,
                     current_price=price_data.get("price"),
                     last_price_update=price_data.get("source_timestamp")
@@ -147,6 +158,75 @@ async def get_stock_suggestions(
     return [StockResponse.model_validate(stock) for stock in stocks]
 
 
+@router.get("/validate/{symbol}", response_model=StockValidationResponse)
+async def validate_stock_symbol(
+    symbol: str,
+    db: Annotated[Session, Depends(get_db)]
+) -> StockValidationResponse:
+    """
+    Validate a stock symbol using live market data.
+
+    This endpoint validates the stock symbol by:
+    1. Checking if it exists in the local database
+    2. If not found, using the adapter system to fetch live data from market providers
+    3. Returning validation status with current price and company details
+    """
+    symbol = symbol.upper().strip()
+
+    if not symbol:
+        return StockValidationResponse(
+            symbol=symbol,
+            is_valid=False,
+            error="Symbol cannot be empty"
+        )
+
+    # First check if stock already exists in database
+    existing_stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    if existing_stock:
+        return StockValidationResponse(
+            symbol=symbol,
+            is_valid=True,
+            company_name=existing_stock.company_name,
+            current_price=float(existing_stock.current_price) if existing_stock.current_price else None,
+            exchange=existing_stock.exchange,
+            currency="AUD" if existing_stock.exchange == "ASX" else "USD"
+        )
+
+    # Stock doesn't exist locally, validate via adapter system
+    service = AdapterMarketDataService(db)
+    try:
+        price_data = await service.fetch_price(symbol)
+
+        if price_data and price_data.get("price") is not None:
+            # Stock is valid, return live data from adapter
+            return StockValidationResponse(
+                symbol=symbol,
+                is_valid=True,
+                company_name=price_data.get("company_name"),
+                current_price=price_data.get("price"),
+                exchange=price_data.get("exchange"),
+                currency=price_data.get("currency")
+            )
+        else:
+            # Invalid stock symbol
+            return StockValidationResponse(
+                symbol=symbol,
+                is_valid=False,
+                error=f"Stock symbol '{symbol}' not found or invalid"
+            )
+
+    except Exception as e:
+        # Error during validation
+        return StockValidationResponse(
+            symbol=symbol,
+            is_valid=False,
+            error=f"Error validating stock: {str(e)}"
+        )
+
+    finally:
+        await service.close_session()
+
+
 @router.get("/search/{symbol}", response_model=StockResponse)
 async def search_or_create_stock(
     symbol: str,
@@ -170,7 +250,7 @@ async def search_or_create_stock(
             new_stock = Stock(
                 symbol=symbol,
                 company_name=price_data["company_name"],
-                exchange="ASX" if service._is_asx_symbol(symbol) else "NASDAQ",  # Default assumption
+                exchange=price_data.get("exchange", "UNKNOWN"),
                 status=StockStatus.ACTIVE,
                 current_price=price_data.get("price"),
                 last_price_update=price_data.get("source_timestamp")

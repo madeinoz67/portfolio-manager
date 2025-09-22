@@ -351,13 +351,24 @@ class ProviderMetricsCollector:
         Returns:
             MetricsSnapshot or None if no metrics available
         """
+        # DEBUG: Log current state of metrics for diagnosis
+        self.logger.info(f"Getting metrics snapshot for {provider_name}")
+        self.logger.info(f"Available providers: {list(self._provider_metrics.keys())}")
+
         if provider_name not in self._provider_metrics:
+            self.logger.warning(f"No metrics found for provider {provider_name}")
             return None
 
         metrics = self._provider_metrics[provider_name]
         total_requests = metrics["total_requests"]
 
+        # DEBUG: Log detailed metrics state
+        self.logger.info(f"Raw metrics for {provider_name}: total_requests={total_requests}, "
+                        f"total_latency_ms={metrics['total_latency_ms']}, "
+                        f"successful_requests={metrics['successful_requests']}")
+
         if total_requests == 0:
+            self.logger.warning(f"Provider {provider_name} has no recorded requests yet")
             return MetricsSnapshot(
                 provider_name=provider_name,
                 timestamp=datetime.utcnow(),
@@ -379,13 +390,20 @@ class ProviderMetricsCollector:
             p90 = response_times[int(len(response_times) * 0.9)]
             p99 = response_times[int(len(response_times) * 0.99)]
 
-        return MetricsSnapshot(
+        # Calculate average latency with debug logging
+        avg_latency = metrics["total_latency_ms"] / total_requests if total_requests > 0 else 0.0
+
+        # DEBUG: Log the calculation
+        self.logger.info(f"Calculating avg_latency for {provider_name}: "
+                        f"{metrics['total_latency_ms']} / {total_requests} = {avg_latency}")
+
+        snapshot = MetricsSnapshot(
             provider_name=provider_name,
             timestamp=metrics["last_updated"],
             request_count=total_requests,
             success_count=metrics["successful_requests"],
             error_count=metrics["failed_requests"],
-            avg_latency_ms=metrics["total_latency_ms"] / total_requests,
+            avg_latency_ms=avg_latency,
             success_rate=metrics["successful_requests"] / total_requests,
             error_rate=metrics["failed_requests"] / total_requests,
             rate_limit_hits=metrics["rate_limit_hits"],
@@ -394,6 +412,12 @@ class ProviderMetricsCollector:
             response_time_p90=p90,
             response_time_p99=p99
         )
+
+        # DEBUG: Log the final snapshot values
+        self.logger.info(f"Final snapshot for {provider_name}: avg_latency_ms={snapshot.avg_latency_ms}, "
+                        f"request_count={snapshot.request_count}, success_count={snapshot.success_count}")
+
+        return snapshot
 
     def get_all_providers_metrics(self) -> List[MetricsSnapshot]:
         """Get metrics snapshots for all providers."""

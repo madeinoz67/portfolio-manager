@@ -332,13 +332,13 @@ const AdapterMetricsView: React.FC<AdapterMetricsViewProps> = ({
               <div>
                 <p className="text-sm font-medium text-gray-600">Success Rate</p>
                 <div className="flex items-center gap-1 mt-1">
-                  {metricsData.success_rate >= 0.95 ? (
+                  {metricsData.success_rate >= 95 ? (
                     <TrendingUp className="w-4 h-4 text-green-600" />
                   ) : (
                     <TrendingDown className="w-4 h-4 text-red-600" />
                   )}
-                  <span className={`text-sm ${metricsData.success_rate >= 0.95 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatPercentage(metricsData.success_rate * 100)}
+                  <span className={`text-sm ${metricsData.success_rate >= 95 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatPercentage(metricsData.success_rate)}
                   </span>
                 </div>
               </div>

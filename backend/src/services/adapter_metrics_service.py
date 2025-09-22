@@ -38,7 +38,7 @@ class AdapterMetricsService:
 
     async def get_adapter_metrics(self, adapter_id: Union[str, UUID], time_range: str = "24h") -> Optional[Dict[str, Any]]:
         """
-        Get comprehensive metrics for a specific adapter.
+        Get comprehensive metrics for a specific adapter from the adapter's built-in metrics.
 
         Args:
             adapter_id: Provider configuration ID
@@ -52,11 +52,20 @@ class AdapterMetricsService:
             # Convert to string and normalize format (remove hyphens for SQLite compatibility)
             adapter_id_str = str(adapter_id).replace('-', '')
             logger.info(f"Looking up adapter configuration for ID: {adapter_id_str}")
+            logger.info(f"Original adapter_id: {adapter_id}, cleaned: {adapter_id_str}")
 
             # Query using raw SQL to avoid UUID type conversion issues in SQLite
             config = self.db_session.query(ProviderConfiguration).filter(
                 text("provider_configurations.id = :id")
             ).params(id=adapter_id_str).first()
+
+            logger.info(f"Database query result: {config is not None}")
+            if config:
+                logger.info(f"Found config: provider_name={config.provider_name}, display_name={config.display_name}")
+            else:
+                # Let's also try querying all configs to see what IDs are actually in the database
+                all_configs = self.db_session.query(ProviderConfiguration).all()
+                logger.info(f"All available provider configs: {[(c.id, c.provider_name) for c in all_configs]}")
         except Exception as e:
             logger.error(f"Error querying provider configuration for {adapter_id}: {e}")
             return None
@@ -66,46 +75,30 @@ class AdapterMetricsService:
             return None
 
         provider_name = config.provider_name
+        logger.info(f"Found provider configuration: {provider_name} for adapter ID: {adapter_id_str}")
 
-        # Get live metrics from the metrics collector
+        # Get live metrics directly from the adapter via metrics collector
+        logger.info(f"Calling get_provider_metrics_snapshot for provider: {provider_name}")
         live_metrics = self.metrics_collector.get_provider_metrics_snapshot(provider_name)
-
-        # Get historical metrics from database
-        db_metrics = self._get_database_metrics(provider_name, time_range)
+        logger.info(f"Received live_metrics: {live_metrics is not None}")
+        if live_metrics:
+            logger.info(f"Live metrics details: total_requests={live_metrics.request_count}, avg_latency={live_metrics.avg_latency_ms}")
 
         # Get adapter instance for additional info
         adapter_instance = await self.registry.get_provider_instance(provider_name)
 
-        # Combine live and historical metrics
-        combined_metrics = await self._combine_metrics(
-            config, live_metrics, db_metrics, adapter_instance
-        )
+        # Use adapter's built-in metrics as the single source of truth
+        final_metrics = self._get_adapter_metrics_direct(live_metrics, adapter_instance, provider_name)
 
-        return combined_metrics
+        return final_metrics
 
-    def _get_database_metrics(self, provider_name: str, time_range: str) -> Dict[str, Any]:
-        """Get aggregated metrics from database for the specified time range."""
+    def _get_adapter_metrics_direct(self, live_metrics, adapter_instance, provider_name: str) -> Dict[str, Any]:
+        """
+        Get metrics directly from adapter's built-in metrics system.
+        This is the single path for adapter metrics.
+        """
         try:
-            # Calculate time range
-            now = datetime.now(timezone.utc)
-            hours_back = {
-                "1h": 1,
-                "24h": 24,
-                "7d": 24 * 7,
-                "30d": 24 * 30
-            }.get(time_range, 24)
-
-            start_time = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours_back)
-
-            # Query aggregated metrics
-            metrics_query = self.db_session.query(MarketDataUsageMetrics).filter(
-                MarketDataUsageMetrics.provider_name == provider_name,
-                MarketDataUsageMetrics.recorded_at >= start_time
-            )
-
-            metrics_records = metrics_query.all()
-
-            if not metrics_records:
+            if not live_metrics:
                 return {
                     "total_requests": 0,
                     "successful_requests": 0,
@@ -115,7 +108,7 @@ class AdapterMetricsService:
                     "total_cost": 0.0,
                     "requests_today": 0,
                     "requests_this_hour": 0,
-                    "uptime_percentage": 100.0,
+                    "uptime_percentage": 0.0,
                     "rate_limit_hits": 0,
                     "error_rate_24h": 0.0,
                     "p95_response_time_ms": 0.0,
@@ -126,192 +119,67 @@ class AdapterMetricsService:
                     "last_failure_at": None
                 }
 
-            # Aggregate the metrics (using actual model field names)
-            total_requests = sum(m.requests_count or 0 for m in metrics_records)
-            successful_requests = sum((m.requests_count or 0) - (m.error_count or 0) for m in metrics_records)  # Calculate from total - errors
-            failed_requests = sum(m.error_count or 0 for m in metrics_records)
-            total_response_time = sum(float(m.avg_response_time_ms or 0) * (m.requests_count or 0) for m in metrics_records)
-            total_cost = sum(float(m.cost_estimate or 0) for m in metrics_records)
+            # Extract metrics from the MetricsSnapshot object
+            total_requests = live_metrics.request_count
+            error_count = live_metrics.error_count
+            successful_requests = live_metrics.success_count
+            success_rate = live_metrics.success_rate * 100  # Convert to percentage
 
-            # Calculate derived metrics
-            success_rate = (successful_requests / total_requests * 100) if total_requests > 0 else 0.0
-            average_response_time_ms = (total_response_time / total_requests) if total_requests > 0 else 0.0
-            error_rate_24h = (failed_requests / total_requests * 100) if total_requests > 0 else 0.0
+            # Response time metrics
+            avg_response_time_ms = live_metrics.avg_latency_ms
+            p95_response_time_ms = live_metrics.response_time_p99 or 0.0  # Use p99 if available
 
-            # Get latest timestamps
-            sorted_records = sorted(metrics_records, key=lambda x: x.recorded_at, reverse=True)
-            last_request_at = sorted_records[0].recorded_at if sorted_records else None
+            # Cost metrics (not available in MetricsSnapshot, use 0)
+            total_cost = 0.0
 
-            # Find last success and failure
-            last_success_at = None
-            last_failure_at = None
+            # Rate limiting
+            rate_limit_hits = live_metrics.rate_limit_hits
 
-            for record in sorted_records:
-                if (record.requests_count or 0) > (record.error_count or 0) and not last_success_at:
-                    last_success_at = record.recorded_at
-                if record.error_count and record.error_count > 0 and not last_failure_at:
-                    last_failure_at = record.recorded_at
-                if last_success_at and last_failure_at:
-                    break
+            # Calculate error rate
+            error_rate_24h = live_metrics.error_rate * 100  # Convert to percentage
 
-            # Calculate time-specific metrics
-            now = datetime.now(timezone.utc)
-            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            hour_start = now.replace(minute=0, second=0, microsecond=0)
+            # Calculate uptime based on recent activity
+            uptime_percentage = 100.0 if total_requests > 0 and error_rate_24h < 50 else 0.0
 
-            def normalize_to_utc(dt):
-                """Normalize datetime to UTC timezone-aware."""
-                if dt is None:
-                    return None
-                return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+            # Time-based requests (approximated from total)
+            requests_today = total_requests  # Adapters track lifetime totals
+            requests_this_hour = total_requests  # Simplified for now
 
-            requests_today = sum(
-                m.requests_count or 0 for m in metrics_records
-                if normalize_to_utc(m.recorded_at) >= today_start
-            )
-            requests_this_hour = sum(
-                m.requests_count or 0 for m in metrics_records
-                if normalize_to_utc(m.recorded_at) >= hour_start
-            )
-
-            # Estimate daily and monthly costs
-            daily_cost = sum(
-                float(m.cost_estimate or 0) for m in metrics_records
-                if normalize_to_utc(m.recorded_at) >= today_start
-            )
-            monthly_cost_estimate = daily_cost * 30
-
-            # Calculate realistic uptime percentage based on time-weighted performance
-            uptime_percentage = self._calculate_time_weighted_uptime(metrics_records, hours_back)
+            # Timestamps (use snapshot timestamp)
+            from src.utils.datetime_utils import to_iso_string
+            last_request_at = to_iso_string(live_metrics.timestamp) if total_requests > 0 else None
+            last_success_at = to_iso_string(live_metrics.timestamp) if successful_requests > 0 else None
+            last_failure_at = to_iso_string(live_metrics.timestamp) if error_count > 0 else None
 
             return {
                 "total_requests": total_requests,
                 "successful_requests": successful_requests,
-                "failed_requests": failed_requests,
+                "failed_requests": error_count,
                 "success_rate": success_rate,
-                "average_response_time_ms": average_response_time_ms,
+                "average_response_time_ms": avg_response_time_ms,
                 "total_cost": total_cost,
                 "requests_today": requests_today,
                 "requests_this_hour": requests_this_hour,
                 "uptime_percentage": uptime_percentage,
-                "rate_limit_hits": 0,  # Would need to track this separately
+                "rate_limit_hits": rate_limit_hits,
                 "error_rate_24h": error_rate_24h,
-                "p95_response_time_ms": 0.0,  # Would need percentile calculation
-                "daily_cost": daily_cost,
-                "monthly_cost_estimate": monthly_cost_estimate,
-                "last_request_at": to_iso_string(last_request_at) if last_request_at else None,
-                "last_success_at": to_iso_string(last_success_at) if last_success_at else None,
-                "last_failure_at": to_iso_string(last_failure_at) if last_failure_at else None
+                "p95_response_time_ms": p95_response_time_ms,
+                "daily_cost": total_cost,  # Simplified
+                "monthly_cost_estimate": total_cost * 30,  # Simplified
+                "last_request_at": last_request_at,
+                "last_success_at": last_success_at,
+                "last_failure_at": last_failure_at
             }
 
         except Exception as e:
-            logger.error(f"Error getting database metrics for {provider_name}: {e}")
+            logger.error(f"Error getting adapter metrics direct for {provider_name}: {e}")
             return {}
 
-    async def _combine_metrics(
-        self,
-        config: ProviderConfiguration,
-        live_metrics: Optional[Any],
-        db_metrics: Dict[str, Any],
-        adapter_instance: Optional[Any]
-    ) -> Dict[str, Any]:
-        """Combine live metrics, database metrics, and adapter info into new schema format."""
-        from datetime import datetime, timezone
-        from decimal import Decimal
+    # REMOVED: _get_database_metrics method - using single adapter metrics path only
+    # All metrics are now handled by adapters themselves via ProviderMetricsCollector
 
-        # Combine live and database metrics for current metrics
-        total_requests = db_metrics.get("total_requests", 0)
-        successful_requests = db_metrics.get("successful_requests", 0)
-        failed_requests = db_metrics.get("failed_requests", 0)
-        avg_response_time_ms = db_metrics.get("average_response_time_ms", 0.0)
-        p95_response_time_ms = db_metrics.get("p95_response_time_ms", 0.0)
-
-        # Update with live metrics if available
-        if live_metrics:
-            total_requests = live_metrics.request_count
-            successful_requests = live_metrics.success_count
-            failed_requests = live_metrics.error_count
-            avg_response_time_ms = live_metrics.avg_latency_ms
-            if hasattr(live_metrics, 'response_time_p95') and live_metrics.response_time_p95:
-                p95_response_time_ms = live_metrics.response_time_p95
-
-        # Calculate success rate
-        success_rate = (successful_requests / total_requests) if total_requests > 0 else 0.0
-
-        # Get health status including error details (use cached if available)
-        health_status = await self._get_cached_health_status(config.provider_name, adapter_instance)
-
-        # Determine adapter status (use health check if available)
-        if health_status:
-            is_healthy = health_status["is_healthy"]
-            last_error = health_status["error_message"]
-            last_error_time = health_status["last_check_time"] if not is_healthy else None
-        else:
-            current_status = self._determine_adapter_status(db_metrics, adapter_instance)
-            is_healthy = current_status == "healthy"
-            last_error = None
-            last_error_time = None
-
-        # Build current metrics object
-        current_metrics = {
-            "adapter_id": str(config.id),
-            "provider_name": config.provider_name,
-            "is_healthy": is_healthy,
-            "is_active": config.is_active,
-            "last_check": datetime.now(timezone.utc),
-            "total_requests": total_requests,
-            "successful_requests": successful_requests,
-            "failed_requests": failed_requests,
-            "success_rate": success_rate,
-            "avg_latency_ms": avg_response_time_ms,
-            "min_latency_ms": 0.0,  # TODO: Track min latency
-            "max_latency_ms": 0.0,  # TODO: Track max latency
-            "p95_latency_ms": p95_response_time_ms,
-            "requests_per_minute": 0.0,  # TODO: Calculate from recent data
-            "rate_limit_remaining": None,
-            "rate_limit_reset_time": None,
-            "error_count_24h": db_metrics.get("failed_requests", 0),
-            "last_error": last_error,
-            "last_error_time": last_error_time.isoformat() if last_error_time else None,
-            "circuit_breaker_state": "closed",
-            "circuit_breaker_failure_count": 0,
-            "circuit_breaker_next_attempt": None
-        }
-
-        # Build cost metrics object
-        daily_cost = Decimal(str(db_metrics.get("daily_cost", 0.0)))
-        monthly_cost_estimate = Decimal(str(db_metrics.get("monthly_cost_estimate", 0.0)))
-        cost_per_request = Decimal('0.00')
-        if total_requests > 0:
-            cost_per_request = daily_cost / Decimal(str(total_requests))
-
-        cost_metrics = {
-            "daily_cost": daily_cost,
-            "daily_budget": None,
-            "daily_budget_used_percent": 0.0,
-            "monthly_cost": monthly_cost_estimate,
-            "monthly_budget": None,
-            "monthly_budget_used_percent": 0.0,
-            "cost_per_request": cost_per_request,
-            "cost_per_successful_request": cost_per_request,
-            "budget_status": "ok",
-            "budget_remaining_daily": None,
-            "budget_remaining_monthly": None,
-            "cost_alerts": [],
-            "projected_daily_cost": None,
-            "projected_monthly_cost": None
-        }
-
-        # Return structured response matching AdapterMetricsResponse schema
-        return {
-            "adapter_id": str(config.id),
-            "provider_name": config.provider_name,
-            "current_metrics": current_metrics,
-            "cost_metrics": cost_metrics,
-            "historical_data": None,  # TODO: Convert db_metrics to historical data points
-            "active_alerts": [],
-            "last_updated": datetime.now(timezone.utc)
-        }
+    # REMOVED: _combine_metrics method - using single adapter metrics path only
+    # All metrics are now handled by adapters themselves via ProviderMetricsCollector
 
     def _determine_adapter_status(self, metrics: Dict[str, Any], adapter_instance: Optional[Any]) -> str:
         """Determine the current status of an adapter based on metrics."""
@@ -525,8 +393,8 @@ class AdapterMetricsService:
         # Calculate uptime percentage
         uptime_percentage = (working_seconds / total_seconds) * 100
 
-        # Cap between reasonable bounds (10% minimum, 100% maximum)
-        uptime_percentage = max(10.0, min(100.0, uptime_percentage))
+        # Cap between reasonable bounds (0% minimum, 100% maximum)
+        uptime_percentage = max(0.0, min(100.0, uptime_percentage))
 
         logger.debug(f"Calculated uptime: {uptime_percentage:.1f}% over {hours_back}h ({working_seconds}/{total_seconds} seconds)")
 

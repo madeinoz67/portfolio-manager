@@ -251,6 +251,28 @@ async def get_price(
                 detail=f"Price data not available for symbol {symbol}"
             )
 
+        # Queue portfolio updates for fresh data via the queue system
+        try:
+            from src.services.portfolio_update_queue import get_portfolio_update_queue
+
+            # Get the portfolio update queue and queue updates for all portfolios
+            queue = get_portfolio_update_queue()
+
+            # Queue update with medium priority for API fetch requests
+            queue_success = queue.queue_portfolio_update(
+                portfolio_id="all",  # Update all portfolios affected by this symbol
+                symbols=[symbol],
+                priority=2  # Medium priority for individual API requests
+            )
+
+            if queue_success:
+                logger.debug(f"Queued portfolio updates for freshly fetched symbol: {symbol}")
+            else:
+                logger.debug(f"Portfolio update queue rejected request for {symbol} (rate limited)")
+
+        except Exception as queue_error:
+            logger.error(f"Error queuing portfolio updates after fresh fetch for {symbol}: {queue_error}")
+
         return build_price_response(
             symbol=symbol,
             price_record=None,
@@ -325,6 +347,30 @@ async def get_bulk_prices(
             except Exception as e:
                 logger.warning(f"Failed to fetch price for {symbol}: {e}")
                 continue
+
+        # Queue portfolio updates for any freshly fetched symbols via the queue system
+        fresh_symbols = [symbol for symbol, price_resp in prices.items() if not price_resp.cached]
+        if fresh_symbols:
+            try:
+                from src.services.portfolio_update_queue import get_portfolio_update_queue
+
+                # Get the portfolio update queue and queue updates for all portfolios
+                queue = get_portfolio_update_queue()
+
+                # Queue update with medium priority for bulk API requests
+                queue_success = queue.queue_portfolio_update(
+                    portfolio_id="all",  # Update all portfolios affected by these symbols
+                    symbols=fresh_symbols,
+                    priority=2  # Medium priority for bulk API requests
+                )
+
+                if queue_success:
+                    logger.debug(f"Queued portfolio updates for freshly fetched symbols in bulk: {fresh_symbols}")
+                else:
+                    logger.debug(f"Portfolio update queue rejected bulk request (rate limited)")
+
+            except Exception as queue_error:
+                logger.error(f"Error queuing portfolio updates after bulk fresh fetch: {queue_error}")
 
         return BulkPriceResponse(
             prices=prices,
@@ -416,6 +462,29 @@ async def refresh_prices(
         # Force refresh if requested or refresh stale data
         max_age = 0 if request.force else 15
         price_data = await service.refresh_portfolio_symbols(symbols)
+
+        # Queue portfolio updates for successfully refreshed symbols via the queue system
+        if price_data:
+            try:
+                from src.services.portfolio_update_queue import get_portfolio_update_queue
+
+                # Get the portfolio update queue and queue updates for all portfolios
+                queue = get_portfolio_update_queue()
+
+                # Queue update with high priority for manual refresh requests
+                queue_success = queue.queue_portfolio_update(
+                    portfolio_id="all",  # Update all portfolios affected by these symbols
+                    symbols=list(price_data.keys()),
+                    priority=5  # Highest priority for manual user-initiated refresh
+                )
+
+                if queue_success:
+                    logger.info(f"Queued portfolio updates for manually refreshed symbols: {list(price_data.keys())}")
+                else:
+                    logger.warning("Portfolio update queue rejected manual refresh request (rate limited)")
+
+            except Exception as queue_error:
+                logger.error(f"Error queuing portfolio updates after manual refresh: {queue_error}")
 
         return {
             "message": f"Refreshed {len(price_data)} symbols",

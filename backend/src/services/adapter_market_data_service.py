@@ -152,6 +152,9 @@ class AdapterMarketDataService:
             return {}
 
         # Try each provider until we get results
+        response_times = []  # Track response times for metrics
+        successful_provider_name = None
+
         for config in active_configs:
             try:
                 provider_name = config.provider_name
@@ -170,6 +173,10 @@ class AdapterMarketDataService:
                 if adapter.capabilities.supports_bulk_quotes and len(symbols) > 1:
                     response = await adapter.fetch_prices(symbols)
                     if response.success and response.data:
+                        # Collect response time for metrics
+                        if response.response_time_ms:
+                            response_times.append(response.response_time_ms)
+
                         # Process bulk results - data should be a dict with symbol keys
                         for symbol in symbols:
                             if symbol in response.data:
@@ -182,6 +189,7 @@ class AdapterMarketDataService:
                                     # Store to database
                                     self._store_price_to_master(symbol, price_data, provider_name)
 
+                        successful_provider_name = provider_name
                         logger.info(f"Bulk fetch successful: {len(results)}/{len(symbols)} symbols")
                         break  # Success, don't try other providers
 
@@ -191,6 +199,10 @@ class AdapterMarketDataService:
                         try:
                             response = await adapter.fetch_prices([symbol])
                             if response.success and response.data:
+                                # Collect response time for metrics
+                                if response.response_time_ms:
+                                    response_times.append(response.response_time_ms)
+
                                 # Extract the actual data for this symbol from response.data dict
                                 if symbol in response.data:
                                     symbol_data = response.data[symbol]
@@ -207,6 +219,7 @@ class AdapterMarketDataService:
                             logger.error(f"Failed to fetch {symbol} from {provider_name}: {e}")
 
                     if results:
+                        successful_provider_name = provider_name
                         logger.info(f"Individual fetches successful: {len(results)}/{len(symbols)} symbols")
                         break  # Success, don't try other providers
 
@@ -214,11 +227,11 @@ class AdapterMarketDataService:
                 logger.error(f"Provider {config.provider_name} failed: {e}")
                 continue
 
-        # Log usage metrics for successful fetches
-        if results:
-            self._log_usage_metrics(results, active_configs[0].provider_name)
+        # Adapter metrics are now handled by the adapters themselves
+        # No need to create duplicate metrics here
 
-            # Queue portfolio updates for all symbols that were updated
+        # Queue portfolio updates for all symbols that were updated
+        if results:
             self._queue_portfolio_updates(list(results.keys()))
 
         return results
@@ -387,100 +400,11 @@ class AdapterMarketDataService:
             logger.error(f"Failed to store price data for {symbol}: {e}")
             self.db.rollback()
 
-    def _log_usage_metrics(self, results: Dict[str, Dict], provider_name: str):
-        """
-        Log usage metrics for adapter operations.
+    # REMOVED: _log_usage_metrics method - using single adapter metrics path only
+    # All metrics are now handled by adapters themselves via ProviderMetricsCollector
 
-        Args:
-            results: Dictionary of successful price fetches
-            provider_name: Name of provider used
-        """
-        try:
-            now = utc_now().replace(tzinfo=None)
-
-            # Create usage metrics record
-            metrics = MarketDataUsageMetrics(
-                metric_id=f"adapter_bulk_{provider_name}_{now.strftime('%Y%m%d_%H%M%S')}",
-                provider_name=provider_name,
-                request_type="bulk_price_fetch",
-                requests_count=len(results),
-                data_points_fetched=len(results),
-                error_count=0,
-                avg_response_time_ms=100.0,  # Default reasonable value
-                cost_estimate=Decimal('0.00'),  # Free for most providers
-                recorded_at=now,
-                time_bucket="hourly"
-            )
-
-            self.db.add(metrics)
-            self.db.commit()
-
-            # Log activity for admin dashboard
-            log_provider_activity(
-                db_session=self.db,
-                provider_id=provider_name,
-                activity_type="BULK_PRICE_UPDATE",
-                description=f"Successfully fetched {len(results)} symbols via adapter system",
-                status="success",
-                metadata={
-                    "symbols_count": len(results),
-                    "symbols": list(results.keys()),
-                    "adapter_system": True
-                }
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to log usage metrics: {e}")
-
-    def _log_invalid_data_metrics(self, symbol: str, invalid_value: Any, provider_name: str, issue_type: str):
-        """
-        Log metrics for invalid data detected from providers.
-
-        Args:
-            symbol: Stock symbol with invalid data
-            invalid_value: The invalid value that was detected
-            provider_name: Name of provider that returned invalid data
-            issue_type: Type of issue (e.g., 'invalid_price', 'missing_data')
-        """
-        try:
-            now = utc_now().replace(tzinfo=None)
-
-            # Create usage metrics record for invalid data tracking
-            metrics = MarketDataUsageMetrics(
-                metric_id=f"invalid_data_{provider_name}_{symbol}_{now.strftime('%Y%m%d_%H%M%S')}",
-                provider_name=provider_name,
-                request_type="invalid_data_detection",
-                requests_count=1,
-                data_points_fetched=0,  # No valid data points
-                error_count=1,
-                avg_response_time_ms=0.0,
-                cost_estimate=Decimal('0.00'),
-                recorded_at=now,
-                time_bucket="hourly"
-            )
-
-            self.db.add(metrics)
-            self.db.commit()
-
-            # Log activity for admin dashboard
-            log_provider_activity(
-                db_session=self.db,
-                provider_id=provider_name,
-                activity_type="INVALID_DATA_DETECTED",
-                description=f"Invalid {issue_type} detected for {symbol}: {invalid_value}",
-                status="warning",
-                metadata={
-                    "symbol": symbol,
-                    "invalid_value": str(invalid_value),
-                    "issue_type": issue_type,
-                    "adapter_system": True
-                }
-            )
-
-            logger.warning(f"Logged invalid data metrics for {symbol}: {issue_type} = {invalid_value}")
-
-        except Exception as e:
-            logger.error(f"Failed to log invalid data metrics: {e}")
+    # REMOVED: _log_invalid_data_metrics method - using single adapter metrics path only
+    # Invalid data tracking is now handled by adapters themselves via ProviderMetricsCollector
 
     def _queue_portfolio_updates(self, symbols: List[str]):
         """

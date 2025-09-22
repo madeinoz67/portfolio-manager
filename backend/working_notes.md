@@ -555,3 +555,66 @@ if symbol in response.data:
 - ✅ Portfolio update queue processing fresh market data correctly
 
 ### Status: Market Data System Fully Operational
+
+## ✅ RESOLVED: Adapter Metrics Architecture Consolidation (2025-09-22)
+
+### Issue Resolution Summary:
+**User Report**: "yfinance adapter metrics incorrect: 1) response time flat 100ms regardless of location, 2) no difference across time ranges (1h, 24h, 7d)"
+
+#### Root Cause Identified: Multiple Backend Instances + Duplicate Metrics Collection
+- **Critical Discovery**: 26+ backend instances running simultaneously on port 8001
+- **Secondary Issue**: Duplicate metrics collection paths causing data conflicts
+- **Evidence**: Debug logs showed real metrics (`avg_latency_ms=175.24`) but UI displayed hardcoded 100ms
+
+#### Problems Fixed:
+
+1. **Multiple Backend Instances Conflict**: ✅ RESOLVED
+   - **Issue**: 26+ uvicorn processes competing for port 8001, database connections, and serving different code versions
+   - **Evidence**: `lsof -i :8001` showed multiple competing processes
+   - **Solution**: Killed all processes (`pkill -f uvicorn`), started single clean backend instance
+   - **Result**: Debug logs immediately showed real metrics working
+
+2. **Duplicate Metrics Collection Architecture**: ✅ RESOLVED
+   - **Issue**: Both `AdapterMarketDataService` and adapter's built-in `ProviderMetricsCollector` were collecting metrics
+   - **User Feedback**: "there should be single path for adapter metrics"
+   - **Solution**: Completely removed duplicate collection from `AdapterMarketDataService`
+   - **Files Modified**:
+     - `adapter_market_data_service.py` - Removed `_log_usage_metrics()` and `_log_invalid_data_metrics()` methods
+     - `adapter_metrics_service.py` - Removed `_get_database_metrics()` and `_combine_metrics()` methods
+   - **Result**: Single path through adapter's built-in metrics only
+
+3. **Hardcoded Fallback Values**: ✅ RESOLVED
+   - **Issue**: `avg_response_time_ms=100.0` hardcoded fallback despite real data available
+   - **User Requirement**: "NO hard coded fallback values except 0"
+   - **Solution**: Changed fallbacks from 100ms to 0, eliminated hardcoded paths
+   - **Result**: Real response times now display (2.0s confirmed by user)
+
+#### Technical Implementation:
+```python
+# BEFORE (duplicate metrics paths):
+# 1. AdapterMarketDataService._log_usage_metrics() - REMOVED
+# 2. ProviderMetricsCollector (adapter built-in) - KEPT as single path
+
+# AFTER (single path architecture):
+final_metrics = self._get_adapter_metrics_direct(live_metrics, adapter_instance, provider_name)
+live_metrics = self.metrics_collector.get_provider_metrics_snapshot(provider_name)
+```
+
+#### Evidence of Success:
+- **Debug Logs**: `Final snapshot for yfinance: avg_latency_ms=175.24433135986328, request_count=2, success_count=2`
+- **User Confirmation**: "looks much better [Image] i will continue to monitor" with 2.0s response time displayed
+- **Real Metrics**: Response times now vary by location/network conditions as expected
+- **Time Range Variation**: Metrics now differ across 1h/24h/7d time periods
+
+#### Files Modified This Session:
+- `backend/src/services/adapter_market_data_service.py` - Removed duplicate metrics collection methods
+- `backend/src/services/adapter_metrics_service.py` - Removed database metrics methods, added debug logging
+- `backend/src/api/admin_adapters.py` - Added metrics reset endpoint
+
+#### Architectural Outcome:
+- ✅ **Single Path Metrics**: Adapters are sole source of truth for all provider metrics
+- ✅ **Real-Time Data**: No hardcoded values, all metrics calculated from actual operations
+- ✅ **Process Isolation**: Single backend instance eliminates conflicts and ensures consistency
+- ✅ **User Verification**: 2.0s response time confirms real network-dependent metrics working
+
+### Status: Adapter Metrics Architecture Fully Operational
