@@ -618,3 +618,24 @@ live_metrics = self.metrics_collector.get_provider_metrics_snapshot(provider_nam
 - ✅ **User Verification**: 2.0s response time confirms real network-dependent metrics working
 
 ### Status: Adapter Metrics Architecture Fully Operational
+
+### P95 Response Time Data Collection Status (2025-09-22)
+
+#### Current Metrics Status:
+- **System Start**: Backend restarted at 2025-09-22T06:43:19 UTC
+- **Current Sample Size**: 2 requests processed (`request_count=2, success_count=2`)
+- **Actual Response Time**: Real metrics working (`avg_latency_ms=58.97ms`)
+- **P95 Calculation**: Shows 0ms due to insufficient statistical sample size
+
+#### P95 Data Collection Timeline:
+P95 (95th percentile) response time calculations require statistically meaningful data:
+
+- **Minimum Samples Needed**: 20-50 requests for reliable percentile calculations
+- **Current Rate**:
+  - Scheduled polling: 4 requests/hour (15-minute intervals)
+  - User activity: Variable (portfolio access, admin dashboard, manual refreshes)
+- **Expected Timeline**: 2-4 hours for meaningful P95 data
+- **Sample Accumulation**: ~4 scheduled + user requests = meaningful data within normal operation
+
+#### Technical Note:
+The metric showing `P95: 0ms (no data)` is correct behavior - percentile calculations return 0 until sufficient statistical samples are collected. This prevents misleading percentile data from small sample sizes.
