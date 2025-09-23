@@ -266,6 +266,9 @@ async def lifespan(app: FastAPI):
         # Import adapter models
         from src.models import provider_configuration, provider_metrics, cost_tracking_record  # noqa: F401
         from src.models import adapter_registry, adapter_health_check  # noqa: F401
+
+        # Import portfolio update metrics models
+        from src.models import portfolio_update_metrics  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:
