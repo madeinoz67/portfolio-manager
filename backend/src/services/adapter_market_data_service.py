@@ -157,16 +157,17 @@ class AdapterMarketDataService:
 
         for config in active_configs:
             try:
-                provider_name = config.provider_name
-                logger.info(f"Fetching {len(symbols)} symbols using adapter: {provider_name}")
+                # Use adapter_type from config to match registry, not provider_name
+                adapter_type = config.config_data.get("adapter_type", config.provider_name)
+                logger.info(f"Fetching {len(symbols)} symbols using adapter: {adapter_type} (config: {config.provider_name})")
 
                 # Get or create adapter instance from registry
-                adapter = await self.registry.get_provider_instance(provider_name)
+                adapter = await self.registry.get_provider_instance(adapter_type)
                 if not adapter:
                     # Create new instance with config
-                    adapter = await self.registry.create_provider_instance(provider_name, config.config_data)
+                    adapter = await self.registry.create_provider_instance(adapter_type, config.config_data)
                     if not adapter:
-                        logger.warning(f"No adapter instance available for {provider_name}")
+                        logger.warning(f"No adapter instance available for {adapter_type}")
                         continue
 
                 # Use bulk fetch if supported
@@ -183,13 +184,13 @@ class AdapterMarketDataService:
                                 quote_data = response.data[symbol]
 
                                 # Convert adapter response to legacy format
-                                price_data = self._convert_adapter_response(quote_data, symbol, provider_name)
+                                price_data = self._convert_adapter_response(quote_data, symbol, adapter_type)
                                 if price_data:
                                     results[symbol] = price_data
                                     # Store to database
-                                    self._store_price_to_master(symbol, price_data, provider_name)
+                                    self._store_price_to_master(symbol, price_data, config)
 
-                        successful_provider_name = provider_name
+                        successful_provider_name = adapter_type
                         logger.info(f"Bulk fetch successful: {len(results)}/{len(symbols)} symbols")
                         break  # Success, don't try other providers
 
@@ -208,23 +209,23 @@ class AdapterMarketDataService:
                                     symbol_data = response.data[symbol]
                                     # Convert adapter response to legacy format
                                     price_data = self._convert_adapter_response(
-                                        symbol_data, symbol, provider_name
+                                        symbol_data, symbol, adapter_type
                                     )
                                     if price_data:
                                         results[symbol] = price_data
                                         # Store to database
-                                        self._store_price_to_master(symbol, price_data, provider_name)
+                                        self._store_price_to_master(symbol, price_data, config)
 
                         except Exception as e:
-                            logger.error(f"Failed to fetch {symbol} from {provider_name}: {e}")
+                            logger.error(f"Failed to fetch {symbol} from {adapter_type}: {e}")
 
                     if results:
-                        successful_provider_name = provider_name
+                        successful_provider_name = adapter_type
                         logger.info(f"Individual fetches successful: {len(results)}/{len(symbols)} symbols")
                         break  # Success, don't try other providers
 
             except Exception as e:
-                logger.error(f"Provider {config.provider_name} failed: {e}")
+                logger.error(f"Provider {adapter_type} (config: {config.provider_name}) failed: {e}")
                 continue
 
         # Adapter metrics are now handled by the adapters themselves
@@ -296,14 +297,14 @@ class AdapterMarketDataService:
             logger.error(f"Failed to convert adapter response for {symbol}: {e}")
             return None
 
-    def _store_price_to_master(self, symbol: str, price_data: Dict, provider_name: str):
+    def _store_price_to_master(self, symbol: str, price_data: Dict, provider_config):
         """
         Store price data to master realtime_symbols table.
 
         Args:
             symbol: Stock symbol
             price_data: Price data dictionary
-            provider_name: Name of data provider
+            provider_config: Provider configuration object
         """
         try:
             now = utc_now().replace(tzinfo=None)
@@ -314,22 +315,11 @@ class AdapterMarketDataService:
                 logger.warning(f"Invalid price data for {symbol}: {price}")
 
                 # Log invalid data metrics
-                self._log_invalid_data_metrics(symbol, price, provider_name, "invalid_price")
+                self._log_invalid_data_metrics(symbol, price, provider_config.provider_name, "invalid_price")
                 return
 
-            # Get provider_id from provider_name by querying the database
+            # Use the provided provider_config directly
             from uuid import UUID
-            provider_config = (
-                self.db.query(ProviderConfiguration)
-                .filter(ProviderConfiguration.provider_name == provider_name)
-                .filter(ProviderConfiguration.is_active == True)
-                .first()
-            )
-
-            if not provider_config:
-                logger.error(f"No active provider configuration found for: {provider_name}")
-                return
-
             provider_id = UUID(provider_config.id)
 
             # Update or create master record
