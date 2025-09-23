@@ -448,34 +448,45 @@ class ProviderMetricsCollector:
                 ).first()
 
                 if not provider_config:
-                    self.logger.warning(f"No active configuration found for provider {provider_name}")
+                    self.logger.warning(f"No provider configuration found for {provider_name}")
                     continue
 
-                # Create or update metrics record
+                # Create or update provider metrics record
+                existing_metrics = db_session.query(ProviderMetrics).filter(
+                    ProviderMetrics.provider_config_id == provider_config.id
+                ).order_by(ProviderMetrics.timestamp.desc()).first()
+
+                # Create new metrics record (snapshot approach - keeps historical data)
                 metrics_record = ProviderMetrics(
                     provider_config_id=provider_config.id,
+                    timestamp=datetime.now(timezone.utc),
                     request_count=snapshot.request_count,
                     success_count=snapshot.success_count,
                     error_count=snapshot.error_count,
-                    total_latency_ms=Decimal(str(snapshot.avg_latency_ms * snapshot.request_count)),
-                    avg_latency_ms=Decimal(str(snapshot.avg_latency_ms)),
+                    total_latency_ms=self._provider_metrics[provider_name]["total_latency_ms"],
+                    avg_latency_ms=snapshot.avg_latency_ms,
                     rate_limit_hits=snapshot.rate_limit_hits,
                     circuit_breaker_state=snapshot.circuit_breaker_state,
                     provider_metadata={
                         "response_time_p50": snapshot.response_time_p50,
                         "response_time_p90": snapshot.response_time_p90,
-                        "response_time_p99": snapshot.response_time_p99
+                        "response_time_p99": snapshot.response_time_p99,
+                        "total_cost_usd": str(self._provider_metrics[provider_name]["total_cost_usd"]),
+                        "last_updated": snapshot.timestamp.isoformat()
                     }
                 )
 
                 db_session.add(metrics_record)
+                self.logger.info(f"Persisted metrics for provider {provider_name}: "
+                               f"{snapshot.request_count} requests, {snapshot.success_rate:.2%} success rate")
 
             db_session.commit()
-            self.logger.info("Metrics persisted to database successfully")
+            self.logger.info("Successfully persisted all provider metrics to database")
 
         except Exception as e:
+            self.logger.error(f"Failed to persist metrics to database: {e}")
             db_session.rollback()
-            self.logger.error(f"Error persisting metrics to database: {e}")
+            raise
 
     async def record_health_check(
         self,

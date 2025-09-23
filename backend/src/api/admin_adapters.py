@@ -675,3 +675,34 @@ async def reset_adapter_metrics(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post(
+    "/persist-metrics",
+    response_model=dict,
+    summary="Persist metrics to database",
+    description="Manually trigger persistence of current adapter metrics to database"
+)
+async def persist_metrics_to_database(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+) -> dict:
+    """Manually persist all adapter metrics to database."""
+    try:
+        from src.services.adapters.metrics import get_metrics_collector
+
+        metrics_collector = get_metrics_collector()
+
+        # Persist metrics to database
+        await metrics_collector.persist_metrics_to_database(db)
+
+        logger.info(f"Admin {current_admin.id} manually triggered metrics persistence")
+
+        return {
+            "message": "All provider metrics have been persisted to database successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error persisting metrics to database: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to persist metrics: {str(e)}")
+
+

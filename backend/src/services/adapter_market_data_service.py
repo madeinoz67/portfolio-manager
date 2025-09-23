@@ -170,6 +170,10 @@ class AdapterMarketDataService:
                         logger.warning(f"No adapter instance available for {adapter_type}")
                         continue
 
+                # Override the adapter's provider_name to match the database config name
+                # This ensures metrics are recorded under the correct provider name
+                adapter.provider_name = config.provider_name
+
                 # Use bulk fetch if supported
                 if adapter.capabilities.supports_bulk_quotes and len(symbols) > 1:
                     response = await adapter.fetch_prices(symbols)

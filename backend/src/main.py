@@ -176,6 +176,17 @@ async def periodic_price_updates():
                         }
                     )
 
+                # Persist metrics to database every few cycles
+                if cycle_count % 5 == 0:  # Every 5th cycle (every ~75 minutes)
+                    try:
+                        logger.info("Persisting provider metrics to database...")
+                        from src.services.adapters.metrics import get_metrics_collector
+                        metrics_collector = get_metrics_collector()
+                        await metrics_collector.persist_metrics_to_database(db)
+                        logger.info("Provider metrics persisted successfully")
+                    except Exception as metrics_error:
+                        logger.error(f"Failed to persist metrics: {metrics_error}")
+
                 await service.close_session()
                 cycle_count += 1
 
